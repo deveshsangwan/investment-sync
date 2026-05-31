@@ -207,6 +207,21 @@ h1 {
   text-transform: uppercase;
 }
 
+.table-link {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.table-link:hover {
+  text-decoration: underline;
+}
+
+.table-subtext {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
 .upload-zone {
   align-items: center;
   border: 1px dashed #8aa3a0;
@@ -488,6 +503,50 @@ h1 {
 
 .quiet-empty p {
   margin: 0;
+}
+
+.back-link {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 750;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.back-link:hover {
+  color: var(--accent-strong);
+}
+
+.detail-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.detail-list div {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 140px 1fr;
+  padding: 10px 0;
+}
+
+.detail-list dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.detail-list dd {
+  font-size: 14px;
+  font-weight: 750;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .trend-list {

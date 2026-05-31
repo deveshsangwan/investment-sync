@@ -131,7 +131,14 @@ export function DashboardClient({
               <tbody>
                 {summary.data?.allocationByAssetClass.map((item) => (
                   <tr key={item.assetClass}>
-                    <td>{labelize(item.assetClass)}</td>
+                    <td>
+                      <Link
+                        className="table-link"
+                        href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
+                      >
+                        {labelize(item.assetClass)}
+                      </Link>
+                    </td>
                     <td>{inrCurrency.format(item.currentValue)}</td>
                     <td>{item.weight}%</td>
                   </tr>
@@ -163,7 +170,14 @@ export function DashboardClient({
               <tbody>
                 {holdings.data?.slice(0, 8).map((holding) => (
                   <tr key={holding.id}>
-                    <td>{holding.symbol ?? holding.instrumentName}</td>
+                    <td>
+                      <Link
+                        className="table-link"
+                        href={`/dashboard/holdings/${holding.id}`}
+                      >
+                        {holding.symbol ?? holding.instrumentName}
+                      </Link>
+                    </td>
                     <td>{holding.accountName}</td>
                     <td>
                       {formatCurrency(
@@ -212,7 +226,14 @@ export function DashboardClient({
               <tbody>
                 {performance.data?.byAssetClass.map((item) => (
                   <tr key={item.assetClass}>
-                    <td>{labelize(item.assetClass)}</td>
+                    <td>
+                      <Link
+                        className="table-link"
+                        href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
+                      >
+                        {labelize(item.assetClass)}
+                      </Link>
+                    </td>
                     <td>{inrCurrency.format(item.currentValue)}</td>
                     <td
                       className={

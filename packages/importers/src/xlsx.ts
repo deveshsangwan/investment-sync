@@ -107,7 +107,7 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
 
 export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   sourceType: "investment_portfolio_xlsx",
-  parserVersion: "investment-portfolio-workbook-v1",
+  parserVersion: "investment-portfolio-workbook-v2",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {

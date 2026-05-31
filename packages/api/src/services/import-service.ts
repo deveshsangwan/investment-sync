@@ -98,7 +98,11 @@ export async function uploadAndProcessImport(
 ) {
   const fileHash = createHash("sha256").update(input.content).digest("hex");
   const existing = await ctx.db
-    .select({ id: importBatches.id, status: importBatches.status })
+    .select({
+      id: importBatches.id,
+      status: importBatches.status,
+      parserVersion: importBatches.parserVersion,
+    })
     .from(importBatches)
     .where(
       and(
@@ -106,10 +110,21 @@ export async function uploadAndProcessImport(
         eq(importBatches.fileHash, fileHash),
       ),
     )
-    .limit(1);
+    .limit(10);
 
-  if (existing[0]?.status === "committed") {
-    throw new Error("This file has already been imported and committed");
+  const committedDuplicate = existing.find(
+    (batch) => batch.status === "committed",
+  );
+  if (committedDuplicate) {
+    const parsed = parseImportFile(input);
+    const sameParserVersionCommitted = existing.some(
+      (batch) =>
+        batch.status === "committed" &&
+        batch.parserVersion === parsed.parserVersion,
+    );
+    if (sameParserVersionCommitted) {
+      throw new Error("This file has already been imported and committed");
+    }
   }
 
   const upload = await createImportUpload(ctx, membership, input.fileName);

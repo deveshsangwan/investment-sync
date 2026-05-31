@@ -10,7 +10,9 @@ import {
   portfolioValuations,
   transactions,
 } from "@investment-sync/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+import type { ApiContext } from "../context";
 import { protectedProcedure, router } from "../trpc";
 import { getUsdInrRate } from "../services/currency-rates";
 
@@ -249,7 +251,332 @@ export const portfolioRouter = router({
       asOfDate: latestHoldings[0]?.snapshotDate ?? null,
     };
   }),
+  holdingDetail: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [selected] = await ctx.db
+        .select({
+          id: holdingSnapshots.id,
+          accountId: holdingSnapshots.accountId,
+          instrumentId: holdingSnapshots.instrumentId,
+          snapshotDate: holdingSnapshots.snapshotDate,
+          quantity: holdingSnapshots.quantity,
+          investedAmount: holdingSnapshots.investedAmount,
+          currentValue: holdingSnapshots.currentValue,
+          pnlAmount: holdingSnapshots.pnlAmount,
+          pnlPercent: holdingSnapshots.pnlPercent,
+          currency: holdingSnapshots.currency,
+          sourcePayload: holdingSnapshots.sourcePayload,
+          accountName: accounts.name,
+          provider: accounts.provider,
+          instrumentName: instruments.name,
+          symbol: instruments.symbol,
+          assetClass: instruments.assetClass,
+          isin: instruments.isin,
+          exchange: instruments.exchange,
+        })
+        .from(holdingSnapshots)
+        .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
+        .innerJoin(
+          instruments,
+          eq(instruments.id, holdingSnapshots.instrumentId),
+        )
+        .where(
+          and(
+            eq(holdingSnapshots.id, input.id),
+            eq(holdingSnapshots.householdId, ctx.membership.householdId),
+          ),
+        )
+        .limit(1);
+
+      if (!selected) return null;
+
+      const history = await ctx.db
+        .select({
+          id: holdingSnapshots.id,
+          snapshotDate: holdingSnapshots.snapshotDate,
+          quantity: holdingSnapshots.quantity,
+          investedAmount: holdingSnapshots.investedAmount,
+          currentValue: holdingSnapshots.currentValue,
+          pnlAmount: holdingSnapshots.pnlAmount,
+          pnlPercent: holdingSnapshots.pnlPercent,
+          currency: holdingSnapshots.currency,
+          sourcePayload: holdingSnapshots.sourcePayload,
+        })
+        .from(holdingSnapshots)
+        .where(
+          and(
+            eq(holdingSnapshots.householdId, ctx.membership.householdId),
+            eq(holdingSnapshots.accountId, selected.accountId),
+            eq(holdingSnapshots.instrumentId, selected.instrumentId),
+          ),
+        )
+        .orderBy(holdingSnapshots.snapshotDate);
+
+      const allHoldings = await currentHoldings(ctx);
+      const latestHoldings = latestNonAggregateHoldings(allHoldings);
+      const latest = latestHoldingForSelection(selected, history) ?? selected;
+      const usdInrRate = await getUsdInrRateIfNeeded([
+        selected.currency,
+        ...latestHoldings.map((holding) => holding.currency),
+      ]);
+      const portfolioCurrentValue = sum(
+        latestHoldings.map((holding) =>
+          convertToInr(
+            Number(holding.currentValue),
+            holding.currency,
+            usdInrRate?.rate,
+          ),
+        ),
+      );
+      const portfolioPnl = sum(
+        latestHoldings.map((holding) =>
+          convertToInr(
+            Number(holding.pnlAmount ?? 0),
+            holding.currency,
+            usdInrRate?.rate,
+          ),
+        ),
+      );
+      const latestCurrentValueInInr = convertToInr(
+        Number(latest.currentValue),
+        latest.currency,
+        usdInrRate?.rate,
+      );
+      const latestPnlInInr = convertToInr(
+        Number(latest.pnlAmount ?? 0),
+        latest.currency,
+        usdInrRate?.rate,
+      );
+      const isCurrent = isCurrentHoldingSnapshot(selected, latest, allHoldings);
+      const transactionsForHolding = await ctx.db
+        .select({
+          id: transactions.id,
+          tradeDate: transactions.tradeDate,
+          type: transactions.type,
+          quantity: transactions.quantity,
+          price: transactions.price,
+          amount: transactions.amount,
+          currency: transactions.currency,
+          notes: transactions.notes,
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.householdId, ctx.membership.householdId),
+            eq(transactions.instrumentId, selected.instrumentId),
+          ),
+        )
+        .orderBy(transactions.tradeDate);
+
+      return {
+        holding: {
+          ...selected,
+          ...latest,
+          accountName: selected.accountName,
+          provider: selected.provider,
+          instrumentName: selected.instrumentName,
+          symbol: selected.symbol,
+          assetClass: selected.assetClass,
+          isin: selected.isin,
+          exchange: selected.exchange,
+          sourceXirr: sourceXirrFromPayload(latest.sourcePayload),
+          isCurrent,
+          currentValueInInr: latestCurrentValueInInr,
+          investedAmountInInr: convertToInr(
+            Number(latest.investedAmount),
+            latest.currency,
+            usdInrRate?.rate,
+          ),
+          pnlAmountInInr: latestPnlInInr,
+          portfolioWeight:
+            portfolioCurrentValue === 0
+              ? 0
+              : roundPercent(
+                  (latestCurrentValueInInr / portfolioCurrentValue) * 100,
+                ),
+          pnlContribution:
+            portfolioPnl === 0
+              ? 0
+              : roundPercent((latestPnlInInr / portfolioPnl) * 100),
+        },
+        history: history.map((point) => ({
+          ...point,
+          currentValueInInr: convertToInr(
+            Number(point.currentValue),
+            point.currency,
+            usdInrRate?.rate,
+          ),
+          investedAmountInInr: convertToInr(
+            Number(point.investedAmount),
+            point.currency,
+            usdInrRate?.rate,
+          ),
+          pnlAmountInInr: convertToInr(
+            Number(point.pnlAmount ?? 0),
+            point.currency,
+            usdInrRate?.rate,
+          ),
+        })),
+        transactions: transactionsForHolding,
+      };
+    }),
+  assetClassDetail: protectedProcedure
+    .input(z.object({ assetClass: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const holdings = await currentHoldings(ctx);
+      const latestHoldings = latestNonAggregateHoldings(holdings);
+      const exitedHoldings = exitedNonAggregateHoldings(holdings);
+      const usdInrRate = await getUsdInrRateIfNeeded(
+        [...latestHoldings, ...exitedHoldings].map(
+          (holding) => holding.currency,
+        ),
+      );
+      const converted = latestHoldings.map((holding) => {
+        const currentValueInInr = convertToInr(
+          Number(holding.currentValue),
+          holding.currency,
+          usdInrRate?.rate,
+        );
+        const investedAmountInInr = convertToInr(
+          Number(holding.investedAmount),
+          holding.currency,
+          usdInrRate?.rate,
+        );
+        const pnlAmountInInr = convertToInr(
+          Number(holding.pnlAmount ?? 0),
+          holding.currency,
+          usdInrRate?.rate,
+        );
+        return {
+          ...holding,
+          currentValueInInr,
+          investedAmountInInr,
+          pnlAmountInInr,
+          sourceXirr: sourceXirrFromPayload(holding.sourcePayload),
+        };
+      });
+      const convertedExited = exitedHoldings.map((holding) => ({
+        ...holding,
+        currentValueInInr: convertToInr(
+          Number(holding.currentValue),
+          holding.currency,
+          usdInrRate?.rate,
+        ),
+        investedAmountInInr: convertToInr(
+          Number(holding.investedAmount),
+          holding.currency,
+          usdInrRate?.rate,
+        ),
+        pnlAmountInInr: convertToInr(
+          Number(holding.pnlAmount ?? 0),
+          holding.currency,
+          usdInrRate?.rate,
+        ),
+        sourceXirr: sourceXirrFromPayload(holding.sourcePayload),
+      }));
+      const assetHoldings = converted
+        .filter((holding) => holding.assetClass === input.assetClass)
+        .sort((a, b) => b.currentValueInInr - a.currentValueInInr);
+      const assetExitedHoldings = convertedExited
+        .filter((holding) => holding.assetClass === input.assetClass)
+        .sort((a, b) => b.snapshotDate.localeCompare(a.snapshotDate));
+      const totalCurrentValue = sum(
+        assetHoldings.map((holding) => holding.currentValueInInr),
+      );
+      const totalInvestedAmount = sum(
+        assetHoldings.map((holding) => holding.investedAmountInInr),
+      );
+      const totalPnlAmount = sum(
+        assetHoldings.map((holding) => holding.pnlAmountInInr),
+      );
+      const portfolioCurrentValue = sum(
+        converted.map((holding) => holding.currentValueInInr),
+      );
+
+      return {
+        assetClass: input.assetClass,
+        holdings: assetHoldings.map((holding) => ({
+          ...holding,
+          weightInAssetClass:
+            totalCurrentValue === 0
+              ? 0
+              : roundPercent(
+                  (holding.currentValueInInr / totalCurrentValue) * 100,
+                ),
+        })),
+        summary: {
+          currentValue: roundMoney(totalCurrentValue),
+          investedAmount: roundMoney(totalInvestedAmount),
+          pnlAmount: roundMoney(totalPnlAmount),
+          pnlPercent:
+            totalInvestedAmount === 0
+              ? 0
+              : roundPercent((totalPnlAmount / totalInvestedAmount) * 100),
+          portfolioWeight:
+            portfolioCurrentValue === 0
+              ? 0
+              : roundPercent((totalCurrentValue / portfolioCurrentValue) * 100),
+          holdingCount: assetHoldings.length,
+        },
+        exitedHoldings: assetExitedHoldings,
+      };
+    }),
 });
+
+type CurrentHoldingRow = {
+  id: string;
+  snapshotDate: string;
+  quantity: string | null;
+  investedAmount: string;
+  currentValue: string;
+  pnlAmount: string | null;
+  pnlPercent: string | null;
+  currency: Currency;
+  sourcePayload: Record<string, unknown>;
+  accountName: string;
+  provider: string;
+  instrumentName: string;
+  symbol: string | null;
+  assetClass: string;
+};
+
+async function currentHoldings(ctx: {
+  db: ApiContext["db"];
+  membership: { householdId: string };
+}): Promise<CurrentHoldingRow[]> {
+  return ctx.db
+    .select({
+      id: holdingSnapshots.id,
+      snapshotDate: holdingSnapshots.snapshotDate,
+      quantity: holdingSnapshots.quantity,
+      investedAmount: holdingSnapshots.investedAmount,
+      currentValue: holdingSnapshots.currentValue,
+      pnlAmount: holdingSnapshots.pnlAmount,
+      pnlPercent: holdingSnapshots.pnlPercent,
+      currency: holdingSnapshots.currency,
+      sourcePayload: holdingSnapshots.sourcePayload,
+      accountName: accounts.name,
+      provider: accounts.provider,
+      instrumentName: instruments.name,
+      symbol: instruments.symbol,
+      assetClass: instruments.assetClass,
+    })
+    .from(holdingSnapshots)
+    .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
+    .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
+    .where(eq(holdingSnapshots.householdId, ctx.membership.householdId));
+}
+
+function latestHoldingForSelection<
+  T extends {
+    snapshotDate: string;
+  },
+>(selected: T, history: T[]): T | undefined {
+  return history
+    .filter((row) => row.snapshotDate >= selected.snapshotDate)
+    .sort((a, b) => b.snapshotDate.localeCompare(a.snapshotDate))[0];
+}
 
 function latestNonAggregateHoldings<
   T extends {
@@ -263,18 +590,86 @@ function latestNonAggregateHoldings<
   },
 >(holdings: T[]): T[] {
   if (holdings.length === 0) return [];
+  const eligible = nonAggregateEligibleHoldings(holdings);
+  const latestDateBySnapshotGroup = latestSnapshotDatesByGroup(eligible);
+  const byInstrument = latestSnapshotsByInstrument(
+    eligible.filter((holding) => {
+      const latestGroupDate = latestDateBySnapshotGroup.get(
+        snapshotGroupKey(holding),
+      );
+      return !latestGroupDate || holding.snapshotDate === latestGroupDate;
+    }),
+  );
+  return [...byInstrument.values()].sort((a, b) => {
+    const dateOrder =
+      new Date(b.snapshotDate).getTime() - new Date(a.snapshotDate).getTime();
+    if (dateOrder !== 0) return dateOrder;
+    return a.instrumentName.localeCompare(b.instrumentName);
+  });
+}
+
+function exitedNonAggregateHoldings<
+  T extends {
+    snapshotDate: string;
+    accountName?: string;
+    provider?: string;
+    assetClass: string;
+    instrumentName: string;
+    currency?: string;
+    sourcePayload?: Record<string, unknown>;
+  },
+>(holdings: T[]): T[] {
+  const eligible = nonAggregateEligibleHoldings(holdings);
+  const latestDateBySnapshotGroup = latestSnapshotDatesByGroup(eligible);
+  const byInstrument = latestSnapshotsByInstrument(eligible);
+
+  return [...byInstrument.values()]
+    .filter((holding) => {
+      const latestGroupDate = latestDateBySnapshotGroup.get(
+        snapshotGroupKey(holding),
+      );
+      return Boolean(
+        latestGroupDate && holding.snapshotDate !== latestGroupDate,
+      );
+    })
+    .sort((a, b) => {
+      const dateOrder =
+        new Date(b.snapshotDate).getTime() - new Date(a.snapshotDate).getTime();
+      if (dateOrder !== 0) return dateOrder;
+      return a.instrumentName.localeCompare(b.instrumentName);
+    });
+}
+
+function nonAggregateEligibleHoldings<
+  T extends {
+    assetClass: string;
+    instrumentName: string;
+    sourcePayload?: Record<string, unknown>;
+  },
+>(holdings: T[]) {
   const assetClassesWithDetails = new Set(
     holdings
       .filter((holding) => !isAggregateHolding(holding))
       .map((holding) => holding.assetClass),
   );
-  const eligible = holdings.filter(
+  return holdings.filter(
     (holding) =>
       !isAggregateHolding(holding) ||
       !assetClassesWithDetails.has(holding.assetClass),
   );
+}
+
+function latestSnapshotsByInstrument<
+  T extends {
+    snapshotDate: string;
+    accountName?: string;
+    provider?: string;
+    instrumentName: string;
+    currency?: string;
+  },
+>(holdings: T[]): Map<string, T> {
   const byInstrument = new Map<string, T>();
-  for (const holding of eligible) {
+  for (const holding of holdings) {
     const key = [
       holding.accountName,
       holding.provider,
@@ -286,12 +681,68 @@ function latestNonAggregateHoldings<
       byInstrument.set(key, holding);
     }
   }
-  return [...byInstrument.values()].sort((a, b) => {
-    const dateOrder =
-      new Date(b.snapshotDate).getTime() - new Date(a.snapshotDate).getTime();
-    if (dateOrder !== 0) return dateOrder;
-    return a.instrumentName.localeCompare(b.instrumentName);
-  });
+  return byInstrument;
+}
+
+function latestSnapshotDatesByGroup<
+  T extends {
+    snapshotDate: string;
+    accountName?: string;
+    provider?: string;
+    assetClass: string;
+    currency?: string;
+    sourcePayload?: Record<string, unknown>;
+  },
+>(holdings: T[]): Map<string, string> {
+  const latest = new Map<string, string>();
+  for (const holding of holdings) {
+    const key = snapshotGroupKey(holding);
+    const current = latest.get(key);
+    if (!current || holding.snapshotDate > current) {
+      latest.set(key, holding.snapshotDate);
+    }
+  }
+  return latest;
+}
+
+function isCurrentHoldingSnapshot<
+  TSelected extends {
+    snapshotDate: string;
+    accountName: string;
+    provider: string;
+    assetClass: string;
+    currency: Currency;
+    sourcePayload?: Record<string, unknown>;
+  },
+  THolding extends {
+    snapshotDate: string;
+    accountName?: string;
+    provider?: string;
+    assetClass: string;
+    currency?: string;
+    sourcePayload?: Record<string, unknown>;
+  },
+>(selected: TSelected, latest: { snapshotDate: string }, holdings: THolding[]) {
+  const latestDate = latestSnapshotDatesByGroup(holdings).get(
+    snapshotGroupKey(selected),
+  );
+  return latestDate === latest.snapshotDate;
+}
+
+function snapshotGroupKey(holding: {
+  accountName?: string;
+  provider?: string;
+  assetClass: string;
+  currency?: string;
+  sourcePayload?: Record<string, unknown>;
+}) {
+  return [
+    holding.accountName ?? "",
+    holding.provider ?? "",
+    holding.assetClass,
+    holding.currency ?? "",
+    String(holding.sourcePayload?.sourceSheet ?? ""),
+  ].join("|");
 }
 
 function isAggregateHolding(holding: {
@@ -331,4 +782,19 @@ function convertToInr(
   if (currency === "INR") return amount;
   if (currency === "USD" && usdInrRate) return amount * usdInrRate;
   return amount;
+}
+
+function sum(values: number[]): number {
+  return values.reduce(
+    (total, value) => total + (Number.isFinite(value) ? value : 0),
+    0,
+  );
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function roundPercent(value: number): number {
+  return Math.round(value * 100) / 100;
 }
