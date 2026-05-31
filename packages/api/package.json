@@ -1,0 +1,26 @@
+{
+  "name": "@investment-sync/api",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@investment-sync/analytics": "workspace:*",
+    "@investment-sync/db": "workspace:*",
+    "@investment-sync/importers": "workspace:*",
+    "@supabase/supabase-js": "^2.48.1",
+    "@trpc/server": "^10.45.2",
+    "drizzle-orm": "^0.38.4",
+    "superjson": "^2.2.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

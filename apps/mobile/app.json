@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Investment Sync",
+    "slug": "investment-sync",
+    "scheme": "investmentsync",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.deveshsangwan.investmentsync"
+    },
+    "android": {
+      "package": "com.deveshsangwan.investmentsync"
+    },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

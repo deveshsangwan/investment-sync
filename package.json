@@ -1,0 +1,25 @@
+{
+  "name": "investment-sync",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev --parallel",
+    "dev:web": "pnpm --filter @investment-sync/web dev",
+    "dev:mobile": "pnpm --filter @investment-sync/mobile dev",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write .",
+    "db:generate": "pnpm --filter @investment-sync/db generate",
+    "db:migrate": "pnpm --filter @investment-sync/db migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
