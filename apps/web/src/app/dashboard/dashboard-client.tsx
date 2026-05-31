@@ -15,9 +15,9 @@ const currency = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 0,
 });
 
-export function DashboardClient() {
-  const summary = trpc.portfolio.summary.useQuery();
-  const holdings = trpc.portfolio.holdings.useQuery();
+export function DashboardClient({ isDataConfigured }: { isDataConfigured: boolean }) {
+  const summary = trpc.portfolio.summary.useQuery(undefined, { enabled: isDataConfigured });
+  const holdings = trpc.portfolio.holdings.useQuery(undefined, { enabled: isDataConfigured });
   const hasHoldings = (holdings.data?.length ?? 0) > 0;
   const pnlClass =
     (summary.data?.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
@@ -38,7 +38,9 @@ export function DashboardClient() {
         </Link>
       </section>
 
-      {!hasHoldings ? <EmptyPortfolio /> : null}
+      {!isDataConfigured ? null : !hasHoldings ? <EmptyPortfolio /> : null}
+
+      {!isDataConfigured ? <SetupRequired /> : null}
 
       <section className="grid grid-4">
         <Metric
@@ -133,6 +135,22 @@ export function DashboardClient() {
         </div>
       </section>
     </main>
+  );
+}
+
+function SetupRequired() {
+  return (
+    <section className="empty-portfolio setup-required">
+      <div>
+        <p className="eyebrow">Setup required</p>
+        <h2>Connect Supabase before loading portfolio data</h2>
+        <p>
+          Add DATABASE_URL, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to
+          apps/web/.env.local, then restart the dev server. Until then, the
+          UI will stay in setup mode instead of showing API errors.
+        </p>
+      </div>
+    </section>
   );
 }
 
