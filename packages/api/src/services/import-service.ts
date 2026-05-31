@@ -18,6 +18,23 @@ import type { MembershipContext } from "./membership";
 const IMPORT_TTL_DAYS = 30;
 const IMPORT_BUCKET = process.env.SUPABASE_IMPORT_BUCKET ?? "portfolio-imports";
 
+async function ensureImportBucket(ctx: ApiContext) {
+  const existing = await ctx.supabase.storage.getBucket(IMPORT_BUCKET);
+  if (!existing.error) return;
+
+  const created = await ctx.supabase.storage.createBucket(IMPORT_BUCKET, {
+    public: false,
+    fileSizeLimit: "50MB",
+  });
+
+  if (
+    created.error &&
+    !created.error.message.toLowerCase().includes("already exists")
+  ) {
+    throw created.error;
+  }
+}
+
 type AssetClass =
   | "indian_stock"
   | "mutual_fund"
@@ -34,6 +51,7 @@ export async function createImportUpload(
   membership: MembershipContext,
   fileName: string,
 ) {
+  await ensureImportBucket(ctx);
   const expiresAt = new Date(
     Date.now() + IMPORT_TTL_DAYS * 24 * 60 * 60 * 1000,
   );
@@ -98,7 +116,13 @@ export async function uploadAndProcessImport(
       upsert: true,
     });
 
-  if (storageUpload.error) throw storageUpload.error;
+  if (storageUpload.error) {
+    await ctx.db
+      .update(importBatches)
+      .set({ status: "failed", errors: [storageUpload.error.message] })
+      .where(eq(importBatches.id, upload.importBatchId));
+    throw storageUpload.error;
+  }
 
   return processImport(ctx, membership, {
     importBatchId: upload.importBatchId,

@@ -31,7 +31,8 @@ RELIANCE,0.00,24.00,1479.58,10.22,1336.40,35509.92,32073.60,-3436.32,-9.68,-25.4
 Visit: https://tickertape.in/portfolio?tab=mfholdings
 
 Fund Name,AMC Name,Category,Sub-Category,Plan Type,Option Type,NAV ₹,Units,Invested Amt ₹,Current Value ₹,Weight %,P&L ₹,P&L %,XIRR %,Invested Since
-Parag Parikh ELSS Tax Saver Fund,PPFAS,Equity,ELSS,Direct,Growth,31.53,1903.24,56997.25,60002.21,11.49,3004.96,5.27,4.05,2023-05-02`;
+Parag Parikh ELSS Tax Saver Fund,PPFAS,Equity,ELSS,Direct,Growth,31.53,1903.24,56997.25,60002.21,11.49,3004.96,5.27,4.05,2023-05-02
+Total,,,,,,,,56997.25,60002.21,100,3004.96,5.27,,`;
 
     const result = parseImportFile({
       fileName: "Holdings-mf.csv",
@@ -39,6 +40,7 @@ Parag Parikh ELSS Tax Saver Fund,PPFAS,Equity,ELSS,Direct,Growth,31.53,1903.24,5
     });
 
     expect(result.sourceType).toBe("tickertape_mutual_fund_csv");
+    expect(result.rows).toHaveLength(1);
     expect(result.rows[0]).toMatchObject({
       instrumentName: "Parag Parikh ELSS Tax Saver Fund",
       assetClass: "mutual_fund",

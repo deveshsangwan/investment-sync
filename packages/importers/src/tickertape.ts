@@ -142,7 +142,7 @@ export const tickertapeMutualFundImporter: PortfolioImporter = {
     const holdings = rows.slice(headerRow + 1).flatMap((row) => {
       const record = objectFromRow(headers, row);
       const fundName = String(record["fund name"] ?? "").trim();
-      if (!fundName) return [];
+      if (!fundName || fundName.toLowerCase() === "total") return [];
 
       return [
         {

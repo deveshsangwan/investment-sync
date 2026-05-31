@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   accounts,
   householdMembers,
@@ -68,6 +68,7 @@ export async function ensureMembership(
     .from(users)
     .innerJoin(householdMembers, eq(users.id, householdMembers.userId))
     .where(eq(users.clerkUserId, clerkUserId))
+    .orderBy(asc(householdMembers.createdAt))
     .limit(1);
 
   if (existing[0]) {

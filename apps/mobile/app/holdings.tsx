@@ -2,9 +2,15 @@ import { FlatList, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { trpc } from "../src/trpc";
 import { colors } from "../src/theme";
 
-const currency = new Intl.NumberFormat("en-IN", {
+const inrCurrency = new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
+  maximumFractionDigits: 0,
+});
+
+const usdCurrency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
   maximumFractionDigits: 0,
 });
 
@@ -27,7 +33,9 @@ export default function HoldingsScreen() {
             </Text>
             <Text style={styles.muted}>{item.accountName}</Text>
             <View style={styles.row}>
-              <Text>{currency.format(Number(item.currentValue))}</Text>
+              <Text>
+                {formatCurrency(Number(item.currentValue), item.currency)}
+              </Text>
               <Text
                 style={
                   Number(item.pnlAmount ?? 0) >= 0
@@ -35,7 +43,7 @@ export default function HoldingsScreen() {
                     : styles.negative
                 }
               >
-                {currency.format(Number(item.pnlAmount ?? 0))}
+                {formatCurrency(Number(item.pnlAmount ?? 0), item.currency)}
               </Text>
             </View>
           </View>
@@ -43,6 +51,11 @@ export default function HoldingsScreen() {
       />
     </SafeAreaView>
   );
+}
+
+function formatCurrency(value: number, currency: string) {
+  if (currency === "USD") return usdCurrency.format(value);
+  return inrCurrency.format(value);
 }
 
 const styles = StyleSheet.create({

@@ -9,15 +9,29 @@ import {
 } from "lucide-react";
 import { trpc } from "../providers";
 
-const currency = new Intl.NumberFormat("en-IN", {
+const inrCurrency = new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
   maximumFractionDigits: 0,
 });
 
-export function DashboardClient({ isDataConfigured }: { isDataConfigured: boolean }) {
-  const summary = trpc.portfolio.summary.useQuery(undefined, { enabled: isDataConfigured });
-  const holdings = trpc.portfolio.holdings.useQuery(undefined, { enabled: isDataConfigured });
+const usdCurrency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+export function DashboardClient({
+  isDataConfigured,
+}: {
+  isDataConfigured: boolean;
+}) {
+  const summary = trpc.portfolio.summary.useQuery(undefined, {
+    enabled: isDataConfigured,
+  });
+  const holdings = trpc.portfolio.holdings.useQuery(undefined, {
+    enabled: isDataConfigured,
+  });
   const hasHoldings = (holdings.data?.length ?? 0) > 0;
   const pnlClass =
     (summary.data?.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
@@ -45,15 +59,15 @@ export function DashboardClient({ isDataConfigured }: { isDataConfigured: boolea
       <section className="grid grid-4">
         <Metric
           label="Current value"
-          value={currency.format(summary.data?.currentValue ?? 0)}
+          value={inrCurrency.format(summary.data?.currentValue ?? 0)}
         />
         <Metric
           label="Invested"
-          value={currency.format(summary.data?.investedAmount ?? 0)}
+          value={inrCurrency.format(summary.data?.investedAmount ?? 0)}
         />
         <Metric
           label="Gain/Loss"
-          value={currency.format(summary.data?.pnlAmount ?? 0)}
+          value={inrCurrency.format(summary.data?.pnlAmount ?? 0)}
           className={pnlClass}
         />
         <Metric
@@ -84,7 +98,7 @@ export function DashboardClient({ isDataConfigured }: { isDataConfigured: boolea
                 {summary.data?.allocationByAssetClass.map((item) => (
                   <tr key={item.assetClass}>
                     <td>{labelize(item.assetClass)}</td>
-                    <td>{currency.format(item.currentValue)}</td>
+                    <td>{inrCurrency.format(item.currentValue)}</td>
                     <td>{item.weight}%</td>
                   </tr>
                 ))}
@@ -117,7 +131,12 @@ export function DashboardClient({ isDataConfigured }: { isDataConfigured: boolea
                   <tr key={holding.id}>
                     <td>{holding.symbol ?? holding.instrumentName}</td>
                     <td>{holding.accountName}</td>
-                    <td>{currency.format(Number(holding.currentValue))}</td>
+                    <td>
+                      {formatCurrency(
+                        Number(holding.currentValue),
+                        holding.currency,
+                      )}
+                    </td>
                     <td
                       className={
                         Number(holding.pnlAmount ?? 0) >= 0
@@ -125,7 +144,10 @@ export function DashboardClient({ isDataConfigured }: { isDataConfigured: boolea
                           : "negative"
                       }
                     >
-                      {currency.format(Number(holding.pnlAmount ?? 0))}
+                      {formatCurrency(
+                        Number(holding.pnlAmount ?? 0),
+                        holding.currency,
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -146,8 +168,8 @@ function SetupRequired() {
         <h2>Connect Supabase before loading portfolio data</h2>
         <p>
           Add DATABASE_URL, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to
-          apps/web/.env.local, then restart the dev server. Until then, the
-          UI will stay in setup mode instead of showing API errors.
+          apps/web/.env.local, then restart the dev server. Until then, the UI
+          will stay in setup mode instead of showing API errors.
         </p>
       </div>
     </section>
@@ -195,4 +217,9 @@ function labelize(value: string) {
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatCurrency(value: number, currency: string) {
+  if (currency === "USD") return usdCurrency.format(value);
+  return inrCurrency.format(value);
 }
