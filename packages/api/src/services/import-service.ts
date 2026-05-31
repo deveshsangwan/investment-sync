@@ -6,11 +6,15 @@ import {
   importBatches,
   importRows,
   instruments,
+  portfolioValuations,
+  transactions,
 } from "@investment-sync/db";
 import {
   parseImportFile,
   type ImportFile,
   type NormalizedHoldingRow,
+  type NormalizedTransactionRow,
+  type NormalizedValuationRow,
 } from "@investment-sync/importers";
 import type { ApiContext } from "../context";
 import type { MembershipContext } from "./membership";
@@ -198,31 +202,83 @@ export async function commitImport(
 
   for (const row of batchRows) {
     const payload = row.payload as unknown;
-    if (!isHoldingRow(payload)) continue;
+    if (isHoldingRow(payload)) {
+      const accountId = await findOrCreateAccount(
+        ctx,
+        membership.householdId,
+        payload,
+      );
+      const instrumentId = await findOrCreateInstrument(ctx, payload);
+      const snapshotDate =
+        payload.sourceDate ?? new Date().toISOString().slice(0, 10);
 
-    const accountId = await findOrCreateAccount(
-      ctx,
-      membership.householdId,
-      payload,
-    );
-    const instrumentId = await findOrCreateInstrument(ctx, payload);
-    const snapshotDate =
-      payload.sourceDate ?? new Date().toISOString().slice(0, 10);
+      await ctx.db.insert(holdingSnapshots).values({
+        householdId: membership.householdId,
+        accountId,
+        instrumentId,
+        importBatchId,
+        snapshotDate,
+        quantity: payload.quantity?.toString(),
+        investedAmount: payload.investedAmount.toString(),
+        currentValue: payload.currentValue.toString(),
+        pnlAmount: payload.pnlAmount?.toString(),
+        pnlPercent: payload.pnlPercent?.toString(),
+        currency: payload.currency,
+        sourcePayload: payload.metadata,
+      });
+    } else if (isTransactionRow(payload)) {
+      const accountId = await findOrCreateAccount(
+        ctx,
+        membership.householdId,
+        payload,
+      );
+      const instrumentId = await findOrCreateInstrument(ctx, payload);
 
-    await ctx.db.insert(holdingSnapshots).values({
-      householdId: membership.householdId,
-      accountId,
-      instrumentId,
-      importBatchId,
-      snapshotDate,
-      quantity: payload.quantity?.toString(),
-      investedAmount: payload.investedAmount.toString(),
-      currentValue: payload.currentValue.toString(),
-      pnlAmount: payload.pnlAmount?.toString(),
-      pnlPercent: payload.pnlPercent?.toString(),
-      currency: payload.currency,
-      sourcePayload: payload.metadata,
-    });
+      await ctx.db.insert(transactions).values({
+        householdId: membership.householdId,
+        accountId,
+        instrumentId,
+        importBatchId,
+        type: payload.type,
+        tradeDate: payload.tradeDate,
+        quantity: payload.quantity?.toString(),
+        price: payload.price?.toString(),
+        amount: payload.amount.toString(),
+        currency: payload.currency,
+        metadata: payload.metadata,
+      });
+    } else if (isValuationRow(payload)) {
+      await ctx.db
+        .insert(portfolioValuations)
+        .values({
+          householdId: membership.householdId,
+          valuationDate: payload.valuationDate,
+          investedAmount: payload.investedAmount.toString(),
+          currentValue: payload.currentValue.toString(),
+          pnlAmount: (
+            payload.pnlAmount ?? payload.currentValue - payload.investedAmount
+          ).toString(),
+          currency: payload.currency,
+          metadata: payload.metadata,
+        })
+        .onConflictDoUpdate({
+          target: [
+            portfolioValuations.householdId,
+            portfolioValuations.valuationDate,
+          ],
+          set: {
+            investedAmount: payload.investedAmount.toString(),
+            currentValue: payload.currentValue.toString(),
+            pnlAmount: (
+              payload.pnlAmount ?? payload.currentValue - payload.investedAmount
+            ).toString(),
+            currency: payload.currency,
+            metadata: payload.metadata,
+          },
+        });
+    } else {
+      continue;
+    }
 
     await ctx.db
       .update(importRows)
@@ -286,10 +342,28 @@ function isHoldingRow(value: unknown): value is NormalizedHoldingRow {
   );
 }
 
+function isTransactionRow(value: unknown): value is NormalizedTransactionRow {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as NormalizedTransactionRow).kind === "transaction",
+  );
+}
+
+function isValuationRow(value: unknown): value is NormalizedValuationRow {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as NormalizedValuationRow).kind === "valuation",
+  );
+}
+
+type AccountImportRow = NormalizedHoldingRow | NormalizedTransactionRow;
+
 async function findOrCreateAccount(
   ctx: ApiContext,
   householdId: string,
-  row: NormalizedHoldingRow,
+  row: AccountImportRow,
 ): Promise<string> {
   const existing = await ctx.db
     .select({ id: accounts.id })
@@ -322,7 +396,7 @@ async function findOrCreateAccount(
 
 async function findOrCreateInstrument(
   ctx: ApiContext,
-  row: NormalizedHoldingRow,
+  row: AccountImportRow,
 ): Promise<string> {
   const existing = await ctx.db
     .select({ id: instruments.id })
@@ -341,7 +415,7 @@ async function findOrCreateInstrument(
     .values({
       name: row.instrumentName,
       symbol: row.symbol,
-      isin: row.isin,
+      isin: "isin" in row ? row.isin : undefined,
       assetClass: row.assetClass as AssetClass,
       currency: row.currency as Currency,
     })

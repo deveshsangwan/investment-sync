@@ -74,9 +74,21 @@ export interface NormalizedTransactionRow {
   metadata: Record<string, unknown>;
 }
 
+export interface NormalizedValuationRow {
+  kind: "valuation";
+  sourceType: ImportSourceType;
+  valuationDate: string;
+  investedAmount: number;
+  currentValue: number;
+  pnlAmount?: number;
+  currency: Currency;
+  metadata: Record<string, unknown>;
+}
+
 export type NormalizedImportRow =
   | NormalizedHoldingRow
-  | NormalizedTransactionRow;
+  | NormalizedTransactionRow
+  | NormalizedValuationRow;
 
 export interface ParseResult {
   sourceType: ImportSourceType;

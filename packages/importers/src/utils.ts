@@ -20,7 +20,8 @@ export function normalizeHeader(value: unknown): string {
 export function parseNumber(value: unknown): number | undefined {
   if (value === null || value === undefined || value === "") return undefined;
   const raw = String(value)
-    .replace(/[₹,$%\s]/g, "")
+    .replace(/rs\.?|inr/gi, "")
+    .replace(/[₹,$%\s\u00a0]/g, "")
     .replace(/[()]/g, "")
     .replace(/,/g, "");
   if (!raw || raw === "-") return undefined;
