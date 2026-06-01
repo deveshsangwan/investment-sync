@@ -8,10 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.deveshsangwan.investmentsync"
+      "bundleIdentifier": "com.investmentsync.app"
     },
     "android": {
-      "package": "com.deveshsangwan.investmentsync"
+      "package": "com.investmentsync.app"
     },
     "plugins": ["expo-router", "expo-secure-store"],
     "experiments": {

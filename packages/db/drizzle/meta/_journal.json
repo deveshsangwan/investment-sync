@@ -8,6 +8,27 @@
       "when": 1780237315451,
       "tag": "0000_concerned_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780327800000,
+      "tag": "0001_dedupe_portfolio_rows",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780329600000,
+      "tag": "0002_remove_semantic_portfolio_duplicates",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780331400000,
+      "tag": "0003_remove_cross_source_stock_duplicates",
+      "breakpoints": true
     }
   ]
 }

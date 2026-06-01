@@ -662,18 +662,18 @@ function nonAggregateEligibleHoldings<
 function latestSnapshotsByInstrument<
   T extends {
     snapshotDate: string;
-    accountName?: string;
-    provider?: string;
+    assetClass: string;
     instrumentName: string;
+    symbol?: string | null;
     currency?: string;
   },
 >(holdings: T[]): Map<string, T> {
   const byInstrument = new Map<string, T>();
   for (const holding of holdings) {
     const key = [
-      holding.accountName,
-      holding.provider,
-      holding.instrumentName,
+      holding.assetClass,
+      holding.symbol?.trim().toUpperCase() ??
+        holding.instrumentName.trim().toUpperCase(),
       holding.currency,
     ].join("|");
     const current = byInstrument.get(key);

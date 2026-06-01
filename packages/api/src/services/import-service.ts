@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   accounts,
   holdingSnapshots,
@@ -227,20 +227,40 @@ export async function commitImport(
       const snapshotDate =
         payload.sourceDate ?? new Date().toISOString().slice(0, 10);
 
-      await ctx.db.insert(holdingSnapshots).values({
-        householdId: membership.householdId,
-        accountId,
-        instrumentId,
-        importBatchId,
-        snapshotDate,
-        quantity: payload.quantity?.toString(),
-        investedAmount: payload.investedAmount.toString(),
-        currentValue: payload.currentValue.toString(),
-        pnlAmount: payload.pnlAmount?.toString(),
-        pnlPercent: payload.pnlPercent?.toString(),
-        currency: payload.currency,
-        sourcePayload: payload.metadata,
-      });
+      await ctx.db
+        .insert(holdingSnapshots)
+        .values({
+          householdId: membership.householdId,
+          accountId,
+          instrumentId,
+          importBatchId,
+          snapshotDate,
+          quantity: payload.quantity?.toString(),
+          investedAmount: payload.investedAmount.toString(),
+          currentValue: payload.currentValue.toString(),
+          pnlAmount: payload.pnlAmount?.toString(),
+          pnlPercent: payload.pnlPercent?.toString(),
+          currency: payload.currency,
+          sourcePayload: payload.metadata,
+        })
+        .onConflictDoUpdate({
+          target: [
+            holdingSnapshots.householdId,
+            holdingSnapshots.accountId,
+            holdingSnapshots.instrumentId,
+            holdingSnapshots.snapshotDate,
+            holdingSnapshots.currency,
+          ],
+          set: {
+            importBatchId,
+            quantity: payload.quantity?.toString(),
+            investedAmount: payload.investedAmount.toString(),
+            currentValue: payload.currentValue.toString(),
+            pnlAmount: payload.pnlAmount?.toString(),
+            pnlPercent: payload.pnlPercent?.toString(),
+            sourcePayload: payload.metadata,
+          },
+        });
     } else if (isTransactionRow(payload)) {
       const accountId = await findOrCreateAccount(
         ctx,
@@ -249,19 +269,38 @@ export async function commitImport(
       );
       const instrumentId = await findOrCreateInstrument(ctx, payload);
 
-      await ctx.db.insert(transactions).values({
-        householdId: membership.householdId,
-        accountId,
-        instrumentId,
-        importBatchId,
-        type: payload.type,
-        tradeDate: payload.tradeDate,
-        quantity: payload.quantity?.toString(),
-        price: payload.price?.toString(),
-        amount: payload.amount.toString(),
-        currency: payload.currency,
-        metadata: payload.metadata,
-      });
+      await ctx.db
+        .insert(transactions)
+        .values({
+          householdId: membership.householdId,
+          accountId,
+          instrumentId,
+          importBatchId,
+          type: payload.type,
+          tradeDate: payload.tradeDate,
+          quantity: payload.quantity?.toString(),
+          price: payload.price?.toString(),
+          amount: payload.amount.toString(),
+          currency: payload.currency,
+          metadata: payload.metadata,
+        })
+        .onConflictDoUpdate({
+          target: [
+            transactions.householdId,
+            transactions.accountId,
+            transactions.instrumentId,
+            transactions.tradeDate,
+            transactions.type,
+            transactions.amount,
+            transactions.currency,
+          ],
+          set: {
+            importBatchId,
+            quantity: payload.quantity?.toString(),
+            price: payload.price?.toString(),
+            metadata: payload.metadata,
+          },
+        });
     } else if (isValuationRow(payload)) {
       await ctx.db
         .insert(portfolioValuations)
@@ -347,6 +386,134 @@ export async function cleanupExpiredImportFiles(ctx: ApiContext) {
   }
 
   return { deleted };
+}
+
+export async function dedupePortfolioData(
+  ctx: ApiContext,
+  membership: MembershipContext,
+) {
+  const deletedAggregateHoldingSnapshots = await ctx.db.execute(sql`
+    delete from ${holdingSnapshots}
+    using ${instruments}
+    where ${holdingSnapshots.instrumentId} = ${instruments.id}
+      and ${holdingSnapshots.householdId} = ${membership.householdId}
+      and (
+        ${holdingSnapshots.sourcePayload}->>'isAggregate' = 'true'
+        or ${holdingSnapshots.sourcePayload}->>'sourceSheet' = 'Investment Portfolio'
+        or ${instruments.name} ilike '% Summary'
+      )
+    returning ${holdingSnapshots.id}
+  `);
+
+  const deletedHoldingSnapshots = await ctx.db.execute(sql`
+    with ranked as (
+      select
+        id,
+        row_number() over (
+          partition by
+            household_id,
+            account_id,
+            instrument_id,
+            snapshot_date,
+            currency
+          order by created_at desc, id desc
+        ) as duplicate_rank
+      from ${holdingSnapshots}
+      where household_id = ${membership.householdId}
+    )
+    delete from ${holdingSnapshots}
+    using ranked
+    where ${holdingSnapshots.id} = ranked.id
+      and ranked.duplicate_rank > 1
+    returning ${holdingSnapshots.id}
+  `);
+
+  const deletedSemanticHoldingSnapshots = await ctx.db.execute(sql`
+    with ranked as (
+      select
+        ${holdingSnapshots.id} as id,
+        row_number() over (
+          partition by
+            ${holdingSnapshots.householdId},
+            lower(${accounts.name}),
+            lower(${accounts.provider}),
+            ${holdingSnapshots.snapshotDate},
+            ${holdingSnapshots.currency},
+            coalesce(${holdingSnapshots.sourcePayload}->>'sourceSheet', ''),
+            coalesce(upper(${instruments.symbol}), lower(${instruments.name}))
+          order by ${holdingSnapshots.createdAt} desc, ${holdingSnapshots.id} desc
+        ) as duplicate_rank
+      from ${holdingSnapshots}
+      inner join ${accounts} on ${holdingSnapshots.accountId} = ${accounts.id}
+      inner join ${instruments} on ${holdingSnapshots.instrumentId} = ${instruments.id}
+      where ${holdingSnapshots.householdId} = ${membership.householdId}
+    )
+    delete from ${holdingSnapshots}
+    using ranked
+    where ${holdingSnapshots.id} = ranked.id
+      and ranked.duplicate_rank > 1
+    returning ${holdingSnapshots.id}
+  `);
+
+  const deletedCrossSourceStockSnapshots = await ctx.db.execute(sql`
+    with ranked as (
+      select
+        ${holdingSnapshots.id} as id,
+        row_number() over (
+          partition by
+            ${holdingSnapshots.householdId},
+            ${instruments.assetClass},
+            coalesce(upper(${instruments.symbol}), lower(${instruments.name})),
+            ${holdingSnapshots.currency},
+            ${holdingSnapshots.quantity},
+            ${holdingSnapshots.investedAmount},
+            ${holdingSnapshots.currentValue}
+          order by
+            ${holdingSnapshots.snapshotDate} desc,
+            case
+              when ${holdingSnapshots.sourcePayload} ? 'sourceSheet' then 0
+              else 1
+            end,
+            ${holdingSnapshots.createdAt} desc,
+            ${holdingSnapshots.id} desc
+        ) as duplicate_rank
+      from ${holdingSnapshots}
+      inner join ${instruments} on ${holdingSnapshots.instrumentId} = ${instruments.id}
+      where ${holdingSnapshots.householdId} = ${membership.householdId}
+        and ${instruments.assetClass} in ('indian_stock', 'us_stock')
+    )
+    delete from ${holdingSnapshots}
+    using ranked
+    where ${holdingSnapshots.id} = ranked.id
+      and ranked.duplicate_rank > 1
+    returning ${holdingSnapshots.id}
+  `);
+
+  const deletedTransactions = await ctx.db.execute(sql`
+    with ranked as (
+      select
+        id,
+        row_number() over (
+          partition by household_id, account_id, instrument_id, trade_date, type, amount, currency
+          order by created_at desc, id desc
+        ) as duplicate_rank
+      from ${transactions}
+      where household_id = ${membership.householdId}
+    )
+    delete from ${transactions}
+    using ranked
+    where ${transactions.id} = ranked.id
+      and ranked.duplicate_rank > 1
+    returning ${transactions.id}
+  `);
+
+  return {
+    deletedAggregateHoldingSnapshots: deletedAggregateHoldingSnapshots.length,
+    deletedHoldingSnapshots: deletedHoldingSnapshots.length,
+    deletedSemanticHoldingSnapshots: deletedSemanticHoldingSnapshots.length,
+    deletedCrossSourceStockSnapshots: deletedCrossSourceStockSnapshots.length,
+    deletedTransactions: deletedTransactions.length,
+  };
 }
 
 function isHoldingRow(value: unknown): value is NormalizedHoldingRow {
