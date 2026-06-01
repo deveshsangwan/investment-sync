@@ -1,7 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, FileSpreadsheet, ReceiptText } from "lucide-react";
+import {
+  ArrowLeft,
+  FileSpreadsheet,
+  ReceiptText,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
+import {
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  PageShell,
+  SectionCard,
+  TrendRow,
+} from "@/components/portfolio-ui";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trpc } from "../../../providers";
 
 const inrCurrency = new Intl.NumberFormat("en-IN", {
@@ -29,83 +53,82 @@ export function HoldingDetailClient({
   );
   const data = detail.data;
   const holding = data?.holding;
-  const pnlClass =
-    (holding?.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
-  const historyValues =
-    data?.history.map((point) => point.currentValueInInr) ?? [];
+  const pnlTone = (holding?.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
+  const historyValues = data?.history.map((point) => point.currentValueInInr) ?? [];
 
   return (
-    <main className="page dashboard-page">
-      <section className="page-header">
-        <div>
-          <Link className="back-link" href="/dashboard">
-            <ArrowLeft size={16} />
-            Dashboard
-          </Link>
-          <p className="eyebrow">Holding</p>
-          <h1>
-            {holding ? (holding.symbol ?? holding.instrumentName) : "Holding"}
-          </h1>
-          <p className="muted">
-            {holding
-              ? `${labelize(holding.assetClass)} · ${holding.accountName} · ${holding.provider}`
-              : "Loading holding analytics"}
-          </p>
-        </div>
-        {holding ? (
-          <Link
-            className="button secondary"
-            href={`/dashboard/asset-class/${encodeURIComponent(holding.assetClass)}`}
-          >
-            {labelize(holding.assetClass)}
-          </Link>
-        ) : null}
-      </section>
+    <PageShell>
+      <PageHeader
+        eyebrow="Holding"
+        title={holding ? (holding.symbol ?? holding.instrumentName) : "Holding"}
+        description={
+          holding
+            ? `${labelize(holding.assetClass)} · ${holding.accountName} · ${holding.provider}`
+            : "Loading holding analytics"
+        }
+        before={
+          <Button variant="ghost" size="sm" asChild className="mb-2 -ml-3">
+            <Link href="/dashboard">
+              <ArrowLeft className="size-4" />
+              Dashboard
+            </Link>
+          </Button>
+        }
+        action={
+          holding ? (
+            <Button variant="secondary" asChild>
+              <Link
+                href={`/dashboard/asset-class/${encodeURIComponent(holding.assetClass)}`}
+              >
+                {labelize(holding.assetClass)}
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {!isDataConfigured ? <SetupRequired /> : null}
-      {isDataConfigured && !detail.isLoading && !holding ? (
-        <MissingHolding />
-      ) : null}
+      {isDataConfigured && !detail.isLoading && !holding ? <MissingHolding /> : null}
 
-      <section className="grid grid-4">
-        <Metric
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          icon={Wallet}
           label="Current value"
           value={formatCurrency(
             Number(holding?.currentValue ?? 0),
             holding?.currency ?? "INR",
           )}
         />
-        <Metric
+        <MetricCard
           label="Invested"
           value={formatCurrency(
             Number(holding?.investedAmount ?? 0),
             holding?.currency ?? "INR",
           )}
         />
-        <Metric
+        <MetricCard
+          icon={TrendingUp}
           label="Gain/Loss"
           value={formatCurrency(
             Number(holding?.pnlAmount ?? 0),
             holding?.currency ?? "INR",
           )}
-          className={pnlClass}
+          tone={pnlTone}
         />
-        <Metric
+        <MetricCard
           label="Return"
           value={formatPercent(numberOrUndefined(holding?.pnlPercent))}
-          className={pnlClass}
+          tone={pnlTone}
         />
       </section>
 
-      <section className="grid grid-4" style={{ marginTop: 16 }}>
-        <Metric
+      <section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
           label="Source XIRR"
           value={formatPercent(holding?.sourceXirr)}
-          detail={
-            holding?.sourceXirr === undefined ? "Needs cash flows" : "Imported"
-          }
+          detail={holding?.sourceXirr === undefined ? "Needs cash flows" : "Imported"}
         />
-        <Metric
+        <MetricCard
           label="Portfolio weight"
           value={
             holding?.isCurrent === false
@@ -113,179 +136,127 @@ export function HoldingDetailClient({
               : formatPercent(holding?.portfolioWeight)
           }
           detail={
-            holding?.isCurrent === false
-              ? "Absent from latest snapshot"
-              : undefined
+            holding?.isCurrent === false ? "Absent from latest snapshot" : undefined
           }
         />
-        <Metric
+        <MetricCard
           label="P&L contribution"
           value={formatPercent(holding?.pnlContribution)}
-          className={pnlClass}
+          tone={pnlTone}
         />
-        <Metric label="Snapshots" value={`${data?.history.length ?? 0}`} />
+        <MetricCard label="Snapshots" value={`${data?.history.length ?? 0}`} />
       </section>
 
-      <section className="grid grid-2" style={{ marginTop: 16 }}>
-        <div className="panel panel-tall">
-          <h2>Value history</h2>
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <SectionCard title="Value history">
           {(data?.history.length ?? 0) < 2 ? (
-            <div className="quiet-empty">
-              <FileSpreadsheet size={24} />
-              <p>More dated uploads will build this holding history.</p>
-            </div>
+            <EmptyState
+              icon={FileSpreadsheet}
+              title="No history yet"
+              description="More dated uploads will build this holding history."
+            />
           ) : (
-            <div className="trend-list">
+            <div className="divide-y">
               {data?.history.slice(-10).map((point) => (
-                <div className="trend-row" key={point.id}>
-                  <div>
-                    <strong>{formatDate(point.snapshotDate)}</strong>
-                    <span>
-                      {formatCurrency(
-                        Number(point.investedAmount),
-                        point.currency,
-                      )}
-                    </span>
-                  </div>
-                  <div className="trend-track">
-                    <span
-                      style={{
-                        width: `${trendWidth(point.currentValueInInr, historyValues)}%`,
-                      }}
-                    />
-                  </div>
-                  <strong>
-                    {formatCurrency(Number(point.currentValue), point.currency)}
-                  </strong>
-                </div>
+                <TrendRow
+                  key={point.id}
+                  label={formatDate(point.snapshotDate)}
+                  sublabel={formatCurrency(Number(point.investedAmount), point.currency)}
+                  value={formatCurrency(Number(point.currentValue), point.currency)}
+                  width={trendWidth(point.currentValueInInr, historyValues)}
+                />
               ))}
             </div>
           )}
-        </div>
+        </SectionCard>
 
-        <div className="panel panel-tall">
-          <h2>Holding facts</h2>
-          <dl className="detail-list">
-            <div>
-              <dt>Quantity</dt>
-              <dd>{holding?.quantity ?? "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Last updated</dt>
-              <dd>{holding ? formatDate(holding.snapshotDate) : "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Currency</dt>
-              <dd>{holding?.currency ?? "N/A"}</dd>
-            </div>
-            <div>
-              <dt>ISIN</dt>
-              <dd>{holding?.isin ?? "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Exchange</dt>
-              <dd>{holding?.exchange ?? "N/A"}</dd>
-            </div>
+        <SectionCard title="Holding facts">
+          <dl className="grid gap-3 sm:grid-cols-2">
+            {[
+              ["Quantity", holding?.quantity ?? "N/A"],
+              ["Last updated", holding ? formatDate(holding.snapshotDate) : "N/A"],
+              ["Currency", holding?.currency ?? "N/A"],
+              ["ISIN", holding?.isin ?? "N/A"],
+              ["Exchange", holding?.exchange ?? "N/A"],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border bg-muted/30 p-3">
+                <dt className="text-xs font-semibold uppercase text-muted-foreground">
+                  {label}
+                </dt>
+                <dd className="mt-1 break-words text-sm font-semibold">{value}</dd>
+              </div>
+            ))}
           </dl>
-        </div>
+        </SectionCard>
       </section>
 
-      <section className="panel panel-tall" style={{ marginTop: 16 }}>
-        <h2>Transactions</h2>
+      <SectionCard title="Transactions" className="mt-4">
         {(data?.transactions.length ?? 0) === 0 ? (
-          <div className="quiet-empty">
-            <ReceiptText size={24} />
-            <p>
-              Transaction imports will unlock exact XIRR and realized gains.
-            </p>
-          </div>
+          <EmptyState
+            icon={ReceiptText}
+            title="No transactions yet"
+            description="Transaction imports will unlock exact XIRR and realized gains."
+          />
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Quantity</th>
-                <th>Price</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Quantity</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {data?.transactions.map((transaction) => (
-                <tr key={transaction.id}>
-                  <td>{formatDate(transaction.tradeDate)}</td>
-                  <td>{labelize(transaction.type)}</td>
-                  <td>{transaction.quantity ?? "N/A"}</td>
-                  <td>
+                <TableRow key={transaction.id}>
+                  <TableCell>{formatDate(transaction.tradeDate)}</TableCell>
+                  <TableCell>{labelize(transaction.type)}</TableCell>
+                  <TableCell>{transaction.quantity ?? "N/A"}</TableCell>
+                  <TableCell>
                     {transaction.price
-                      ? formatCurrency(
-                          Number(transaction.price),
-                          transaction.currency,
-                        )
+                      ? formatCurrency(Number(transaction.price), transaction.currency)
                       : "N/A"}
-                  </td>
-                  <td>
-                    {formatCurrency(
-                      Number(transaction.amount),
-                      transaction.currency,
-                    )}
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="font-semibold">
+                    {formatCurrency(Number(transaction.amount), transaction.currency)}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </section>
-    </main>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  className,
-  detail,
-}: {
-  label: string;
-  value: string;
-  className?: string;
-  detail?: string;
-}) {
-  return (
-    <div className="panel metric-card">
-      <div className="metric-label">{label}</div>
-      <div className={`metric-value ${className ?? ""}`}>{value}</div>
-      {detail ? <div className="metric-detail">{detail}</div> : null}
-    </div>
+      </SectionCard>
+    </PageShell>
   );
 }
 
 function SetupRequired() {
   return (
-    <section className="empty-portfolio setup-required">
-      <div>
-        <p className="eyebrow">Setup required</p>
-        <h2>Connect Supabase before loading portfolio data</h2>
-        <p>
-          Add the database and Supabase environment variables, then restart.
-        </p>
-      </div>
-    </section>
+    <Alert className="mb-4 border-amber-500/30 bg-amber-500/10">
+      <AlertTitle>Connect Supabase before loading portfolio data</AlertTitle>
+      <AlertDescription>
+        Add the database and Supabase environment variables, then restart.
+      </AlertDescription>
+    </Alert>
   );
 }
 
 function MissingHolding() {
   return (
-    <section className="empty-portfolio">
-      <div>
-        <p className="eyebrow">Not found</p>
-        <h2>This holding was not found</h2>
-        <p>It may have been replaced by a newer import or removed.</p>
-      </div>
-      <Link className="button secondary" href="/dashboard">
-        Back to dashboard
-      </Link>
-    </section>
+    <div className="mb-4">
+      <EmptyState
+        icon={FileSpreadsheet}
+        title="This holding was not found"
+        description="It may have been replaced by a newer import or removed."
+        action={
+          <Button variant="secondary" asChild>
+            <Link href="/dashboard">Back to dashboard</Link>
+          </Button>
+        }
+      />
+    </div>
   );
 }
 

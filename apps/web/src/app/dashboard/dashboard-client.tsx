@@ -2,13 +2,34 @@
 
 import Link from "next/link";
 import {
-  ArrowRight,
   Activity,
+  ArrowRight,
   FileSpreadsheet,
+  LineChart,
   PieChart,
   TrendingUp,
   UploadCloud,
+  Wallet,
 } from "lucide-react";
+import {
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  PageShell,
+  QualityBadge,
+  SectionCard,
+  TrendRow,
+} from "@/components/portfolio-ui";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trpc } from "../providers";
 
 const inrCurrency = new Intl.NumberFormat("en-IN", {
@@ -41,224 +62,226 @@ export function DashboardClient({
     enabled: isDataConfigured,
   });
   const hasHoldings = (holdings.data?.length ?? 0) > 0;
-  const pnlClass =
-    (summary.data?.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
-  const xirrClass =
-    (performance.data?.xirr ?? 0) >= 0 ? "positive" : "negative";
+  const pnlTone = (summary.data?.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
+  const xirrTone = (performance.data?.xirr ?? 0) >= 0 ? "positive" : "negative";
 
   return (
-    <main className="page dashboard-page">
-      <section className="page-header">
-        <div>
-          <p className="eyebrow">Dashboard</p>
-          <h1>Portfolio overview</h1>
-          <p className="muted">
-            Latest committed holdings across every account in your household.
-          </p>
-        </div>
-        <Link className="button" href="/uploads">
-          <UploadCloud size={18} />
-          Upload file
-        </Link>
-      </section>
-
-      {!isDataConfigured ? null : !hasHoldings ? <EmptyPortfolio /> : null}
+    <PageShell>
+      <PageHeader
+        eyebrow="Dashboard"
+        title="Portfolio overview"
+        description="Latest committed holdings across every account in your household."
+        action={
+          <Button asChild>
+            <Link href="/uploads">
+              <UploadCloud className="size-4" />
+              Upload file
+            </Link>
+          </Button>
+        }
+      />
 
       {!isDataConfigured ? <SetupRequired /> : null}
+      {isDataConfigured && !hasHoldings ? <EmptyPortfolio /> : null}
 
-      <section className="grid grid-4">
-        <Metric
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          icon={Wallet}
           label="Current value"
           value={inrCurrency.format(summary.data?.currentValue ?? 0)}
         />
-        <Metric
+        <MetricCard
+          icon={Activity}
           label="Invested"
           value={inrCurrency.format(summary.data?.investedAmount ?? 0)}
         />
-        <Metric
+        <MetricCard
+          icon={TrendingUp}
           label="Gain/Loss"
           value={inrCurrency.format(summary.data?.pnlAmount ?? 0)}
-          className={pnlClass}
+          tone={pnlTone}
         />
-        <Metric
+        <MetricCard
+          icon={LineChart}
           label="Return"
           value={`${summary.data?.pnlPercent ?? 0}%`}
-          className={pnlClass}
+          tone={pnlTone}
         />
       </section>
 
-      <section className="grid grid-4" style={{ marginTop: 16 }}>
-        <Metric
+      <section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
           label="XIRR"
           value={formatPercent(performance.data?.xirr)}
-          className={xirrClass}
+          tone={xirrTone}
           detail={qualityLabel(performance.data?.dataQuality)}
         />
-        <Metric
+        <MetricCard
           label="Absolute return"
           value={formatPercent(performance.data?.absoluteReturnPercent)}
-          className={pnlClass}
+          tone={pnlTone}
         />
-        <Metric
+        <MetricCard
           label="CAGR"
           value={formatPercent(performance.data?.cagr)}
           detail="Valuation trend"
         />
-        <Metric
+        <MetricCard
           label="XIRR coverage"
           value={formatPercent(performance.data?.sourceXirrCoveragePercent)}
           detail={`${performance.data?.cashFlowCount ?? 0} cash flows`}
         />
       </section>
 
-      <section className="grid grid-2" style={{ marginTop: 16 }}>
-        <div className="panel panel-tall">
-          <h2>Allocation</h2>
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <SectionCard title="Allocation">
           {(summary.data?.allocationByAssetClass.length ?? 0) === 0 ? (
-            <div className="quiet-empty">
-              <PieChart size={24} />
-              <p>Allocation will appear after your first committed import.</p>
-            </div>
+            <EmptyState
+              icon={PieChart}
+              title="No allocation yet"
+              description="Allocation will appear after your first committed import."
+            />
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Asset class</th>
-                  <th>Value</th>
-                  <th>Weight</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Asset class</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead className="text-right">Weight</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {summary.data?.allocationByAssetClass.map((item) => (
-                  <tr key={item.assetClass}>
-                    <td>
+                  <TableRow key={item.assetClass}>
+                    <TableCell>
                       <Link
-                        className="table-link"
+                        className="font-semibold text-primary hover:underline"
                         href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
                       >
                         {labelize(item.assetClass)}
                       </Link>
-                    </td>
-                    <td>{inrCurrency.format(item.currentValue)}</td>
-                    <td>{item.weight}%</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>{inrCurrency.format(item.currentValue)}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {item.weight}%
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
-        </div>
+        </SectionCard>
 
-        <div className="panel panel-tall">
-          <h2>Top holdings</h2>
+        <SectionCard title="Top holdings">
           {(holdings.data?.length ?? 0) === 0 ? (
-            <div className="quiet-empty">
-              <FileSpreadsheet size={24} />
-              <p>
-                Holdings will show here once an upload is parsed and committed.
-              </p>
-            </div>
+            <EmptyState
+              icon={FileSpreadsheet}
+              title="No holdings yet"
+              description="Holdings will show here once an upload is parsed and committed."
+            />
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Account</th>
-                  <th>Value</th>
-                  <th>P&L</th>
-                </tr>
-              </thead>
-              <tbody>
-                {holdings.data?.slice(0, 8).map((holding) => (
-                  <tr key={holding.id}>
-                    <td>
-                      <Link
-                        className="table-link"
-                        href={`/dashboard/holdings/${holding.id}`}
-                      >
-                        {holding.symbol ?? holding.instrumentName}
-                      </Link>
-                    </td>
-                    <td>{holding.accountName}</td>
-                    <td>
-                      {formatCurrency(
-                        Number(holding.currentValue),
-                        holding.currency,
-                      )}
-                    </td>
-                    <td
-                      className={
-                        Number(holding.pnlAmount ?? 0) >= 0
-                          ? "positive"
-                          : "negative"
-                      }
-                    >
-                      {formatCurrency(
-                        Number(holding.pnlAmount ?? 0),
-                        holding.currency,
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead className="text-right">P&L</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {holdings.data?.slice(0, 8).map((holding) => {
+                  const rowTone =
+                    Number(holding.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
+                  return (
+                    <TableRow key={holding.id}>
+                      <TableCell>
+                        <Link
+                          className="font-semibold text-primary hover:underline"
+                          href={`/dashboard/holdings/${holding.id}`}
+                        >
+                          {holding.symbol ?? holding.instrumentName}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {holding.accountName}
+                      </TableCell>
+                      <TableCell>
+                        {formatCurrency(
+                          Number(holding.currentValue),
+                          holding.currency,
+                        )}
+                      </TableCell>
+                      <TableCell className={`text-right font-semibold ${rowTone}`}>
+                        {formatCurrency(
+                          Number(holding.pnlAmount ?? 0),
+                          holding.currency,
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
-        </div>
+        </SectionCard>
       </section>
 
-      <section className="grid grid-2" style={{ marginTop: 16 }}>
-        <div className="panel panel-tall">
-          <h2>Performance by asset class</h2>
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <SectionCard title="Performance by asset class">
           {(performance.data?.byAssetClass.length ?? 0) === 0 ? (
-            <div className="quiet-empty">
-              <Activity size={24} />
-              <p>XIRR by asset class appears once source data has returns.</p>
-            </div>
+            <EmptyState
+              icon={Activity}
+              title="No performance data yet"
+              description="XIRR by asset class appears once source data has returns."
+            />
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Asset class</th>
-                  <th>Value</th>
-                  <th>XIRR</th>
-                  <th>Quality</th>
-                </tr>
-              </thead>
-              <tbody>
-                {performance.data?.byAssetClass.map((item) => (
-                  <tr key={item.assetClass}>
-                    <td>
-                      <Link
-                        className="table-link"
-                        href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
-                      >
-                        {labelize(item.assetClass)}
-                      </Link>
-                    </td>
-                    <td>{inrCurrency.format(item.currentValue)}</td>
-                    <td
-                      className={
-                        (item.xirr ?? 0) >= 0 ? "positive" : "negative"
-                      }
-                    >
-                      {formatPercent(item.xirr)}
-                    </td>
-                    <td>{qualityLabel(item.dataQuality)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Asset class</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>XIRR</TableHead>
+                  <TableHead>Quality</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {performance.data?.byAssetClass.map((item) => {
+                  const rowTone = (item.xirr ?? 0) >= 0 ? "positive" : "negative";
+                  return (
+                    <TableRow key={item.assetClass}>
+                      <TableCell>
+                        <Link
+                          className="font-semibold text-primary hover:underline"
+                          href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
+                        >
+                          {labelize(item.assetClass)}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{inrCurrency.format(item.currentValue)}</TableCell>
+                      <TableCell className={`font-semibold ${rowTone}`}>
+                        {formatPercent(item.xirr)}
+                      </TableCell>
+                      <TableCell>
+                        <QualityBadge value={qualityLabel(item.dataQuality)} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
-        </div>
+        </SectionCard>
 
-        <div className="panel panel-tall">
-          <h2>Portfolio trend</h2>
+        <SectionCard title="Portfolio trend">
           {(timeline.data?.length ?? 0) < 2 ? (
-            <div className="quiet-empty">
-              <TrendingUp size={24} />
-              <p>Upload dated snapshots to build portfolio history.</p>
-            </div>
+            <EmptyState
+              icon={TrendingUp}
+              title="No trend yet"
+              description="Upload dated snapshots to build portfolio history."
+            />
           ) : (
-            <div className="trend-list">
+            <div className="divide-y">
               {timeline.data?.slice(-8).map((point) => {
                 const currentValue = Number(point.currentValue);
                 const investedAmount = Number(point.investedAmount);
@@ -267,78 +290,51 @@ export function DashboardClient({
                   timeline.data.map((item) => Number(item.currentValue)),
                 );
                 return (
-                  <div className="trend-row" key={point.snapshotDate}>
-                    <div>
-                      <strong>{formatDate(point.snapshotDate)}</strong>
-                      <span>{inrCurrency.format(investedAmount)}</span>
-                    </div>
-                    <div className="trend-track">
-                      <span style={{ width: `${width}%` }} />
-                    </div>
-                    <strong>{inrCurrency.format(currentValue)}</strong>
-                  </div>
+                  <TrendRow
+                    key={point.snapshotDate}
+                    label={formatDate(point.snapshotDate)}
+                    sublabel={inrCurrency.format(investedAmount)}
+                    value={inrCurrency.format(currentValue)}
+                    width={width}
+                  />
                 );
               })}
             </div>
           )}
-        </div>
+        </SectionCard>
       </section>
-    </main>
+    </PageShell>
   );
 }
 
 function SetupRequired() {
   return (
-    <section className="empty-portfolio setup-required">
-      <div>
-        <p className="eyebrow">Setup required</p>
-        <h2>Connect Supabase before loading portfolio data</h2>
-        <p>
-          Add DATABASE_URL, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to
-          apps/web/.env.local, then restart the dev server. Until then, the UI
-          will stay in setup mode instead of showing API errors.
-        </p>
-      </div>
-    </section>
+    <Alert className="mb-4 border-amber-500/30 bg-amber-500/10">
+      <AlertTitle>Connect Supabase before loading portfolio data</AlertTitle>
+      <AlertDescription>
+        Add DATABASE_URL, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to
+        apps/web/.env.local, then restart the dev server.
+      </AlertDescription>
+    </Alert>
   );
 }
 
 function EmptyPortfolio() {
   return (
-    <section className="empty-portfolio">
-      <div>
-        <p className="eyebrow">Start here</p>
-        <h2>Import your first portfolio file</h2>
-        <p>
-          Upload a Tickertape holdings CSV, mutual fund CSV, Vested P&L
-          workbook, or your current investment workbook. The app will stage the
-          parsed rows before committing them to your private portfolio.
-        </p>
-      </div>
-      <Link className="button secondary" href="/uploads">
-        Go to uploads
-        <ArrowRight size={18} />
-      </Link>
-    </section>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  className,
-  detail,
-}: {
-  label: string;
-  value: string;
-  className?: string;
-  detail?: string;
-}) {
-  return (
-    <div className="panel metric-card">
-      <div className="metric-label">{label}</div>
-      <div className={`metric-value ${className ?? ""}`}>{value}</div>
-      {detail ? <div className="metric-detail">{detail}</div> : null}
+    <div className="mb-4">
+      <EmptyState
+        icon={UploadCloud}
+        title="Import your first portfolio file"
+        description="Upload a Tickertape holdings CSV, mutual fund CSV, Vested P&L workbook, or your current investment workbook."
+        action={
+          <Button variant="secondary" asChild>
+            <Link href="/uploads">
+              Go to uploads
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        }
+      />
     </div>
   );
 }

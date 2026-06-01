@@ -6,6 +6,7 @@ import { httpBatchLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
 import superjson from "superjson";
 import { useState } from "react";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -24,7 +25,9 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>{children}</ThemeProvider>
+      </QueryClientProvider>
     </trpc.Provider>
   );
 }
