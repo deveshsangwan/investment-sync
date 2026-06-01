@@ -1,8 +1,8 @@
-import { ClerkProvider, SignedIn, UserButton } from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
 import { TRPCProvider } from "./providers";
+import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: "Investment Sync",
@@ -16,25 +16,10 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <body>
           <TRPCProvider>
-            <div className="shell">
-              <SignedIn>
-                <header className="topbar">
-                  <Link href="/dashboard" className="brand">
-                    Investment Sync
-                  </Link>
-                  <nav className="nav">
-                    <Link href="/dashboard">Dashboard</Link>
-                    <Link href="/uploads">Uploads</Link>
-                    <Link href="/settings">Settings</Link>
-                    <UserButton afterSignOutUrl="/" />
-                  </nav>
-                </header>
-              </SignedIn>
-              {children}
-            </div>
+            <AppShell>{children}</AppShell>
           </TRPCProvider>
         </body>
       </html>
