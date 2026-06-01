@@ -1,36 +1,36 @@
-import * as React from "react";
+import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-const Alert = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    role="alert"
-    className={cn(
-      "relative w-full rounded-lg border border-border bg-card px-4 py-3 text-sm",
-      className,
-    )}
-    {...props}
-  />
-));
-Alert.displayName = "Alert";
+function Alert({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "relative w-full rounded-lg border border-border bg-card px-4 py-3 text-sm",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
-const AlertTitle = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
-  <h5 ref={ref} className={cn("mb-1 font-semibold leading-none", className)} {...props} />
-));
-AlertTitle.displayName = "AlertTitle";
+function AlertTitle({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLHeadingElement>) {
+  return (
+    <h5
+      className={cn("mb-1 font-semibold leading-none", className)}
+      {...props}
+    />
+  );
+}
 
-const AlertDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("text-muted-foreground", className)} {...props} />
-));
-AlertDescription.displayName = "AlertDescription";
+function AlertDescription({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLParagraphElement>) {
+  return <div className={cn("text-muted-foreground", className)} {...props} />;
+}
 
 export { Alert, AlertDescription, AlertTitle };
