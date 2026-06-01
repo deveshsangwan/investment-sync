@@ -3,7 +3,7 @@ import {
   ensureMembership,
   uploadAndProcessImport,
 } from "@investment-sync/api";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -19,13 +19,15 @@ export async function POST(request: Request) {
   }
 
   try {
+    const user = await currentUser();
     const ctx = createApiContext({
       auth: {
         userId: session.userId,
         email:
-          typeof session.sessionClaims?.email === "string"
+          user?.primaryEmailAddress?.emailAddress ??
+          (typeof session.sessionClaims?.email === "string"
             ? session.sessionClaims.email
-            : null,
+            : null),
       },
     });
     const membership = await ensureMembership(ctx);

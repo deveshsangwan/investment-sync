@@ -72,6 +72,13 @@ export async function ensureMembership(
     .limit(1);
 
   if (existing[0]) {
+    if (ctx.auth.email) {
+      await ctx.db
+        .update(users)
+        .set({ email: ctx.auth.email, updatedAt: new Date() })
+        .where(eq(users.id, existing[0].appUserId));
+    }
+
     return {
       userId: clerkUserId,
       appUserId: existing[0].appUserId,
