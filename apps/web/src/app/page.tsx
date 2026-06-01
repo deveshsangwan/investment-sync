@@ -80,17 +80,17 @@ export default async function HomePage() {
           <table className="preview-table">
             <tbody>
               <tr>
-                <td>RELIANCE</td>
+                <td>EQUITY-A</td>
                 <td>Indian Stocks</td>
                 <td>₹32,074</td>
               </tr>
               <tr>
-                <td>Parag Parikh ELSS</td>
+                <td>Growth Fund</td>
                 <td>Mutual Funds</td>
                 <td>₹60,002</td>
               </tr>
               <tr>
-                <td>NVDA</td>
+                <td>US-EQ-A</td>
                 <td>US Stocks</td>
                 <td>$1,101</td>
               </tr>

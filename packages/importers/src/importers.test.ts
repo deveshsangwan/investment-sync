@@ -11,7 +11,7 @@ Security,No. of Smallcases,Quantity,Average Cost ₹,Portfolio Weight %,LTP ₹,
 
 Stocks/ETFs
 
-RELIANCE,0.00,24.00,1479.58,10.22,1336.40,35509.92,32073.60,-3436.32,-9.68,-25.40,-1.87`;
+TESTSTOCK,0.00,24.00,100.00,10.22,120.00,2400.00,2880.00,480.00,20.00,1.00,0.84`;
 
     const result = parseImportFile({
       fileName: "Holdings.csv",
@@ -21,9 +21,9 @@ RELIANCE,0.00,24.00,1479.58,10.22,1336.40,35509.92,32073.60,-3436.32,-9.68,-25.4
     expect(result.sourceType).toBe("tickertape_stock_csv");
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]).toMatchObject({
-      instrumentName: "RELIANCE",
+      instrumentName: "TESTSTOCK",
       assetClass: "indian_stock",
-      currentValue: 32073.6,
+      currentValue: 2880,
     });
   });
 
@@ -32,8 +32,8 @@ RELIANCE,0.00,24.00,1479.58,10.22,1336.40,35509.92,32073.60,-3436.32,-9.68,-25.4
 Visit: https://tickertape.in/portfolio?tab=mfholdings
 
 Fund Name,AMC Name,Category,Sub-Category,Plan Type,Option Type,NAV ₹,Units,Invested Amt ₹,Current Value ₹,Weight %,P&L ₹,P&L %,XIRR %,Invested Since
-Parag Parikh ELSS Tax Saver Fund,PPFAS,Equity,ELSS,Direct,Growth,31.53,1903.24,56997.25,60002.21,11.49,3004.96,5.27,4.05,2023-05-02
-Total,,,,,,,,56997.25,60002.21,100,3004.96,5.27,,`;
+Example Equity Saver Fund,Example AMC,Equity,ELSS,Direct,Growth,31.53,100.00,1000.00,1100.00,11.49,100.00,10.00,4.05,2023-05-02
+Total,,,,,,,,1000.00,1100.00,100,100.00,10.00,,`;
 
     const result = parseImportFile({
       fileName: "Holdings-mf.csv",
@@ -43,9 +43,9 @@ Total,,,,,,,,56997.25,60002.21,100,3004.96,5.27,,`;
     expect(result.sourceType).toBe("tickertape_mutual_fund_csv");
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]).toMatchObject({
-      instrumentName: "Parag Parikh ELSS Tax Saver Fund",
+      instrumentName: "Example Equity Saver Fund",
       assetClass: "mutual_fund",
-      investedAmount: 56997.25,
+      investedAmount: 1000,
     });
   });
 });
@@ -65,6 +65,7 @@ describe("Investment workbook importer", () => {
           "Percentage Change",
         ],
         [new Date("2024-07-28"), "Stocks", 1000, 1100, 100, 10],
+        [new Date("2024-07-28"), "US Stock", 500, 550, 50, 10],
         [new Date("2024-07-28"), "Total", 1000, 1100, 100, 10],
       ]),
       "Investment Portfolio",
@@ -148,14 +149,31 @@ describe("Investment workbook importer", () => {
       ]),
       "Crypto",
     );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Name", "Quantity", "Current Value", "Invested", "Returns", "%"],
+        ["USSTOCK", 1, 200, 150, 50, 33.33],
+        ["USSTOCK", 1, 200, 150, 50, 33.33],
+      ]),
+      "US stocks",
+    );
 
     const content = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
     const result = parseImportFile({
-      fileName: "Investment Portfolio.xlsx",
+      fileName: "Personal Workbook.xlsx",
       content,
     });
 
     expect(result.sourceType).toBe("investment_portfolio_xlsx");
+    expect(result.rows).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "holding",
+          instrumentName: expect.stringContaining("Summary"),
+        }),
+      ]),
+    );
     expect(result.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "valuation", currentValue: 1100 }),
@@ -171,7 +189,18 @@ describe("Investment workbook importer", () => {
           assetClass: "mutual_fund",
           metadata: expect.objectContaining({ xirr: 12.5 }),
         }),
+        expect.objectContaining({
+          kind: "holding",
+          instrumentName: "USSTOCK",
+          assetClass: "us_stock",
+          currentValue: 200,
+        }),
       ]),
     );
+    expect(
+      result.rows.filter(
+        (row) => row.kind === "holding" && row.instrumentName === "USSTOCK",
+      ),
+    ).toHaveLength(1);
   });
 });

@@ -263,6 +263,15 @@ export const transactions = pgTable(
     householdIdx: index("transactions_household_idx").on(table.householdId),
     accountIdx: index("transactions_account_idx").on(table.accountId),
     tradeDateIdx: index("transactions_trade_date_idx").on(table.tradeDate),
+    uniqueTransactionIdx: uniqueIndex("transactions_import_dedupe_idx").on(
+      table.householdId,
+      table.accountId,
+      table.instrumentId,
+      table.tradeDate,
+      table.type,
+      table.amount,
+      table.currency,
+    ),
   }),
 );
 
@@ -308,6 +317,13 @@ export const holdingSnapshots = pgTable(
       table.householdId,
     ),
     dateIdx: index("holding_snapshots_date_idx").on(table.snapshotDate),
+    uniqueSnapshotIdx: uniqueIndex("holding_snapshots_import_dedupe_idx").on(
+      table.householdId,
+      table.accountId,
+      table.instrumentId,
+      table.snapshotDate,
+      table.currency,
+    ),
   }),
 );
 

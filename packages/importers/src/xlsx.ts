@@ -107,7 +107,7 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
 
 export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   sourceType: "investment_portfolio_xlsx",
-  parserVersion: "investment-portfolio-workbook-v2",
+  parserVersion: "investment-portfolio-workbook-v3",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -153,7 +153,7 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
 
     const headers = rows[headerRow] ?? [];
     const initialDate = firstPortfolioDate(rows.slice(headerRow + 1), headers);
-    const summaryRows: NormalizedImportRow[] = rows
+    const valuationRows: NormalizedImportRow[] = rows
       .slice(headerRow + 1)
       .flatMap((row): NormalizedImportRow[] => {
         const record = objectFromRow(headers, row);
@@ -175,49 +175,29 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
             },
           ];
         }
-
-        const assetClass = assetClassFromWorkbookLabel(assetType);
-
-        return [
-          {
-            kind: "holding" as const,
-            sourceType: "investment_portfolio_xlsx" as const,
-            sourceDate: toIsoDate(record.date),
-            accountName: assetType,
-            provider: "Manual Workbook",
-            instrumentName: `${assetType} Summary`,
-            assetClass,
-            currency: "INR" as const,
-            investedAmount: parseRequiredNumber(record["investment amount"]),
-            currentValue: parseRequiredNumber(record["current value"]),
-            pnlAmount: parseNumber(record["gain/loss"]),
-            pnlPercent: parseNumber(record["percentage change"]),
-            metadata: {
-              isAggregate: true,
-              sourceSheet: "Investment Portfolio",
-              realizedGain: parseNumber(record["realized gain"]),
-            },
-          },
-        ];
+        return [];
       });
-    const detailedRows = [
+    const detailedRows = dedupeHoldingRows([
       ...parseStockInvestments(file, initialDate),
       ...parseMutualFunds(file, initialDate),
       ...parseNps(file, initialDate),
       ...parseUlips(file, initialDate),
       ...parseCrypto(file, initialDate),
       ...parseUsStocks(file, initialDate),
+    ]);
+    const parsedRows = [...valuationRows, ...detailedRows.rows];
+    const warnings = [
+      ...detailedRows.warnings,
+      ...(parsedRows.length === 0
+        ? ["No holdings or valuations were parsed from the workbook"]
+        : []),
     ];
-    const parsedRows = [...summaryRows, ...detailedRows];
 
     return {
       sourceType: "investment_portfolio_xlsx",
       parserVersion: this.parserVersion,
       rows: parsedRows,
-      warnings:
-        parsedRows.length === 0
-          ? ["No holdings or valuations were parsed from the workbook"]
-          : [],
+      warnings,
     };
   },
 };
@@ -525,12 +505,82 @@ function firstPortfolioDate(
   return undefined;
 }
 
-function assetClassFromWorkbookLabel(value: string): AssetClass {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "stocks") return "indian_stock";
-  if (normalized === "mutual funds") return "mutual_fund";
-  if (normalized === "nps") return "nps";
-  if (normalized === "ulips") return "ulip";
-  if (normalized === "crypto") return "crypto";
-  return "other";
+function dedupeHoldingRows(rows: NormalizedHoldingRow[]): {
+  rows: NormalizedHoldingRow[];
+  warnings: string[];
+} {
+  const byKey = new Map<string, NormalizedHoldingRow>();
+  const warnings: string[] = [];
+
+  for (const row of rows) {
+    const existing = byKey.get(holdingDedupeKey(row));
+    if (!existing) {
+      byKey.set(holdingDedupeKey(row), row);
+      continue;
+    }
+
+    if (sameHoldingAmounts(existing, row)) {
+      byKey.set(holdingDedupeKey(row), richerHolding(existing, row));
+      continue;
+    }
+
+    warnings.push(
+      `Conflicting duplicate holding ignored for ${row.instrumentName} in ${String(row.metadata.sourceSheet ?? "unknown sheet")} on ${row.sourceDate ?? "unknown date"}`,
+    );
+  }
+
+  return { rows: [...byKey.values()], warnings };
+}
+
+function holdingDedupeKey(row: NormalizedHoldingRow): string {
+  return [
+    row.sourceType,
+    row.metadata.sourceSheet ?? "",
+    row.accountName,
+    row.provider,
+    row.assetClass,
+    row.currency,
+    row.sourceDate ?? "",
+    row.symbol?.trim().toUpperCase() || row.instrumentName.trim().toUpperCase(),
+  ].join("|");
+}
+
+function sameHoldingAmounts(
+  left: NormalizedHoldingRow,
+  right: NormalizedHoldingRow,
+): boolean {
+  return (
+    sameNumber(left.quantity, right.quantity) &&
+    sameNumber(left.investedAmount, right.investedAmount) &&
+    sameNumber(left.currentValue, right.currentValue) &&
+    sameNumber(left.pnlAmount, right.pnlAmount) &&
+    sameNumber(left.pnlPercent, right.pnlPercent)
+  );
+}
+
+function sameNumber(left?: number, right?: number): boolean {
+  if (left === undefined && right === undefined) return true;
+  if (left === undefined || right === undefined) return false;
+  return Math.abs(left - right) < 0.000001;
+}
+
+function richerHolding(
+  left: NormalizedHoldingRow,
+  right: NormalizedHoldingRow,
+): NormalizedHoldingRow {
+  return holdingCompletenessScore(right) > holdingCompletenessScore(left)
+    ? right
+    : left;
+}
+
+function holdingCompletenessScore(row: NormalizedHoldingRow): number {
+  return [
+    row.symbol,
+    row.isin,
+    row.quantity,
+    row.pnlAmount,
+    row.pnlPercent,
+    ...Object.values(row.metadata),
+  ].filter((value) => value !== undefined && value !== null && value !== "")
+    .length;
 }

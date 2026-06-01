@@ -5,6 +5,7 @@ import { protectedProcedure, router } from "../trpc";
 import {
   commitImport,
   createImportUpload,
+  dedupePortfolioData,
   processImport,
 } from "../services/import-service";
 
@@ -36,6 +37,9 @@ export const importsRouter = router({
     .mutation(async ({ ctx, input }) =>
       commitImport(ctx, ctx.membership, input.importBatchId),
     ),
+  dedupe: protectedProcedure.mutation(async ({ ctx }) =>
+    dedupePortfolioData(ctx, ctx.membership),
+  ),
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db
       .select()
