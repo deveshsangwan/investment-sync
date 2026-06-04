@@ -105,8 +105,77 @@ export function summarizePerformance(input: {
   };
 }
 
+export interface ResolvedXirr {
+  xirr?: number;
+  dataQuality: PerformanceDataQuality;
+}
+
+export function resolveHoldingXirr(input: {
+  cashFlows: PerformanceCashFlowInput[];
+  terminalValue: number;
+  asOfDate: Date;
+  sourceXirr?: number;
+  valuations: PerformanceValuationInput[];
+}): ResolvedXirr {
+  const exactRate = xirrFromCashFlows(
+    input.cashFlows,
+    input.terminalValue,
+    input.asOfDate,
+  );
+  if (exactRate !== undefined) {
+    return {
+      xirr: roundPercent(exactRate * 100),
+      dataQuality: "exact",
+    };
+  }
+
+  if (
+    input.sourceXirr !== undefined &&
+    Number.isFinite(input.sourceXirr)
+  ) {
+    return {
+      xirr: roundPercent(input.sourceXirr),
+      dataQuality: "source_provided",
+    };
+  }
+
+  const estimatedRate = xirrFromValuationDeltas(input.valuations);
+  if (estimatedRate === undefined) {
+    return { dataQuality: "insufficient_data" };
+  }
+
+  return {
+    xirr: roundPercent(estimatedRate * 100),
+    dataQuality: "estimated",
+  };
+}
+
+export function resolveAssetClassXirr(input: {
+  holdings: PerformanceHoldingInput[];
+  valuations: PerformanceValuationInput[];
+}): ResolvedXirr {
+  const sourceXirr = weightedAverageSourceXirr(input.holdings);
+  if (sourceXirr !== undefined) {
+    return {
+      xirr: roundPercent(sourceXirr),
+      dataQuality: "source_provided",
+    };
+  }
+
+  const estimatedRate = xirrFromValuationDeltas(input.valuations);
+  if (estimatedRate === undefined) {
+    return { dataQuality: "insufficient_data" };
+  }
+
+  return {
+    xirr: roundPercent(estimatedRate * 100),
+    dataQuality: "estimated",
+  };
+}
+
 export function xirrByAssetClass(input: {
   holdings: PerformanceHoldingInput[];
+  valuationsByAssetClass?: Record<string, PerformanceValuationInput[]>;
 }): Array<{
   assetClass: string;
   xirr?: number;
@@ -124,14 +193,14 @@ export function xirrByAssetClass(input: {
 
   return [...groups.entries()]
     .map(([assetClass, holdings]) => {
-      const sourceXirr = weightedAverageSourceXirr(holdings);
+      const resolved = resolveAssetClassXirr({
+        holdings,
+        valuations: input.valuationsByAssetClass?.[assetClass] ?? [],
+      });
       return {
         assetClass,
-        xirr: sourceXirr === undefined ? undefined : roundPercent(sourceXirr),
-        dataQuality:
-          sourceXirr === undefined
-            ? ("insufficient_data" as const)
-            : ("source_provided" as const),
+        xirr: resolved.xirr,
+        dataQuality: resolved.dataQuality,
         currentValue: roundMoney(
           sum(holdings.map((holding) => holding.currentValue)),
         ),
@@ -143,7 +212,7 @@ export function xirrByAssetClass(input: {
     .sort((a, b) => b.currentValue - a.currentValue);
 }
 
-function xirrFromCashFlows(
+export function xirrFromCashFlows(
   flows: PerformanceCashFlowInput[],
   terminalValue: number,
   asOfDate: Date,
@@ -157,7 +226,7 @@ function xirrFromCashFlows(
   return xirr(signedFlows.sort((a, b) => a.date.getTime() - b.date.getTime()));
 }
 
-function xirrFromValuationDeltas(
+export function xirrFromValuationDeltas(
   valuations: PerformanceValuationInput[],
 ): number | undefined {
   if (valuations.length < 2) return undefined;

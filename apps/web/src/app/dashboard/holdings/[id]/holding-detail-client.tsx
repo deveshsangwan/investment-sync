@@ -124,9 +124,9 @@ export function HoldingDetailClient({
 
       <section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Source XIRR"
-          value={formatPercent(holding?.sourceXirr)}
-          detail={holding?.sourceXirr === undefined ? "Needs cash flows" : "Imported"}
+          label="XIRR"
+          value={formatPercent(holding?.xirr)}
+          detail={qualityLabel(holding?.xirrDataQuality)}
         />
         <MetricCard
           label="Portfolio weight"
@@ -270,6 +270,13 @@ function formatCurrency(value: number, currency: string) {
 
 function formatPercent(value: number | undefined | null) {
   return value === undefined || value === null ? "N/A" : `${value}%`;
+}
+
+function qualityLabel(value: string | undefined) {
+  if (value === "exact") return "Exact cash-flow XIRR";
+  if (value === "source_provided") return "Imported";
+  if (value === "estimated") return "Estimated from snapshots";
+  return "Needs cash flows";
 }
 
 function numberOrUndefined(value: string | number | null | undefined) {

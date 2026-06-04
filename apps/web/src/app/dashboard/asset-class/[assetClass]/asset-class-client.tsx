@@ -104,9 +104,9 @@ export function AssetClassClient({
           }
         />
         <MetricCard
-          label="Source XIRR names"
-          value={`${detail.data?.holdings.filter((holding) => holding.sourceXirr !== undefined).length ?? 0}`}
-          detail="Imported XIRR"
+          label="XIRR"
+          value={formatPercent(summary?.xirr)}
+          detail={qualityLabel(summary?.xirrDataQuality)}
         />
       </section>
 
@@ -137,7 +137,8 @@ function HoldingsTable({
     pnlAmountInInr?: number | null;
     pnlPercent?: string | number | null;
     weightInAssetClass?: number | null;
-    sourceXirr?: number | null;
+    xirr?: number | null;
+    xirrDataQuality?: string;
     snapshotDate?: string | Date;
   }>;
   exited?: boolean;
@@ -202,7 +203,12 @@ function HoldingsTable({
                     <TableCell>{formatPercent(holding.weightInAssetClass)}</TableCell>
                   ) : null}
                   {!exited ? (
-                    <TableCell>{formatPercent(holding.sourceXirr)}</TableCell>
+                    <TableCell>
+                      <div>{formatPercent(holding.xirr)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {qualityLabel(holding.xirrDataQuality)}
+                      </div>
+                    </TableCell>
                   ) : null}
                 </TableRow>
               );
@@ -232,6 +238,13 @@ function formatCurrency(value: number, currency: string) {
 
 function formatPercent(value: number | undefined | null) {
   return value === undefined || value === null ? "N/A" : `${value}%`;
+}
+
+function qualityLabel(value: string | undefined) {
+  if (value === "exact") return "Exact";
+  if (value === "source_provided") return "Imported";
+  if (value === "estimated") return "Estimated";
+  return "N/A";
 }
 
 function numberOrUndefined(value: string | number | null | undefined) {

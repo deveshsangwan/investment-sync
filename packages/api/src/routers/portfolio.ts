@@ -1,16 +1,20 @@
 import {
+  resolveAssetClassXirr,
+  resolveHoldingXirr,
   summarizePerformance,
   summarizePortfolio,
   xirrByAssetClass,
+  type PerformanceValuationInput,
 } from "@investment-sync/analytics";
 import {
   accounts,
+  assetClassEnum,
   holdingSnapshots,
   instruments,
   portfolioValuations,
   transactions,
 } from "@investment-sync/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { ApiContext } from "../context";
 import { protectedProcedure, router } from "../trpc";
@@ -298,6 +302,27 @@ export const portfolioRouter = router({
         )
         .orderBy(transactions.tradeDate);
 
+      const sourceXirr = sourceXirrFromPayload(latest.sourcePayload);
+      const holdingValuations = history.map((point) =>
+        toPerformanceValuation(point, usdInrRate?.rate),
+      );
+      const resolvedXirr = resolveHoldingXirr({
+        cashFlows: transactionsForHolding.map((transaction) => ({
+          date:
+            parseDate(transaction.tradeDate) ?? new Date(transaction.tradeDate),
+          amount: convertToInr(
+            Number(transaction.amount),
+            transaction.currency,
+            usdInrRate?.rate,
+          ),
+          type: transaction.type,
+        })),
+        terminalValue: latestCurrentValueInInr,
+        asOfDate: parseDate(latest.snapshotDate) ?? new Date(),
+        sourceXirr,
+        valuations: holdingValuations,
+      });
+
       return {
         holding: {
           ...selected,
@@ -309,7 +334,9 @@ export const portfolioRouter = router({
           assetClass: selected.assetClass,
           isin: selected.isin,
           exchange: selected.exchange,
-          sourceXirr: sourceXirrFromPayload(latest.sourcePayload),
+          sourceXirr,
+          xirr: resolvedXirr.xirr,
+          xirrDataQuality: resolvedXirr.dataQuality,
           isCurrent,
           currentValueInInr: latestCurrentValueInInr,
           investedAmountInInr: convertToInr(
@@ -353,14 +380,17 @@ export const portfolioRouter = router({
   assetClassDetail: protectedProcedure
     .input(z.object({ assetClass: z.string() }))
     .query(async ({ ctx, input }) => {
-      const holdings = await currentHoldings(ctx);
+      const [holdings, assetClassSnapshots] = await Promise.all([
+        currentHoldings(ctx),
+        assetClassSnapshotRows(ctx, input.assetClass as AssetClass),
+      ]);
       const latestHoldings = latestNonAggregateHoldings(holdings);
       const exitedHoldings = exitedNonAggregateHoldings(holdings);
-      const usdInrRate = await getUsdInrRateIfNeeded(
-        [...latestHoldings, ...exitedHoldings].map(
-          (holding) => holding.currency,
-        ),
-      );
+      const usdInrRate = await getUsdInrRateIfNeeded([
+        ...latestHoldings.map((holding) => holding.currency),
+        ...exitedHoldings.map((holding) => holding.currency),
+        ...assetClassSnapshots.map((row) => row.currency),
+      ]);
       const converted = latestHoldings.map((holding) => {
         const currentValueInInr = convertToInr(
           Number(holding.currentValue),
@@ -422,18 +452,72 @@ export const portfolioRouter = router({
       const portfolioCurrentValue = sum(
         converted.map((holding) => holding.currentValueInInr),
       );
+      const instrumentIds = [
+        ...new Set(assetHoldings.map((holding) => holding.instrumentId)),
+      ];
+      const [
+        transactionsByInstrument,
+        historyByInstrument,
+        assetClassValuations,
+      ] = await Promise.all([
+        transactionsByInstrumentIds(ctx, instrumentIds),
+        historyByInstrumentIds(ctx, instrumentIds),
+        Promise.resolve(
+          valuationsFromSnapshotRows(assetClassSnapshots, usdInrRate?.rate),
+        ),
+      ]);
+      const assetClassXirr = resolveAssetClassXirr({
+        holdings: assetHoldings.map((holding) => ({
+          assetClass: holding.assetClass,
+          investedAmount: holding.investedAmountInInr,
+          currentValue: holding.currentValueInInr,
+          sourceXirr: holding.sourceXirr,
+        })),
+        valuations: assetClassValuations,
+      });
 
       return {
         assetClass: input.assetClass,
-        holdings: assetHoldings.map((holding) => ({
-          ...holding,
-          weightInAssetClass:
-            totalCurrentValue === 0
-              ? 0
-              : roundPercent(
-                  (holding.currentValueInInr / totalCurrentValue) * 100,
+        holdings: assetHoldings.map((holding) => {
+          const instrumentHistory = historyByInstrument.get(
+            holding.instrumentId,
+          ) ?? [holding];
+          const instrumentTransactions =
+            transactionsByInstrument.get(holding.instrumentId) ?? [];
+          const resolved = resolveHoldingXirr({
+            cashFlows: instrumentTransactions.map(
+              (transaction: InstrumentTransactionRow) => ({
+                date:
+                  parseDate(transaction.tradeDate) ??
+                  new Date(transaction.tradeDate),
+                amount: convertToInr(
+                  Number(transaction.amount),
+                  transaction.currency,
+                  usdInrRate?.rate,
                 ),
-        })),
+                type: transaction.type,
+              }),
+            ),
+            terminalValue: holding.currentValueInInr,
+            asOfDate: parseDate(holding.snapshotDate) ?? new Date(),
+            sourceXirr: holding.sourceXirr,
+            valuations: instrumentHistory.map((point) =>
+              toPerformanceValuation(point, usdInrRate?.rate),
+            ),
+          });
+
+          return {
+            ...holding,
+            xirr: resolved.xirr,
+            xirrDataQuality: resolved.dataQuality,
+            weightInAssetClass:
+              totalCurrentValue === 0
+                ? 0
+                : roundPercent(
+                    (holding.currentValueInInr / totalCurrentValue) * 100,
+                  ),
+          };
+        }),
         summary: {
           currentValue: roundMoney(totalCurrentValue),
           investedAmount: roundMoney(totalInvestedAmount),
@@ -447,6 +531,8 @@ export const portfolioRouter = router({
               ? 0
               : roundPercent((totalCurrentValue / portfolioCurrentValue) * 100),
           holdingCount: assetHoldings.length,
+          xirr: assetClassXirr.xirr,
+          xirrDataQuality: assetClassXirr.dataQuality,
         },
         exitedHoldings: assetExitedHoldings,
       };
@@ -455,6 +541,7 @@ export const portfolioRouter = router({
 
 type CurrentHoldingRow = {
   id: string;
+  instrumentId: string;
   snapshotDate: string;
   quantity: string | null;
   investedAmount: string;
@@ -469,6 +556,35 @@ type CurrentHoldingRow = {
   symbol: string | null;
   assetClass: string;
 };
+
+type SnapshotValuationRow = {
+  instrumentId: string;
+  snapshotDate: string;
+  investedAmount: string;
+  currentValue: string;
+  currency: Currency;
+  sourcePayload?: Record<string, unknown>;
+  accountName: string;
+  provider: string;
+  instrumentName: string;
+};
+
+type InstrumentTransactionRow = {
+  instrumentId: string | null;
+  tradeDate: string;
+  amount: string;
+  type:
+    | "buy"
+    | "sell"
+    | "dividend"
+    | "fee"
+    | "transfer"
+    | "contribution"
+    | "redemption";
+  currency: Currency;
+};
+
+type AssetClass = (typeof assetClassEnum.enumValues)[number];
 
 function cached<T>(
   ctx: ApiContext,
@@ -500,6 +616,7 @@ async function currentHoldings(
     ctx.db
       .select({
         id: holdingSnapshots.id,
+        instrumentId: holdingSnapshots.instrumentId,
         snapshotDate: holdingSnapshots.snapshotDate,
         quantity: holdingSnapshots.quantity,
         investedAmount: holdingSnapshots.investedAmount,
@@ -751,6 +868,180 @@ function sourceXirrFromPayload(payload?: Record<string, unknown>) {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+function toPerformanceValuation(
+  point: {
+    snapshotDate: string;
+    investedAmount: string | number;
+    currentValue: string | number;
+    currency: Currency;
+  },
+  usdInrRate?: number,
+): PerformanceValuationInput {
+  return {
+    date: parseDate(point.snapshotDate) ?? new Date(point.snapshotDate),
+    investedAmount: convertToInr(
+      Number(point.investedAmount),
+      point.currency,
+      usdInrRate,
+    ),
+    currentValue: convertToInr(
+      Number(point.currentValue),
+      point.currency,
+      usdInrRate,
+    ),
+  };
+}
+
+async function assetClassSnapshotRows(
+  ctx: PortfolioContext,
+  assetClass: AssetClass,
+): Promise<SnapshotValuationRow[]> {
+  return cachedPortfolioData(
+    ctx,
+    `portfolio.assetClassSnapshots.${assetClass}`,
+    () =>
+      ctx.db
+        .select({
+          instrumentId: holdingSnapshots.instrumentId,
+          snapshotDate: holdingSnapshots.snapshotDate,
+          investedAmount: holdingSnapshots.investedAmount,
+          currentValue: holdingSnapshots.currentValue,
+          currency: holdingSnapshots.currency,
+          sourcePayload: holdingSnapshots.sourcePayload,
+          accountName: accounts.name,
+          provider: accounts.provider,
+          instrumentName: instruments.name,
+        })
+        .from(holdingSnapshots)
+        .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
+        .innerJoin(
+          instruments,
+          eq(instruments.id, holdingSnapshots.instrumentId),
+        )
+        .where(
+          and(
+            eq(holdingSnapshots.householdId, ctx.membership.householdId),
+            eq(instruments.assetClass, assetClass),
+          ),
+        )
+        .orderBy(holdingSnapshots.snapshotDate),
+  );
+}
+
+function valuationsFromSnapshotRows(
+  rows: SnapshotValuationRow[],
+  usdInrRate?: number,
+): PerformanceValuationInput[] {
+  const eligible = rows.filter((row) => !isAggregateHolding(row));
+  const latestByInstrumentDate = new Map<string, SnapshotValuationRow>();
+
+  for (const row of eligible) {
+    const key = `${row.instrumentId}|${row.snapshotDate}`;
+    latestByInstrumentDate.set(key, row);
+  }
+
+  const totalsByDate = new Map<
+    string,
+    { investedAmount: number; currentValue: number }
+  >();
+
+  for (const row of latestByInstrumentDate.values()) {
+    const investedAmount = convertToInr(
+      Number(row.investedAmount),
+      row.currency,
+      usdInrRate,
+    );
+    const currentValue = convertToInr(
+      Number(row.currentValue),
+      row.currency,
+      usdInrRate,
+    );
+    const existing = totalsByDate.get(row.snapshotDate) ?? {
+      investedAmount: 0,
+      currentValue: 0,
+    };
+    totalsByDate.set(row.snapshotDate, {
+      investedAmount: existing.investedAmount + investedAmount,
+      currentValue: existing.currentValue + currentValue,
+    });
+  }
+
+  return [...totalsByDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([snapshotDate, totals]) => ({
+      date: parseDate(snapshotDate) ?? new Date(snapshotDate),
+      investedAmount: totals.investedAmount,
+      currentValue: totals.currentValue,
+    }));
+}
+
+async function historyByInstrumentIds(
+  ctx: PortfolioContext,
+  instrumentIds: string[],
+): Promise<Map<string, SnapshotValuationRow[]>> {
+  if (instrumentIds.length === 0) return new Map();
+
+  const rows = await ctx.db
+    .select({
+      instrumentId: holdingSnapshots.instrumentId,
+      snapshotDate: holdingSnapshots.snapshotDate,
+      investedAmount: holdingSnapshots.investedAmount,
+      currentValue: holdingSnapshots.currentValue,
+      currency: holdingSnapshots.currency,
+      sourcePayload: holdingSnapshots.sourcePayload,
+      accountName: accounts.name,
+      provider: accounts.provider,
+      instrumentName: instruments.name,
+    })
+    .from(holdingSnapshots)
+    .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
+    .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
+    .where(
+      and(
+        eq(holdingSnapshots.householdId, ctx.membership.householdId),
+        inArray(holdingSnapshots.instrumentId, instrumentIds),
+      ),
+    )
+    .orderBy(holdingSnapshots.snapshotDate);
+
+  const grouped = new Map<string, SnapshotValuationRow[]>();
+  for (const row of rows) {
+    grouped.set(row.instrumentId, [...(grouped.get(row.instrumentId) ?? []), row]);
+  }
+  return grouped;
+}
+
+async function transactionsByInstrumentIds(
+  ctx: PortfolioContext,
+  instrumentIds: string[],
+) {
+  if (instrumentIds.length === 0) return new Map();
+
+  const rows = await ctx.db
+    .select({
+      instrumentId: transactions.instrumentId,
+      tradeDate: transactions.tradeDate,
+      amount: transactions.amount,
+      type: transactions.type,
+      currency: transactions.currency,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.householdId, ctx.membership.householdId),
+        inArray(transactions.instrumentId, instrumentIds),
+      ),
+    )
+    .orderBy(transactions.tradeDate);
+
+  const grouped = new Map<string, InstrumentTransactionRow[]>();
+  for (const row of rows) {
+    if (!row.instrumentId) continue;
+    grouped.set(row.instrumentId, [...(grouped.get(row.instrumentId) ?? []), row]);
+  }
+  return grouped;
 }
 
 function parseDate(value: string | Date | null | undefined): Date | undefined {
