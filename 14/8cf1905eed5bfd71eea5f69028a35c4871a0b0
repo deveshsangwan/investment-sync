@@ -1,0 +1,50 @@
+packages/db/drizzle.config.ts
+  s_06bed767e42cdc::t_308803027d2c9b 37
+apps/web/src/components/theme-toggle.tsx
+  s_06bed767e42cdc::t_56404133960ae6 12-15
+eslint.config.mjs
+  s_06bed767e42cdc::t_37e2ebb2e17973 73
+  s_06bed767e42cdc::t_d48afce0e5338d 10-13,27
+packages/api/src/services/import-service.ts
+  s_06bed767e42cdc::t_1a68d1239df92b 599-600
+packages/api/src/services/portfolio-cache.ts
+  s_06bed767e42cdc::t_a27c7c85ea339c 26
+packages/api/src/services/membership.ts
+  s_06bed767e42cdc::t_4532ac0423d802 93
+apps/mobile/src/sign-in-screen.tsx
+  s_06bed767e42cdc::t_9ea70f93c0feef 59-61
+packages/importers/src/utils.ts
+  s_06bed767e42cdc::t_d89c42aef4cfcb 12-21,23,31-33,50
+packages/importers/src/tickertape.ts
+  s_06bed767e42cdc::t_38159d89ac158d 9,51,145
+apps/web/src/app/uploads/uploads-client.tsx
+  s_06bed767e42cdc::t_a18a6cbf579763 23,70,111-116
+packages/importers/src/importers.test.ts
+  s_06bed767e42cdc::t_c0da7d5e33a814 177-181,204-210
+  s_06bed767e42cdc::t_5cebb32c515c48 5-12,170
+packages/api/src/routers/portfolio.ts
+  s_06bed767e42cdc::t_e93ecadfb84d67 856-859,865,1015
+packages/importers/src/xlsx.ts
+  s_06bed767e42cdc::t_737e1778f9cff1 16,24,28,72,161,222,276,462,529-531,539,541,546,548-549
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "148cf1905eed5bfd71eea5f69028a35c4871a0b0",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_06bed767e42cdc": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ba6cf939-103f-421f-9192-321f42e9382d",
+        "model": "gpt-5.2-codex-high-fast"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
