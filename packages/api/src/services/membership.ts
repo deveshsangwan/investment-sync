@@ -14,6 +14,15 @@ export interface MembershipContext {
   role: string;
 }
 
+const MEMBERSHIP_CACHE_TTL_MS = 30_000;
+
+interface CachedMembership {
+  expiresAt: number;
+  promise: Promise<MembershipContext>;
+}
+
+const membershipCache = new Map<string, CachedMembership>();
+
 const defaultAccounts = [
   {
     name: "Indian Stocks",
@@ -59,9 +68,43 @@ export async function ensureMembership(
   const cached = ctx.cache.get("membership");
   if (cached) return cached as Promise<MembershipContext>;
 
-  const membership = loadMembership(ctx);
+  const clerkUserId = ctx.auth.userId;
+  if (!clerkUserId) throw new Error("Missing Clerk user id");
+
+  const membership = cachedMembership(clerkUserId, () => loadMembership(ctx));
   ctx.cache.set("membership", membership);
   return membership;
+}
+
+function cachedMembership(
+  clerkUserId: string,
+  load: () => Promise<MembershipContext>,
+): Promise<MembershipContext> {
+  const now = Date.now();
+  const existing = membershipCache.get(clerkUserId);
+
+  if (existing && existing.expiresAt > now) {
+    console.log("membership cache hit");
+    return existing.promise;
+  }
+
+  console.log("membership cache miss");
+
+  let promise: Promise<MembershipContext>;
+  promise = load().catch((error) => {
+    const latest = membershipCache.get(clerkUserId);
+    if (latest?.promise === promise) {
+      membershipCache.delete(clerkUserId);
+    }
+    throw error;
+  });
+
+  membershipCache.set(clerkUserId, {
+    expiresAt: now + MEMBERSHIP_CACHE_TTL_MS,
+    promise,
+  });
+
+  return promise;
 }
 
 async function loadMembership(ctx: ApiContext): Promise<MembershipContext> {
