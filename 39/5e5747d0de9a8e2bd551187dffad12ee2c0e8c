@@ -1,0 +1,24 @@
+.gitignore
+  s_a110d35badfe2b::t_8ecfa74c800254 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "395e5747d0de9a8e2bd551187dffad12ee2c0e8c",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_a110d35badfe2b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "9b64a386-0ff5-4b45-80b4-4e1d22bf5119",
+        "model": "composer-2.5-fast"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
