@@ -15,34 +15,14 @@ import { z } from "zod";
 import type { ApiContext } from "../context";
 import { protectedProcedure, router } from "../trpc";
 import { getUsdInrRate } from "../services/currency-rates";
+import { getHouseholdPortfolioCache } from "../services/portfolio-cache";
 
 type Currency = "INR" | "USD" | "BTC" | "ETH" | "OTHER";
+type PortfolioContext = ApiContext & { membership: { householdId: string } };
 
 export const portfolioRouter = router({
   holdings: protectedProcedure.query(async ({ ctx }) => {
-    const holdings = await ctx.db
-      .select({
-        id: holdingSnapshots.id,
-        snapshotDate: holdingSnapshots.snapshotDate,
-        quantity: holdingSnapshots.quantity,
-        investedAmount: holdingSnapshots.investedAmount,
-        currentValue: holdingSnapshots.currentValue,
-        pnlAmount: holdingSnapshots.pnlAmount,
-        pnlPercent: holdingSnapshots.pnlPercent,
-        currency: holdingSnapshots.currency,
-        accountName: accounts.name,
-        provider: accounts.provider,
-        instrumentName: instruments.name,
-        symbol: instruments.symbol,
-        assetClass: instruments.assetClass,
-        sourcePayload: holdingSnapshots.sourcePayload,
-      })
-      .from(holdingSnapshots)
-      .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
-      .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
-      .where(eq(holdingSnapshots.householdId, ctx.membership.householdId));
-
-    const latestHoldings = latestNonAggregateHoldings(holdings);
+    const latestHoldings = await latestCurrentHoldings(ctx);
     const usdInrRate = await getUsdInrRateIfNeeded(
       latestHoldings.map((holding) => holding.currency),
     );
@@ -81,21 +61,7 @@ export const portfolioRouter = router({
       });
   }),
   summary: protectedProcedure.query(async ({ ctx }) => {
-    const holdings = await ctx.db
-      .select({
-        assetClass: instruments.assetClass,
-        investedAmount: holdingSnapshots.investedAmount,
-        currentValue: holdingSnapshots.currentValue,
-        currency: holdingSnapshots.currency,
-        snapshotDate: holdingSnapshots.snapshotDate,
-        instrumentName: instruments.name,
-        sourcePayload: holdingSnapshots.sourcePayload,
-      })
-      .from(holdingSnapshots)
-      .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
-      .where(eq(holdingSnapshots.householdId, ctx.membership.householdId));
-
-    const latestHoldings = latestNonAggregateHoldings(holdings);
+    const latestHoldings = await latestCurrentHoldings(ctx);
     const usdInrRate = await getUsdInrRateIfNeeded(
       latestHoldings.map((holding) => holding.currency),
     );
@@ -123,17 +89,7 @@ export const portfolioRouter = router({
     };
   }),
   timeline: protectedProcedure.query(async ({ ctx }) => {
-    const valuations = await ctx.db
-      .select({
-        valuationDate: portfolioValuations.valuationDate,
-        currentValue: portfolioValuations.currentValue,
-        investedAmount: portfolioValuations.investedAmount,
-        pnlAmount: portfolioValuations.pnlAmount,
-        currency: portfolioValuations.currency,
-      })
-      .from(portfolioValuations)
-      .where(eq(portfolioValuations.householdId, ctx.membership.householdId))
-      .orderBy(portfolioValuations.valuationDate);
+    const valuations = await portfolioValuationRows(ctx);
 
     if (valuations.length > 0) {
       return valuations.map((valuation) => ({
@@ -161,40 +117,11 @@ export const portfolioRouter = router({
       .orderBy(holdingSnapshots.snapshotDate);
   }),
   performance: protectedProcedure.query(async ({ ctx }) => {
-    const holdings = await ctx.db
-      .select({
-        snapshotDate: holdingSnapshots.snapshotDate,
-        assetClass: instruments.assetClass,
-        investedAmount: holdingSnapshots.investedAmount,
-        currentValue: holdingSnapshots.currentValue,
-        currency: holdingSnapshots.currency,
-        instrumentName: instruments.name,
-        sourcePayload: holdingSnapshots.sourcePayload,
-      })
-      .from(holdingSnapshots)
-      .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
-      .where(eq(holdingSnapshots.householdId, ctx.membership.householdId));
-
-    const latestHoldings = latestNonAggregateHoldings(holdings);
-    const valuations = await ctx.db
-      .select({
-        valuationDate: portfolioValuations.valuationDate,
-        investedAmount: portfolioValuations.investedAmount,
-        currentValue: portfolioValuations.currentValue,
-        currency: portfolioValuations.currency,
-      })
-      .from(portfolioValuations)
-      .where(eq(portfolioValuations.householdId, ctx.membership.householdId))
-      .orderBy(portfolioValuations.valuationDate);
-    const cashFlows = await ctx.db
-      .select({
-        tradeDate: transactions.tradeDate,
-        amount: transactions.amount,
-        type: transactions.type,
-        currency: transactions.currency,
-      })
-      .from(transactions)
-      .where(eq(transactions.householdId, ctx.membership.householdId));
+    const [latestHoldings, valuations, cashFlows] = await Promise.all([
+      latestCurrentHoldings(ctx),
+      portfolioValuationRows(ctx),
+      cashFlowRows(ctx),
+    ]);
 
     const usdInrRate = await getUsdInrRateIfNeeded([
       ...latestHoldings.map((holding) => holding.currency),
@@ -316,7 +243,7 @@ export const portfolioRouter = router({
         .orderBy(holdingSnapshots.snapshotDate);
 
       const allHoldings = await currentHoldings(ctx);
-      const latestHoldings = latestNonAggregateHoldings(allHoldings);
+      const latestHoldings = await latestCurrentHoldings(ctx);
       const latest = latestHoldingForSelection(selected, history) ?? selected;
       const usdInrRate = await getUsdInrRateIfNeeded([
         selected.currency,
@@ -543,31 +470,93 @@ type CurrentHoldingRow = {
   assetClass: string;
 };
 
-async function currentHoldings(ctx: {
-  db: ApiContext["db"];
-  membership: { householdId: string };
-}): Promise<CurrentHoldingRow[]> {
-  return ctx.db
-    .select({
-      id: holdingSnapshots.id,
-      snapshotDate: holdingSnapshots.snapshotDate,
-      quantity: holdingSnapshots.quantity,
-      investedAmount: holdingSnapshots.investedAmount,
-      currentValue: holdingSnapshots.currentValue,
-      pnlAmount: holdingSnapshots.pnlAmount,
-      pnlPercent: holdingSnapshots.pnlPercent,
-      currency: holdingSnapshots.currency,
-      sourcePayload: holdingSnapshots.sourcePayload,
-      accountName: accounts.name,
-      provider: accounts.provider,
-      instrumentName: instruments.name,
-      symbol: instruments.symbol,
-      assetClass: instruments.assetClass,
-    })
-    .from(holdingSnapshots)
-    .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
-    .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
-    .where(eq(holdingSnapshots.householdId, ctx.membership.householdId));
+function cached<T>(
+  ctx: ApiContext,
+  key: string,
+  load: () => Promise<T>,
+): Promise<T> {
+  const existing = ctx.cache.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const promise = load();
+  ctx.cache.set(key, promise);
+  return promise;
+}
+
+function cachedPortfolioData<T>(
+  ctx: PortfolioContext,
+  key: string,
+  load: () => Promise<T>,
+): Promise<T> {
+  return cached(ctx, key, () =>
+    getHouseholdPortfolioCache(ctx.membership.householdId, key, load),
+  );
+}
+
+async function currentHoldings(
+  ctx: PortfolioContext,
+): Promise<CurrentHoldingRow[]> {
+  return cachedPortfolioData(ctx, "portfolio.currentHoldings", () =>
+    ctx.db
+      .select({
+        id: holdingSnapshots.id,
+        snapshotDate: holdingSnapshots.snapshotDate,
+        quantity: holdingSnapshots.quantity,
+        investedAmount: holdingSnapshots.investedAmount,
+        currentValue: holdingSnapshots.currentValue,
+        pnlAmount: holdingSnapshots.pnlAmount,
+        pnlPercent: holdingSnapshots.pnlPercent,
+        currency: holdingSnapshots.currency,
+        sourcePayload: holdingSnapshots.sourcePayload,
+        accountName: accounts.name,
+        provider: accounts.provider,
+        instrumentName: instruments.name,
+        symbol: instruments.symbol,
+        assetClass: instruments.assetClass,
+      })
+      .from(holdingSnapshots)
+      .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
+      .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
+      .where(eq(holdingSnapshots.householdId, ctx.membership.householdId)),
+  );
+}
+
+async function latestCurrentHoldings(
+  ctx: PortfolioContext,
+): Promise<CurrentHoldingRow[]> {
+  return cachedPortfolioData(ctx, "portfolio.latestCurrentHoldings", async () =>
+    latestNonAggregateHoldings(await currentHoldings(ctx)),
+  );
+}
+
+async function portfolioValuationRows(ctx: PortfolioContext) {
+  return cachedPortfolioData(ctx, "portfolio.valuations", () =>
+    ctx.db
+      .select({
+        valuationDate: portfolioValuations.valuationDate,
+        investedAmount: portfolioValuations.investedAmount,
+        currentValue: portfolioValuations.currentValue,
+        pnlAmount: portfolioValuations.pnlAmount,
+        currency: portfolioValuations.currency,
+      })
+      .from(portfolioValuations)
+      .where(eq(portfolioValuations.householdId, ctx.membership.householdId))
+      .orderBy(portfolioValuations.valuationDate),
+  );
+}
+
+async function cashFlowRows(ctx: PortfolioContext) {
+  return cachedPortfolioData(ctx, "portfolio.cashFlows", () =>
+    ctx.db
+      .select({
+        tradeDate: transactions.tradeDate,
+        amount: transactions.amount,
+        type: transactions.type,
+        currency: transactions.currency,
+      })
+      .from(transactions)
+      .where(eq(transactions.householdId, ctx.membership.householdId)),
+  );
 }
 
 function latestHoldingForSelection<
