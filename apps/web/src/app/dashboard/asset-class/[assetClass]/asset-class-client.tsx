@@ -9,6 +9,7 @@ import {
   PageShell,
   SectionCard,
 } from "@/components/portfolio-ui";
+import { SetupRequired } from "@/components/dashboard-states";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -18,26 +19,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  formatCurrency,
+  formatDate,
+  formatInr,
+  formatPercent,
+  labelize,
+  numberOrUndefined,
+  qualityLabel,
+} from "@/lib/format";
+import type { AssetClass } from "@/lib/asset-classes";
 import { trpc } from "../../../providers";
-
-const inrCurrency = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-});
-
-const usdCurrency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
 
 export function AssetClassClient({
   assetClass,
   isDataConfigured,
 }: {
-  assetClass: string;
+  assetClass: AssetClass;
   isDataConfigured: boolean;
 }) {
   const detail = trpc.portfolio.assetClassDetail.useQuery(
@@ -69,16 +67,16 @@ export function AssetClassClient({
         <MetricCard
           icon={Wallet}
           label="Current value"
-          value={inrCurrency.format(summary?.currentValue ?? 0)}
+          value={formatInr(summary?.currentValue ?? 0)}
         />
         <MetricCard
           label="Invested"
-          value={inrCurrency.format(summary?.investedAmount ?? 0)}
+          value={formatInr(summary?.investedAmount ?? 0)}
         />
         <MetricCard
           icon={TrendingUp}
           label="Gain/Loss"
-          value={inrCurrency.format(summary?.pnlAmount ?? 0)}
+          value={formatInr(summary?.pnlAmount ?? 0)}
           tone={pnlTone}
         />
         <MetricCard
@@ -218,51 +216,4 @@ function HoldingsTable({
       )}
     </SectionCard>
   );
-}
-
-function SetupRequired() {
-  return (
-    <Alert className="mb-4 border-amber-500/30 bg-amber-500/10">
-      <AlertTitle>Connect Supabase before loading portfolio data</AlertTitle>
-      <AlertDescription>
-        Add the database and Supabase environment variables, then restart.
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-function formatCurrency(value: number, currency: string) {
-  if (currency === "USD") return usdCurrency.format(value);
-  return inrCurrency.format(value);
-}
-
-function formatPercent(value: number | undefined | null) {
-  return value === undefined || value === null ? "N/A" : `${value}%`;
-}
-
-function qualityLabel(value: string | undefined) {
-  if (value === "exact") return "Exact";
-  if (value === "source_provided") return "Imported";
-  if (value === "estimated") return "Estimated";
-  return "N/A";
-}
-
-function numberOrUndefined(value: string | number | null | undefined) {
-  if (value === null || value === undefined) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function labelize(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
-function formatDate(value: string | Date) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
 }

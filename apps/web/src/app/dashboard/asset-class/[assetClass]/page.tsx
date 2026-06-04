@@ -1,3 +1,4 @@
+import { parseAssetClass } from "@/lib/asset-classes";
 import { AssetClassClient } from "./asset-class-client";
 
 export default async function AssetClassPage({
@@ -12,9 +13,11 @@ export default async function AssetClassPage({
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
 
+  const decodedAssetClass = decodeURIComponent(assetClass);
+
   return (
     <AssetClassClient
-      assetClass={decodeURIComponent(assetClass)}
+      assetClass={parseAssetClass(decodedAssetClass)}
       isDataConfigured={isDataConfigured}
     />
   );
