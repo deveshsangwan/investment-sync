@@ -20,7 +20,7 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
   const list = trpc.imports.list.useQuery(undefined, { enabled: isDataConfigured });
   const commit = trpc.imports.commit.useMutation({
     onSuccess: () => {
-      list.refetch();
+      void list.refetch();
     },
   });
 
@@ -67,7 +67,7 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
       setStatus("success");
       setMessage(`Parsed ${data.rowCount ?? 0} rows${warningSuffix}.`);
       setFile(null);
-      list.refetch();
+      void list.refetch();
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Upload failed.");
@@ -108,7 +108,12 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
           </div>
-          <Button onClick={handleUpload} disabled={!canUpload || isBusy}>
+          <Button
+            onClick={() => {
+              void handleUpload();
+            }}
+            disabled={!canUpload || isBusy}
+          >
             <UploadCloud className="size-4" />
             {status === "uploading" ? "Uploading..." : "Upload"}
           </Button>

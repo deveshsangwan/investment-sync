@@ -90,8 +90,7 @@ function cachedMembership(
 
   console.log("membership cache miss");
 
-  let promise: Promise<MembershipContext>;
-  promise = load().catch((error) => {
+  const promise = load().catch((error) => {
     const latest = membershipCache.get(clerkUserId);
     if (latest?.promise === promise) {
       membershipCache.delete(clerkUserId);

@@ -56,7 +56,9 @@ export function SignInScreen() {
         />
         <Pressable
           disabled={isSubmitting}
-          onPress={submit}
+          onPress={() => {
+            void submit();
+          }}
           style={styles.button}
         >
           <Text style={styles.buttonText}>

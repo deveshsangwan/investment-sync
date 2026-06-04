@@ -7,6 +7,10 @@ import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const tsTypeChecked = tseslint.configs.recommendedTypeChecked.map((config) => ({
+  ...config,
+  files: ["**/*.{ts,tsx}"],
+}));
 
 export default [
   {
@@ -20,7 +24,7 @@ export default [
     ],
   },
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
+  ...tsTypeChecked,
   {
     files: ["**/*.{js,cjs,mjs,ts,tsx}"],
     languageOptions: {
@@ -66,6 +70,7 @@ export default [
       ...react.configs.recommended.rules,
       ...react.configs["jsx-runtime"].rules,
       ...reactHooks.configs.recommended.rules,
+      "react/prop-types": "off",
     },
   },
   {

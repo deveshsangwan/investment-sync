@@ -13,6 +13,7 @@ import {
   objectFromRow,
   parseNumber,
   parseRequiredNumber,
+  toStringValue,
   toIsoDate,
 } from "./utils";
 
@@ -20,11 +21,11 @@ function workbookRows(file: ImportFile, sheetName: string): unknown[][] {
   const workbook = XLSX.read(file.content, { type: "buffer", cellDates: true });
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return [];
-  return XLSX.utils.sheet_to_json(sheet, {
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     raw: true,
     defval: "",
-  }) as unknown[][];
+  });
 }
 
 export const vestedDrivewealthImporter: PortfolioImporter = {
@@ -68,7 +69,7 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
     const headers = rows[headerRow] ?? [];
     const holdings = rows.slice(headerRow + 1).flatMap((row) => {
       const record = objectFromRow(headers, row);
-      const symbol = String(record.security ?? "").trim();
+      const symbol = toStringValue(record.security).trim();
       if (!symbol || symbol.toLowerCase() === "total") return [];
 
       return [
@@ -157,7 +158,7 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
       .slice(headerRow + 1)
       .flatMap((row): NormalizedImportRow[] => {
         const record = objectFromRow(headers, row);
-        const assetType = String(record["asset type"] ?? "").trim();
+        const assetType = toStringValue(record["asset type"]).trim();
         if (!assetType) return [];
         if (assetType.toLowerCase() === "total") {
           const valuationDate = toIsoDate(record.date);
@@ -218,7 +219,7 @@ function parseStockInvestments(
       return [];
     }
 
-    const symbol = String(row[0] ?? "").trim();
+    const symbol = toStringValue(row[0]).trim();
     if (!symbol || ["stocks/etfs", "total"].includes(symbol.toLowerCase())) {
       return [];
     }
@@ -272,7 +273,7 @@ function parseMutualFunds(
       return [];
     }
 
-    const fundName = String(row[0] ?? "").trim();
+    const fundName = toStringValue(row[0]).trim();
     if (!fundName || fundName.toLowerCase() === "total") return [];
     const investedAmount = parseNumber(row[8]) ?? 0;
     const currentValue = parseNumber(row[9]) ?? 0;
@@ -458,7 +459,7 @@ function parseSimpleSectionHoldings({
       return [];
     }
 
-    const instrumentName = String(row[nameColumn] ?? "").trim();
+    const instrumentName = toStringValue(row[nameColumn]).trim();
     if (!instrumentName || instrumentName.toLowerCase() === "total") return [];
     const investedAmount = parseNumber(row[investedColumn]) ?? 0;
     const currentValue = parseNumber(row[currentColumn]) ?? 0;
@@ -525,7 +526,9 @@ function dedupeHoldingRows(rows: NormalizedHoldingRow[]): {
     }
 
     warnings.push(
-      `Conflicting duplicate holding ignored for ${row.instrumentName} in ${String(row.metadata.sourceSheet ?? "unknown sheet")} on ${row.sourceDate ?? "unknown date"}`,
+      `Conflicting duplicate holding ignored for ${row.instrumentName} in ${toStringValue(
+        row.metadata.sourceSheet ?? "unknown sheet",
+      )} on ${row.sourceDate ?? "unknown date"}`,
     );
   }
 
@@ -533,16 +536,17 @@ function dedupeHoldingRows(rows: NormalizedHoldingRow[]): {
 }
 
 function holdingDedupeKey(row: NormalizedHoldingRow): string {
-  return [
+  const keyParts = [
     row.sourceType,
-    row.metadata.sourceSheet ?? "",
+    row.metadata.sourceSheet,
     row.accountName,
     row.provider,
     row.assetClass,
     row.currency,
-    row.sourceDate ?? "",
+    row.sourceDate,
     row.symbol?.trim().toUpperCase() || row.instrumentName.trim().toUpperCase(),
-  ].join("|");
+  ];
+  return keyParts.map(toStringValue).join("|");
 }
 
 function sameHoldingAmounts(

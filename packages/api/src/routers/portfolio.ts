@@ -853,12 +853,16 @@ function snapshotGroupKey(holding: {
   currency?: string;
   sourcePayload?: Record<string, unknown>;
 }) {
+  const sourceSheet =
+    typeof holding.sourcePayload?.sourceSheet === "string"
+      ? holding.sourcePayload.sourceSheet
+      : "";
   return [
     holding.accountName ?? "",
     holding.provider ?? "",
     holding.assetClass,
     holding.currency ?? "",
-    String(holding.sourcePayload?.sourceSheet ?? ""),
+    sourceSheet,
   ].join("|");
 }
 
@@ -1008,7 +1012,7 @@ async function historyByInstrumentIds(
 async function transactionsByInstrumentIds(
   ctx: PortfolioContext,
   instrumentIds: string[],
-) {
+): Promise<Map<string, InstrumentTransactionRow[]>> {
   if (instrumentIds.length === 0) return new Map();
 
   const rows = await ctx.db

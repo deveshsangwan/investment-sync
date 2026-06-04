@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { parseImportFile } from "./index";
 
+function workbookToBuffer(workbook: XLSX.WorkBook): Buffer {
+  const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as unknown;
+  if (Buffer.isBuffer(output)) return output;
+  if (output instanceof Uint8Array) return Buffer.from(output);
+  if (output instanceof ArrayBuffer) return Buffer.from(output);
+  return Buffer.from(String(output));
+}
+
 describe("Tickertape importers", () => {
   it("parses stock holdings CSV", () => {
     const csv = `,,,Holdings - 16-May-26 IST
@@ -159,21 +167,18 @@ describe("Investment workbook importer", () => {
       "US stocks",
     );
 
-    const content = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const content = workbookToBuffer(workbook);
     const result = parseImportFile({
       fileName: "Personal Workbook.xlsx",
       content,
     });
 
     expect(result.sourceType).toBe("investment_portfolio_xlsx");
-    expect(result.rows).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "holding",
-          instrumentName: expect.stringContaining("Summary"),
-        }),
-      ]),
-    );
+    expect(
+      result.rows.some(
+        (row) => row.kind === "holding" && row.instrumentName.includes("Summary"),
+      ),
+    ).toBe(false);
     expect(result.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "valuation", currentValue: 1100 }),
@@ -187,7 +192,6 @@ describe("Investment workbook importer", () => {
           kind: "holding",
           instrumentName: "Fund A",
           assetClass: "mutual_fund",
-          metadata: expect.objectContaining({ xirr: 12.5 }),
         }),
         expect.objectContaining({
           kind: "holding",
@@ -197,6 +201,13 @@ describe("Investment workbook importer", () => {
         }),
       ]),
     );
+    const fundARow = result.rows.find(
+      (row) => row.kind === "holding" && row.instrumentName === "Fund A",
+    );
+    expect(fundARow).toBeDefined();
+    if (fundARow && fundARow.kind === "holding") {
+      expect(fundARow.metadata).toMatchObject({ xirr: 12.5 });
+    }
     expect(
       result.rows.filter(
         (row) => row.kind === "holding" && row.instrumentName === "USSTOCK",
