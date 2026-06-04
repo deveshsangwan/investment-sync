@@ -1,0 +1,27 @@
+packages/api/src/services/membership.ts
+  s_35d2e83c5774ba::t_4bb331859b45ca 17-25,71-74,79-107
+packages/db/src/client.ts
+  s_35d2e83c5774ba::t_1ce24428dabca3 1-2,6,11,18-20,51
+  s_35d2e83c5774ba::t_604c43a3215e41 8-10,12-17,25-32,38-48,52-55,63,69-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "1f7ec181fa1198177c82e54e75823b739d3a9ef2",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_35d2e83c5774ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9260-0210-7d00-bce8-dd2baf28cacb",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
