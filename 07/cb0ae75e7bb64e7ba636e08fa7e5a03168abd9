@@ -1,0 +1,52 @@
+packages/analytics/src/performance.test.ts
+  s_cac67d3084073f::t_0eaee3a0daf341 60-171
+  s_cac67d3084073f::t_cb20840da02850 2-7
+packages/analytics/src/performance.ts
+  s_cac67d3084073f::t_da8070feb659f3 229
+  s_cac67d3084073f::t_dcaf3dc4cd4739 108-175,178,196-199,202-203,215
+apps/web/src/app/dashboard/holdings/[id]/holding-detail-client.tsx
+  s_cac67d3084073f::t_4636f0d1a337f6 275-281
+  s_cac67d3084073f::t_43ce6c0d1ec531 127-129
+apps/web/src/app/dashboard/asset-class/[assetClass]/asset-class-client.tsx
+  s_cac67d3084073f::t_b2d68b170532df 140-141
+  s_cac67d3084073f::t_f3b47a8b10a449 107-109
+  s_cac67d3084073f::t_3d932208520772 206-211
+  s_cac67d3084073f::t_7076d381ecaee1 243-249
+packages/api/src/routers/portfolio.ts
+  s_cac67d3084073f::t_fc8226c4076dcb 2-3,7
+  s_cac67d3084073f::t_d0e75c9014e3f0 455-477,481-487,502-520,534-535
+  s_cac67d3084073f::t_febb842e96e68e 385
+  s_cac67d3084073f::t_966b13317f2e2b 1039,1041
+  s_cac67d3084073f::t_a58e8b99554cfa 389-393
+  s_cac67d3084073f::t_f35b7ed301d0d5 572-588
+  s_cac67d3084073f::t_693d8ed7c60edf 544,560-569
+  s_cac67d3084073f::t_fc25fc4e6b555b 873-898,900-1038,1040,1042-1046
+  s_cac67d3084073f::t_695e4ebb79457d 305-312,318-319,321-325,337-339
+  s_cac67d3084073f::t_913d93990568ec 17
+  s_cac67d3084073f::t_2d2901fb34b335 11
+  s_cac67d3084073f::t_e472c659807f23 313-317,320,488-496,498-501
+  s_cac67d3084073f::t_6a9a3952117c05 383-384,386
+  s_cac67d3084073f::t_3c1eca66de6dc7 899
+  s_cac67d3084073f::t_323fb0d37ac6f7 619
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "07cb0ae75e7bb64e7ba636e08fa7e5a03168abd9",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_cac67d3084073f": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7c86efcb-78db-4517-b386-72ea16f4f709",
+        "model": "gpt-5.2-codex-high-fast"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
