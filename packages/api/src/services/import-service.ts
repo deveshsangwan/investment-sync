@@ -18,6 +18,7 @@ import {
 } from "@investment-sync/importers";
 import type { ApiContext } from "../context";
 import type { MembershipContext } from "./membership";
+import { clearHouseholdPortfolioCache } from "./portfolio-cache";
 
 const IMPORT_TTL_DAYS = 30;
 const IMPORT_BUCKET = process.env.SUPABASE_IMPORT_BUCKET ?? "portfolio-imports";
@@ -202,6 +203,8 @@ export async function commitImport(
   membership: MembershipContext,
   importBatchId: string,
 ) {
+  clearHouseholdPortfolioCache(membership.householdId);
+
   const batchRows = await ctx.db
     .select({ id: importRows.id, payload: importRows.normalizedPayload })
     .from(importRows)
@@ -351,6 +354,8 @@ export async function commitImport(
       ),
     );
 
+  clearHouseholdPortfolioCache(membership.householdId);
+
   return { committed };
 }
 
@@ -392,6 +397,8 @@ export async function dedupePortfolioData(
   ctx: ApiContext,
   membership: MembershipContext,
 ) {
+  clearHouseholdPortfolioCache(membership.householdId);
+
   const deletedAggregateHoldingSnapshots = await ctx.db.execute(sql`
     delete from ${holdingSnapshots}
     using ${instruments}
@@ -506,6 +513,8 @@ export async function dedupePortfolioData(
       and ranked.duplicate_rank > 1
     returning ${transactions.id}
   `);
+
+  clearHouseholdPortfolioCache(membership.householdId);
 
   return {
     deletedAggregateHoldingSnapshots: deletedAggregateHoldingSnapshots.length,

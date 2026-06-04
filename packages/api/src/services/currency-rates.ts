@@ -17,6 +17,7 @@ export interface CurrencyRateQuote {
 }
 
 let cachedUsdInrRate: CachedRate | undefined;
+let pendingUsdInrRate: Promise<CurrencyRateQuote> | undefined;
 
 export async function getUsdInrRate(): Promise<CurrencyRateQuote> {
   const now = Date.now();
@@ -24,6 +25,16 @@ export async function getUsdInrRate(): Promise<CurrencyRateQuote> {
     return toQuote(cachedUsdInrRate, false);
   }
 
+  if (pendingUsdInrRate) return pendingUsdInrRate;
+
+  pendingUsdInrRate = fetchUsdInrRate(now).finally(() => {
+    pendingUsdInrRate = undefined;
+  });
+
+  return pendingUsdInrRate;
+}
+
+async function fetchUsdInrRate(now: number): Promise<CurrencyRateQuote> {
   try {
     const response = await fetch(FRANKFURTER_USD_INR_URL, {
       headers: { accept: "application/json" },

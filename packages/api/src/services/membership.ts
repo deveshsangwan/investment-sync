@@ -56,6 +56,15 @@ const defaultAccounts = [
 export async function ensureMembership(
   ctx: ApiContext,
 ): Promise<MembershipContext> {
+  const cached = ctx.cache.get("membership");
+  if (cached) return cached as Promise<MembershipContext>;
+
+  const membership = loadMembership(ctx);
+  ctx.cache.set("membership", membership);
+  return membership;
+}
+
+async function loadMembership(ctx: ApiContext): Promise<MembershipContext> {
   const clerkUserId = ctx.auth.userId;
   if (!clerkUserId) throw new Error("Missing Clerk user id");
 
