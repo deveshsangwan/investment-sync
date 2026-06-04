@@ -1,0 +1,42 @@
+packages/api/src/routers/portfolio.ts
+  s_35d2e83c5774ba::t_90e43a9a4214c4 496-498
+  s_35d2e83c5774ba::t_af88baa0538041 473-479,481-483,494-495,500-526,528-532,534-548,550-559
+  s_35d2e83c5774ba::t_9e85cc9e0628c0 18,480,484-493,499,527,533,549
+  s_35d2e83c5774ba::t_e426f49d4a074d 21,92,246
+  s_35d2e83c5774ba::t_7f30c149a15bbe 25,64,120-124
+packages/api/src/services/portfolio-cache.ts
+  s_35d2e83c5774ba::t_e4aa94e725ff7b 1-19,21-22,25-50
+  s_35d2e83c5774ba::t_662d84dc04cbe9 20,23-24
+packages/api/src/services/membership.ts
+  s_35d2e83c5774ba::t_df0c15fa25f598 59-67
+apps/web/src/app/api/trpc/[trpc]/route.ts
+  s_35d2e83c5774ba::t_a2967dea00db20 2,13
+packages/api/src/context.ts
+  s_35d2e83c5774ba::t_d7edb5209e4bc6 20,28
+packages/api/src/services/import-service.ts
+  s_35d2e83c5774ba::t_12d2251ce223c5 206-207,400-401
+  s_35d2e83c5774ba::t_a9019ca2ad629a 21,357-358,517
+packages/api/src/services/currency-rates.ts
+  s_35d2e83c5774ba::t_56eff5ec0cef37 20,28-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "9d2459cea6651c6d0bd7fc7281d82bcc032e29fc",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_35d2e83c5774ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9260-0210-7d00-bce8-dd2baf28cacb",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
