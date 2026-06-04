@@ -1,0 +1,60 @@
+package.json
+  s_06bed767e42cdc::t_3839c5f7bea4fe 28-30,34
+  s_06bed767e42cdc::t_1eb0f1e0498b8a 14
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_06bed767e42cdc::t_d9611041221f70 87,92,97,160,257,292-293
+  s_06bed767e42cdc::t_979684b0b06377 22,32-40
+packages/api/src/services/portfolio/utils.ts
+  s_06bed767e42cdc::t_c71f37b082341b 1-55
+apps/web/src/app/uploads/uploads-client.tsx
+  s_06bed767e42cdc::t_77d581e32b9e3d 3,29-36
+  s_06bed767e42cdc::t_55c813ad355e4c 5,7,11,14,16-20,22-23,27,37-38,40-41,43-44,46-55,57-61,63-73,75,81-82,85-88,94-103,106,112-115,118-119,122-123,126-155
+  s_06bed767e42cdc::t_8b51df028b0ce7 28,107,111
+  s_06bed767e42cdc::t_7ed81b7cf306d3 10,89-92
+apps/web/src/lib/format.ts
+  s_06bed767e42cdc::t_3e1947f3cf712f 1-60
+eslint.config.mjs
+  s_06bed767e42cdc::t_1379d087dcdd35 2-9,12-21,23,25,27,29-41,45-74
+apps/web/src/lib/asset-classes.ts
+  s_06bed767e42cdc::t_7360b6618f58ac 1-16
+apps/web/src/app/dashboard/asset-class/[assetClass]/page.tsx
+  s_06bed767e42cdc::t_3db61b67b9df7f 1,16-17,20
+.github/workflows/ci.yml
+  s_06bed767e42cdc::t_10d068ba959014 1-26
+apps/web/src/app/uploads/page.tsx
+  s_06bed767e42cdc::t_4a060574f581ce 4-13
+apps/web/src/app/dashboard/holdings/[id]/holding-detail-client.tsx
+  s_06bed767e42cdc::t_c6d8008f971c55 19,29-37
+  s_06bed767e42cdc::t_dbd467a0a0163a 186
+apps/web/src/components/dashboard-states.tsx
+  s_06bed767e42cdc::t_6cb8a15a270f54 1-56
+apps/web/src/app/dashboard/asset-class/[assetClass]/asset-class-client.tsx
+  s_06bed767e42cdc::t_7bd32a232d96e8 12,22-30
+  s_06bed767e42cdc::t_149a469d80b23f 70,74,79
+  s_06bed767e42cdc::t_493a7a4bca39de 31,38
+packages/api/src/routers/portfolio.ts
+  s_06bed767e42cdc::t_55528034823f6c 390
+  s_06bed767e42cdc::t_10380e5a792be3 22-32
+  s_06bed767e42cdc::t_72f0f2201c1cab 394
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "7f60e8ba41e39c07ba392d6a03d50b3507eb4691",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_06bed767e42cdc": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ba6cf939-103f-421f-9192-321f42e9382d",
+        "model": "gpt-5.2-codex-high-fast"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
