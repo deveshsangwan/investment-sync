@@ -25,3 +25,5 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 6. Start the Expo app with `pnpm dev:mobile`.
 
 Original uploaded files are retained for 30 days by default. Normalized portfolio data remains until deleted from the app.
+
+For fake local portfolio data without production records, see `docs/local-development.md`.

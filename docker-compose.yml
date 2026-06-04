@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: investment-sync-postgres
+    environment:
+      POSTGRES_USER: investment_sync
+      POSTGRES_PASSWORD: investment_sync
+      POSTGRES_DB: investment_sync_dev
+    ports:
+      - "54329:5432"
+    volumes:
+      - investment_sync_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U investment_sync -d investment_sync_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  investment_sync_postgres:

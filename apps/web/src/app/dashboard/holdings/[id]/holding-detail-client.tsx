@@ -161,7 +161,10 @@ export function HoldingDetailClient({
                 <TrendRow
                   key={point.id}
                   label={formatDate(point.snapshotDate)}
-                  sublabel={formatCurrency(Number(point.investedAmount), point.currency)}
+                  sublabel={`${point.accountName} · ${point.provider} · invested ${formatCurrency(
+                    Number(point.investedAmount),
+                    point.currency,
+                  )}`}
                   value={formatCurrency(Number(point.currentValue), point.currency)}
                   width={trendWidth(point.currentValueInInr, historyValues)}
                 />

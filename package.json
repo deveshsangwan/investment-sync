@@ -12,7 +12,14 @@
     "typecheck": "turbo typecheck",
     "format": "prettier --write .",
     "db:generate": "pnpm --filter @investment-sync/db generate",
-    "db:migrate": "pnpm --filter @investment-sync/db migrate"
+    "db:migrate": "pnpm --filter @investment-sync/db migrate",
+    "db:local:up": "docker compose up -d postgres",
+    "db:local:down": "docker compose down",
+    "db:local:migrate": "DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_dev pnpm --filter @investment-sync/db migrate",
+    "db:container:up": "node scripts/local-postgres-container.cjs up",
+    "db:container:down": "node scripts/local-postgres-container.cjs down",
+    "db:container:logs": "node scripts/local-postgres-container.cjs logs",
+    "db:seed:fake": "ALLOW_FAKE_DEV_SEED=1 DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_dev node scripts/seed-fake-dev-data.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

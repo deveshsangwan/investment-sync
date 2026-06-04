@@ -302,12 +302,14 @@ export const portfolioRouter = router({
           pnlPercent: holdingSnapshots.pnlPercent,
           currency: holdingSnapshots.currency,
           sourcePayload: holdingSnapshots.sourcePayload,
+          accountName: accounts.name,
+          provider: accounts.provider,
         })
         .from(holdingSnapshots)
+        .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
         .where(
           and(
             eq(holdingSnapshots.householdId, ctx.membership.householdId),
-            eq(holdingSnapshots.accountId, selected.accountId),
             eq(holdingSnapshots.instrumentId, selected.instrumentId),
           ),
         )
