@@ -11,5 +11,5 @@ web-build
 .env.*
 !.env.example
 *.local
-uploads
+/uploads/
 *.tsbuildinfo
