@@ -33,7 +33,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <nav className="flex items-center gap-1 rounded-lg border bg-card/70 p-1 shadow-sm">
               {navItems.map((item) => {
                 const isActive =
-                  pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`);
                 const Icon = item.icon;
                 return (
                   <Link
@@ -41,7 +42,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     href={item.href}
                     className={cn(
                       "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                      isActive && "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground",
+                      isActive &&
+                        "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground",
                     )}
                   >
                     <Icon className="size-4" />

@@ -3,7 +3,10 @@ import * as XLSX from "xlsx";
 import { parseImportFile } from "./index";
 
 function workbookToBuffer(workbook: XLSX.WorkBook): Buffer {
-  const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as unknown;
+  const output = XLSX.write(workbook, {
+    type: "buffer",
+    bookType: "xlsx",
+  }) as unknown;
   if (Buffer.isBuffer(output)) return output;
   if (output instanceof Uint8Array) return Buffer.from(output);
   if (output instanceof ArrayBuffer) return Buffer.from(output);
@@ -176,7 +179,8 @@ describe("Investment workbook importer", () => {
     expect(result.sourceType).toBe("investment_portfolio_xlsx");
     expect(
       result.rows.some(
-        (row) => row.kind === "holding" && row.instrumentName.includes("Summary"),
+        (row) =>
+          row.kind === "holding" && row.instrumentName.includes("Summary"),
       ),
     ).toBe(false);
     expect(result.rows).toEqual(

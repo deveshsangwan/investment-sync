@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { parseAssetClass } from "@/lib/asset-classes";
 import { AssetClassClient } from "./asset-class-client";
 
@@ -14,10 +15,14 @@ export default async function AssetClassPage({
   );
 
   const decodedAssetClass = decodeURIComponent(assetClass);
+  const parsedAssetClass = parseAssetClass(decodedAssetClass);
+  if (!parsedAssetClass) {
+    notFound();
+  }
 
   return (
     <AssetClassClient
-      assetClass={parseAssetClass(decodedAssetClass)}
+      assetClass={parsedAssetClass}
       isDataConfigured={isDataConfigured}
     />
   );

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, BarChart3, PieChart, TrendingUp, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  PieChart,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import {
   EmptyState,
   MetricCard,
@@ -169,7 +175,9 @@ function HoldingsTable({
           <TableBody>
             {holdings.map((holding) => {
               const rowTone =
-                Number(holding.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
+                Number(holding.pnlAmountInInr ?? 0) >= 0
+                  ? "positive"
+                  : "negative";
               return (
                 <TableRow key={holding.id}>
                   <TableCell>
@@ -185,20 +193,30 @@ function HoldingsTable({
                   </TableCell>
                   {exited ? (
                     <TableCell>
-                      {holding.snapshotDate ? formatDate(holding.snapshotDate) : "N/A"}
+                      {holding.snapshotDate
+                        ? formatDate(holding.snapshotDate)
+                        : "N/A"}
                     </TableCell>
                   ) : null}
                   <TableCell>
-                    {formatCurrency(Number(holding.currentValue), holding.currency)}
+                    {formatCurrency(
+                      Number(holding.currentValue),
+                      holding.currency,
+                    )}
                   </TableCell>
                   <TableCell className={`font-semibold ${rowTone}`}>
-                    {formatCurrency(Number(holding.pnlAmount ?? 0), holding.currency)}
+                    {formatCurrency(
+                      Number(holding.pnlAmount ?? 0),
+                      holding.currency,
+                    )}
                   </TableCell>
                   <TableCell className={`font-semibold ${rowTone}`}>
                     {formatPercent(numberOrUndefined(holding.pnlPercent))}
                   </TableCell>
                   {!exited ? (
-                    <TableCell>{formatPercent(holding.weightInAssetClass)}</TableCell>
+                    <TableCell>
+                      {formatPercent(holding.weightInAssetClass)}
+                    </TableCell>
                   ) : null}
                   {!exited ? (
                     <TableCell>

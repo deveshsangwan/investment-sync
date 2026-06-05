@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { FileSpreadsheet, UploadCloud } from "lucide-react";
 import { SetupRequired } from "@/components/dashboard-states";
-import { EmptyState, PageHeader, PageShell, SectionCard } from "@/components/portfolio-ui";
+import {
+  EmptyState,
+  PageHeader,
+  PageShell,
+  SectionCard,
+} from "@/components/portfolio-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,14 +18,26 @@ import { trpc } from "../providers";
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
 
-export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean }) {
+export function UploadsClient({
+  isDataConfigured,
+}: {
+  isDataConfigured: boolean;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
-  const list = trpc.imports.list.useQuery(undefined, { enabled: isDataConfigured });
+  const [warningDetails, setWarningDetails] = useState<string[]>([]);
+  const utils = trpc.useUtils();
+  const list = trpc.imports.list.useQuery(undefined, {
+    enabled: isDataConfigured,
+  });
   const commit = trpc.imports.commit.useMutation({
     onSuccess: () => {
-      void list.refetch();
+      void utils.imports.list.invalidate();
+      void utils.portfolio.summary.invalidate();
+      void utils.portfolio.holdings.invalidate();
+      void utils.portfolio.performance.invalidate();
+      void utils.portfolio.timeline.invalidate();
     },
   });
 
@@ -39,6 +56,7 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
     if (!file) return;
     setStatus("uploading");
     setMessage(null);
+    setWarningDetails([]);
 
     const body = new FormData();
     body.append("file", file);
@@ -48,24 +66,41 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
         method: "POST",
         body,
       });
-      const data = (await response.json()) as {
-        rowCount?: number;
-        warnings?: string[];
-        error?: string;
-      };
+      const text = await response.text();
+      let data: Record<string, unknown> = {};
+      if (text) {
+        try {
+          data = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          data = {};
+        }
+      }
+      const warnings = Array.isArray(data.warnings)
+        ? data.warnings.filter(
+            (warning): warning is string => typeof warning === "string",
+          )
+        : [];
+      const rowCount = typeof data.rowCount === "number" ? data.rowCount : 0;
+      const sourceType =
+        typeof data.sourceType === "string" ? data.sourceType : undefined;
 
       if (!response.ok) {
         setStatus("error");
-        setMessage(data.error ?? "Upload failed.");
+        setMessage(
+          typeof data.error === "string" ? data.error : "Upload failed.",
+        );
         return;
       }
 
       const warningSuffix =
-        data.warnings && data.warnings.length > 0
-          ? ` (${data.warnings.length} warning${data.warnings.length > 1 ? "s" : ""})`
+        warnings.length > 0
+          ? ` (${warnings.length} warning${warnings.length > 1 ? "s" : ""})`
           : "";
       setStatus("success");
-      setMessage(`Parsed ${data.rowCount ?? 0} rows${warningSuffix}.`);
+      setWarningDetails(warnings);
+      setMessage(
+        `Parsed ${rowCount} rows${sourceType ? ` from ${sourceType}` : ""}${warningSuffix}.`,
+      );
       setFile(null);
       void list.refetch();
     } catch (error) {
@@ -94,7 +129,16 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
           <AlertTitle>
             {status === "error" ? "Upload failed" : "Upload complete"}
           </AlertTitle>
-          <AlertDescription>{message}</AlertDescription>
+          <AlertDescription>
+            <div>{message}</div>
+            {warningDetails.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                {warningDetails.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -103,10 +147,16 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
           <div className="flex-1">
             <input
               type="file"
+              accept=".csv,.xlsx"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               disabled={!isDataConfigured}
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
+            {file ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Selected: {file.name}
+              </p>
+            ) : null}
           </div>
           <Button
             onClick={() => {
@@ -135,9 +185,12 @@ export function UploadsClient({ isDataConfigured }: { isDataConfigured: boolean 
                 className="flex flex-col gap-2 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <div className="text-sm font-semibold">{batch.originalFileName}</div>
+                  <div className="text-sm font-semibold">
+                    {batch.originalFileName}
+                  </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    Uploaded {formatDate(batch.uploadedAt)} · {batch.rowCount} rows
+                    Uploaded {formatDate(batch.uploadedAt)} · {batch.rowCount}{" "}
+                    rows
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

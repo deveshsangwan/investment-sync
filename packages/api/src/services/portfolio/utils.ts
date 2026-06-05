@@ -2,7 +2,9 @@ import { getUsdInrRate } from "../currency-rates";
 
 export type Currency = "INR" | "USD" | "BTC" | "ETH" | "OTHER";
 
-export function parseDate(value: string | Date | null | undefined): Date | undefined {
+export function parseDate(
+  value: string | Date | null | undefined,
+): Date | undefined {
   if (!value) return undefined;
   if (value instanceof Date) return value;
   const parsed = new Date(value);
@@ -51,5 +53,7 @@ export function isAggregateHolding(holding: {
 
 export function sourceXirrFromPayload(payload?: Record<string, unknown>) {
   const value = payload?.xirr;
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }

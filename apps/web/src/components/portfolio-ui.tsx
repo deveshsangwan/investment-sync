@@ -12,7 +12,12 @@ export function PageShell({
   className?: string;
 }) {
   return (
-    <main className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8", className)}>
+    <main
+      className={cn(
+        "mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8",
+        className,
+      )}
+    >
       {children}
     </main>
   );
@@ -179,10 +184,11 @@ export function TrendRow({
 
 export function QualityBadge({ value }: { value: string }) {
   const lower = value.toLowerCase();
-  const variant = lower.includes("exact") || lower.includes("source")
-    ? "positive"
-    : lower.includes("needs")
-      ? "negative"
-      : "secondary";
+  const variant =
+    lower.includes("exact") || lower.includes("source")
+      ? "positive"
+      : lower.includes("needs")
+        ? "negative"
+        : "secondary";
   return <Badge variant={variant}>{value}</Badge>;
 }

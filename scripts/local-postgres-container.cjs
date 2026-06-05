@@ -127,6 +127,8 @@ if (command === "up") {
 } else if (command === "logs") {
   logs();
 } else {
-  console.error("Usage: node scripts/local-postgres-container.cjs <up|down|logs>");
+  console.error(
+    "Usage: node scripts/local-postgres-container.cjs <up|down|logs>",
+  );
   process.exit(1);
 }

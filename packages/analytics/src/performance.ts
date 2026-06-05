@@ -129,10 +129,7 @@ export function resolveHoldingXirr(input: {
     };
   }
 
-  if (
-    input.sourceXirr !== undefined &&
-    Number.isFinite(input.sourceXirr)
-  ) {
+  if (input.sourceXirr !== undefined && Number.isFinite(input.sourceXirr)) {
     return {
       xirr: roundPercent(input.sourceXirr),
       dataQuality: "source_provided",

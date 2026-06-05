@@ -51,7 +51,8 @@ export function HoldingDetailClient({
   const data = detail.data;
   const holding = data?.holding;
   const pnlTone = (holding?.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
-  const historyValues = data?.history.map((point) => point.currentValueInInr) ?? [];
+  const historyValues =
+    data?.history.map((point) => point.currentValueInInr) ?? [];
 
   return (
     <PageShell>
@@ -85,7 +86,9 @@ export function HoldingDetailClient({
       />
 
       {!isDataConfigured ? <SetupRequired /> : null}
-      {isDataConfigured && !detail.isLoading && !holding ? <MissingHolding /> : null}
+      {isDataConfigured && !detail.isLoading && !holding ? (
+        <MissingHolding />
+      ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -133,7 +136,9 @@ export function HoldingDetailClient({
               : formatPercent(holding?.portfolioWeight)
           }
           detail={
-            holding?.isCurrent === false ? "Absent from latest snapshot" : undefined
+            holding?.isCurrent === false
+              ? "Absent from latest snapshot"
+              : undefined
           }
         />
         <MetricCard
@@ -162,7 +167,10 @@ export function HoldingDetailClient({
                     Number(point.investedAmount),
                     point.currency,
                   )}`}
-                  value={formatCurrency(Number(point.currentValue), point.currency)}
+                  value={formatCurrency(
+                    Number(point.currentValue),
+                    point.currency,
+                  )}
                   width={trendWidth(point.currentValueInInr, historyValues)}
                 />
               ))}
@@ -174,7 +182,10 @@ export function HoldingDetailClient({
           <dl className="grid gap-3 sm:grid-cols-2">
             {[
               ["Quantity", holding?.quantity ?? "N/A"],
-              ["Last updated", holding ? formatDate(holding.snapshotDate) : "N/A"],
+              [
+                "Last updated",
+                holding ? formatDate(holding.snapshotDate) : "N/A",
+              ],
               ["Currency", holding?.currency ?? "N/A"],
               ["ISIN", holding?.isin ?? "N/A"],
               ["Exchange", holding?.exchange ?? "N/A"],
@@ -183,7 +194,9 @@ export function HoldingDetailClient({
                 <dt className="text-xs font-semibold uppercase text-muted-foreground">
                   {label}
                 </dt>
-                <dd className="mt-1 wrap-break-word text-sm font-semibold">{value}</dd>
+                <dd className="mt-1 wrap-break-word text-sm font-semibold">
+                  {value}
+                </dd>
               </div>
             ))}
           </dl>
@@ -216,11 +229,17 @@ export function HoldingDetailClient({
                   <TableCell>{transaction.quantity ?? "N/A"}</TableCell>
                   <TableCell>
                     {transaction.price
-                      ? formatCurrency(Number(transaction.price), transaction.currency)
+                      ? formatCurrency(
+                          Number(transaction.price),
+                          transaction.currency,
+                        )
                       : "N/A"}
                   </TableCell>
                   <TableCell className="font-semibold">
-                    {formatCurrency(Number(transaction.amount), transaction.currency)}
+                    {formatCurrency(
+                      Number(transaction.amount),
+                      transaction.currency,
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

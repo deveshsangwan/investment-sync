@@ -188,7 +188,9 @@ export function DashboardClient({
               <TableBody>
                 {holdings.data?.slice(0, 8).map((holding) => {
                   const rowTone =
-                    Number(holding.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
+                    Number(holding.pnlAmount ?? 0) >= 0
+                      ? "positive"
+                      : "negative";
                   return (
                     <TableRow key={holding.id}>
                       <TableCell>
@@ -208,7 +210,9 @@ export function DashboardClient({
                           holding.currency,
                         )}
                       </TableCell>
-                      <TableCell className={`text-right font-semibold ${rowTone}`}>
+                      <TableCell
+                        className={`text-right font-semibold ${rowTone}`}
+                      >
                         {formatCurrency(
                           Number(holding.pnlAmount ?? 0),
                           holding.currency,
@@ -243,7 +247,8 @@ export function DashboardClient({
               </TableHeader>
               <TableBody>
                 {performance.data?.byAssetClass.map((item) => {
-                  const rowTone = (item.xirr ?? 0) >= 0 ? "positive" : "negative";
+                  const rowTone =
+                    (item.xirr ?? 0) >= 0 ? "positive" : "negative";
                   return (
                     <TableRow key={item.assetClass}>
                       <TableCell>

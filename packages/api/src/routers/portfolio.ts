@@ -1004,7 +1004,10 @@ async function historyByInstrumentIds(
 
   const grouped = new Map<string, SnapshotValuationRow[]>();
   for (const row of rows) {
-    grouped.set(row.instrumentId, [...(grouped.get(row.instrumentId) ?? []), row]);
+    grouped.set(row.instrumentId, [
+      ...(grouped.get(row.instrumentId) ?? []),
+      row,
+    ]);
   }
   return grouped;
 }
@@ -1035,8 +1038,10 @@ async function transactionsByInstrumentIds(
   const grouped = new Map<string, InstrumentTransactionRow[]>();
   for (const row of rows) {
     if (!row.instrumentId) continue;
-    grouped.set(row.instrumentId, [...(grouped.get(row.instrumentId) ?? []), row]);
+    grouped.set(row.instrumentId, [
+      ...(grouped.get(row.instrumentId) ?? []),
+      row,
+    ]);
   }
   return grouped;
 }
-
