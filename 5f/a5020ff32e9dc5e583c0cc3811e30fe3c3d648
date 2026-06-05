@@ -1,0 +1,74 @@
+apps/web/src/app/dashboard/asset-class/[assetClass]/page.tsx
+  s_06bed767e42cdc::t_b3c92583da7107 1,18-21,25
+apps/mobile/app.json
+  s_06bed767e42cdc::t_3244d68d976fc9 16
+apps/web/src/app/dashboard/holdings/[id]/holding-detail-client.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 54-55,89-91,139-141,170-173,185-188,197-199,232-235,239-242
+apps/web/src/components/ui/button.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 37-38
+docker-compose.yml
+  s_06bed767e42cdc::t_3244d68d976fc9 14-15
+apps/web/src/components/app-shell.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 36-37,45-46
+packages/analytics/src/performance.test.ts
+  s_06bed767e42cdc::t_3244d68d976fc9 64-78,93-102,104,117-126,140-154,182-191,209-218
+packages/api/src/services/portfolio/utils.ts
+  s_06bed767e42cdc::t_3244d68d976fc9 5-7,56-58
+apps/web/src/app/uploads/uploads-client.tsx
+  s_06bed767e42cdc::t_3c4a523b723e53 29-30,36-40,59,69-78,82-83,89-91,96-97,100-103,132-141,150,155-159
+  s_06bed767e42cdc::t_3244d68d976fc9 6-11,21-25,31-33,79-81,84-85,188-190,192-193
+apps/web/src/components/portfolio-ui.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 15-20,187-192
+apps/web/src/app/dashboard/asset-class/[assetClass]/asset-class-client.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 5-10,178-180,196-198,202-205,208-211,217-219
+apps/web/src/components/ui/table.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 4-7
+packages/importers/src/importers.test.ts
+  s_06bed767e42cdc::t_3244d68d976fc9 6-9,182-183
+apps/web/src/lib/asset-classes.ts
+  s_06bed767e42cdc::t_6207674454c022 1-3,7
+  s_06bed767e42cdc::t_3244d68d976fc9 8-10
+scripts/local-postgres-container.cjs
+  s_06bed767e42cdc::t_3244d68d976fc9 130-132
+apps/web/src/app/globals.css
+  s_06bed767e42cdc::t_3244d68d976fc9 91-95
+packages/analytics/src/performance.ts
+  s_06bed767e42cdc::t_3244d68d976fc9 132
+apps/web/src/components/ui/badge.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 28-29,33-35
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 191-193,213-215,250-251
+apps/web/src/app/uploads/page.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 6-7
+apps/web/src/components/ui/card.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 6-12,21,45
+packages/api/src/routers/portfolio.ts
+  s_06bed767e42cdc::t_3244d68d976fc9 1007-1010,1041-1044
+packages/importers/src/utils.ts
+  s_06bed767e42cdc::t_3244d68d976fc9 15-19
+apps/web/src/app/settings/settings-client.tsx
+  s_06bed767e42cdc::t_3244d68d976fc9 4-9,67-69
+.prettierignore
+  s_06bed767e42cdc::t_9894aec7346a99 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "5fa5020ff32e9dc5e583c0cc3811e30fe3c3d648",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_06bed767e42cdc": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ba6cf939-103f-421f-9192-321f42e9382d",
+        "model": "gpt-5.2-codex-high-fast"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
