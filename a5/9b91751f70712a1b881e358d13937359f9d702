@@ -1,0 +1,38 @@
+pnpm-workspace.yaml
+  h_9c147e6399b95b 4,6-11
+  s_88f749b9b72a45::t_7fa3c74912489d 5
+apps/web/src/lib/format.ts
+  s_88f749b9b72a45::t_38411cdbd99bcb 27-29
+packages/db/package.json
+  s_88f749b9b72a45::t_0737674c4ab87d 15-16,20
+package.json
+  s_88f749b9b72a45::t_7a8ebfb0779e25 26
+  s_88f749b9b72a45::t_0737674c4ab87d 27
+packages/api/package.json
+  s_88f749b9b72a45::t_0737674c4ab87d 16,18
+.github/workflows/ci.yml
+  s_88f749b9b72a45::t_062d1444585a53 22
+  s_88f749b9b72a45::t_228b967d5fbb32 10-12,17,20,23,25
+  s_88f749b9b72a45::t_38411cdbd99bcb 18-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "a59b91751f70712a1b881e358d13937359f9d702",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_88f749b9b72a45": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9c5c-b84a-72c2-a1ef-ef7f3af5cb62",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
