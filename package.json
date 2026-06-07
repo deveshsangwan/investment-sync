@@ -1,7 +1,7 @@
 {
   "name": "investment-sync",
   "private": true,
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@11.5.2+sha512.71c631e382066efc25625d5cf029075de07b61b37f6e27350fbd84b1bda5864c8c1967adc280776b45c30a715c0359a3be08fef42d5bb09e2b99029979692916",
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev --parallel",
@@ -23,7 +23,8 @@
     "db:seed:fake": "ALLOW_FAKE_DEV_SEED=1 DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_dev node scripts/seed-fake-dev-data.cjs"
   },
   "devDependencies": {
-    "@types/node": "^22.10.7",
+    "@eslint/js": "9.39.4",
+    "@types/node": "^24.13.1",
     "eslint": "^9.18.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",

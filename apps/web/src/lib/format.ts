@@ -24,7 +24,9 @@ export function formatCurrency(value: number, currency?: string | null) {
 }
 
 export function formatPercent(value: number | undefined | null) {
-  return value === undefined || value === null ? "N/A" : `${value}%`;
+  return value === undefined || value === null || !Number.isFinite(value)
+    ? "N/A"
+    : `${value}%`;
 }
 
 export function qualityLabel(value: string | undefined) {
