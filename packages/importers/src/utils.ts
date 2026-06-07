@@ -9,8 +9,22 @@ export function parseCsv(content: Buffer): string[][] {
   }) as string[][];
 }
 
+export function toStringValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+  if (value instanceof Date) return value.toISOString();
+  return "";
+}
+
 export function normalizeHeader(value: unknown): string {
-  return String(value ?? "")
+  return toStringValue(value)
     .replace(/\u20b9/g, "rs")
     .replace(/\s+/g, " ")
     .trim()
@@ -18,8 +32,9 @@ export function normalizeHeader(value: unknown): string {
 }
 
 export function parseNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined || value === "") return undefined;
-  const raw = String(value)
+  const rawValue = toStringValue(value);
+  if (!rawValue || rawValue === "-") return undefined;
+  const raw = rawValue
     .replace(/rs\.?|inr/gi, "")
     .replace(/[₹,$%\s\u00a0]/g, "")
     .replace(/[()]/g, "")
@@ -36,7 +51,7 @@ export function parseRequiredNumber(value: unknown, fallback = 0): number {
 export function toIsoDate(value: unknown): string | undefined {
   if (!value) return undefined;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
-  const text = String(value).trim();
+  const text = toStringValue(value).trim();
   if (!text) return undefined;
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);

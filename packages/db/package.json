@@ -12,12 +12,12 @@
     "migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.48.1",
-    "drizzle-orm": "^0.38.4",
+    "@supabase/supabase-js": "^2.107.0",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.5"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.30.2",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
   }

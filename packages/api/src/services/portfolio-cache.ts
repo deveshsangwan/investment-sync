@@ -23,8 +23,7 @@ export function getHouseholdPortfolioCache<T>(
 
   console.log("portfolio cache miss", key);
 
-  let promise: Promise<T>;
-  promise = load().catch((error) => {
+  const promise = load().catch((error) => {
     const latest = householdPortfolioCache.get(cacheKey);
     if (latest?.promise === promise) {
       householdPortfolioCache.delete(cacheKey);

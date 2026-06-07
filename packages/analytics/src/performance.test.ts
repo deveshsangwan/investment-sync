@@ -61,9 +61,21 @@ describe("summarizePerformance", () => {
 describe("xirrFromValuationDeltas", () => {
   it("estimates XIRR from invested deltas and terminal value", () => {
     const rate = xirrFromValuationDeltas([
-      { date: new Date("2024-07-27"), investedAmount: 366.18, currentValue: 304.47 },
-      { date: new Date("2025-08-14"), investedAmount: 521.8, currentValue: 701.38 },
-      { date: new Date("2026-05-31"), investedAmount: 716.81, currentValue: 1100.78 },
+      {
+        date: new Date("2024-07-27"),
+        investedAmount: 366.18,
+        currentValue: 304.47,
+      },
+      {
+        date: new Date("2025-08-14"),
+        investedAmount: 521.8,
+        currentValue: 701.38,
+      },
+      {
+        date: new Date("2026-05-31"),
+        investedAmount: 716.81,
+        currentValue: 1100.78,
+      },
     ]);
 
     expect(rate).toBeDefined();
@@ -78,12 +90,18 @@ describe("resolveHoldingXirr", () => {
       terminalValue: 1210,
       sourceXirr: 12,
       valuations: [
-        { date: new Date("2024-01-01"), investedAmount: 1000, currentValue: 900 },
-        { date: new Date("2025-01-01"), investedAmount: 1000, currentValue: 1210 },
+        {
+          date: new Date("2024-01-01"),
+          investedAmount: 1000,
+          currentValue: 900,
+        },
+        {
+          date: new Date("2025-01-01"),
+          investedAmount: 1000,
+          currentValue: 1210,
+        },
       ],
-      cashFlows: [
-        { date: new Date("2024-01-01"), amount: 1000, type: "buy" },
-      ],
+      cashFlows: [{ date: new Date("2024-01-01"), amount: 1000, type: "buy" }],
     });
 
     expect(resolved.dataQuality).toBe("exact");
@@ -96,8 +114,16 @@ describe("resolveHoldingXirr", () => {
       terminalValue: 1200,
       sourceXirr: 14.5,
       valuations: [
-        { date: new Date("2024-01-01"), investedAmount: 1000, currentValue: 900 },
-        { date: new Date("2025-01-01"), investedAmount: 1000, currentValue: 1200 },
+        {
+          date: new Date("2024-01-01"),
+          investedAmount: 1000,
+          currentValue: 900,
+        },
+        {
+          date: new Date("2025-01-01"),
+          investedAmount: 1000,
+          currentValue: 1200,
+        },
       ],
       cashFlows: [],
     });
@@ -111,9 +137,21 @@ describe("resolveHoldingXirr", () => {
       asOfDate: new Date("2026-05-31"),
       terminalValue: 1100.78,
       valuations: [
-        { date: new Date("2024-07-27"), investedAmount: 366.18, currentValue: 304.47 },
-        { date: new Date("2025-08-14"), investedAmount: 521.8, currentValue: 701.38 },
-        { date: new Date("2026-05-31"), investedAmount: 716.81, currentValue: 1100.78 },
+        {
+          date: new Date("2024-07-27"),
+          investedAmount: 366.18,
+          currentValue: 304.47,
+        },
+        {
+          date: new Date("2025-08-14"),
+          investedAmount: 521.8,
+          currentValue: 701.38,
+        },
+        {
+          date: new Date("2026-05-31"),
+          investedAmount: 716.81,
+          currentValue: 1100.78,
+        },
       ],
       cashFlows: [],
     });
@@ -141,8 +179,16 @@ describe("resolveAssetClassXirr", () => {
         },
       ],
       valuations: [
-        { date: new Date("2024-01-01"), investedAmount: 2000, currentValue: 1800 },
-        { date: new Date("2025-01-01"), investedAmount: 2000, currentValue: 4000 },
+        {
+          date: new Date("2024-01-01"),
+          investedAmount: 2000,
+          currentValue: 1800,
+        },
+        {
+          date: new Date("2025-01-01"),
+          investedAmount: 2000,
+          currentValue: 4000,
+        },
       ],
     });
 
@@ -160,8 +206,16 @@ describe("resolveAssetClassXirr", () => {
         },
       ],
       valuations: [
-        { date: new Date("2024-07-27"), investedAmount: 366.18, currentValue: 304.47 },
-        { date: new Date("2026-05-31"), investedAmount: 716.81, currentValue: 1100.78 },
+        {
+          date: new Date("2024-07-27"),
+          investedAmount: 366.18,
+          currentValue: 304.47,
+        },
+        {
+          date: new Date("2026-05-31"),
+          investedAmount: 716.81,
+          currentValue: 1100.78,
+        },
       ],
     });
 

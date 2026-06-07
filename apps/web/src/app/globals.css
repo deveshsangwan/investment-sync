@@ -88,7 +88,11 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at top left, hsl(var(--primary) / 0.1), transparent 34rem),
+    radial-gradient(
+      circle at top left,
+      hsl(var(--primary) / 0.1),
+      transparent 34rem
+    ),
     linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.45));
   color: hsl(var(--foreground));
   font-family:

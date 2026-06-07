@@ -6,6 +6,7 @@ import {
   parseNumber,
   parseRequiredNumber,
   sourceDateFromText,
+  toStringValue,
 } from "./utils";
 
 export const tickertapeStockImporter: PortfolioImporter = {
@@ -47,7 +48,7 @@ export const tickertapeStockImporter: PortfolioImporter = {
 
     const holdings = rows.slice(headerRow + 1).flatMap((row) => {
       const record = objectFromRow(headers, row);
-      const symbol = String(record.security ?? "").trim();
+      const symbol = toStringValue(record.security).trim();
       if (!symbol || symbol.toLowerCase() === "stocks/etfs") return [];
 
       const currentValue =
@@ -141,7 +142,7 @@ export const tickertapeMutualFundImporter: PortfolioImporter = {
 
     const holdings = rows.slice(headerRow + 1).flatMap((row) => {
       const record = objectFromRow(headers, row);
-      const fundName = String(record["fund name"] ?? "").trim();
+      const fundName = toStringValue(record["fund name"]).trim();
       if (!fundName || fundName.toLowerCase() === "total") return [];
 
       return [

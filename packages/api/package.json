@@ -13,9 +13,9 @@
     "@investment-sync/analytics": "workspace:*",
     "@investment-sync/db": "workspace:*",
     "@investment-sync/importers": "workspace:*",
-    "@supabase/supabase-js": "^2.48.1",
+    "@supabase/supabase-js": "^2.107.0",
     "@trpc/server": "^10.45.2",
-    "drizzle-orm": "^0.38.4",
+    "drizzle-orm": "^0.45.2",
     "superjson": "^2.2.2",
     "zod": "^3.24.1"
   },

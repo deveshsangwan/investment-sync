@@ -18,10 +18,19 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { ApiContext } from "../context";
 import { protectedProcedure, router } from "../trpc";
-import { getUsdInrRate } from "../services/currency-rates";
 import { getHouseholdPortfolioCache } from "../services/portfolio-cache";
+import {
+  convertToInr,
+  getUsdInrRateIfNeeded,
+  isAggregateHolding,
+  parseDate,
+  roundMoney,
+  roundPercent,
+  sourceXirrFromPayload,
+  sum,
+  type Currency,
+} from "../services/portfolio/utils";
 
-type Currency = "INR" | "USD" | "BTC" | "ETH" | "OTHER";
 type PortfolioContext = ApiContext & { membership: { householdId: string } };
 
 export const portfolioRouter = router({
@@ -378,11 +387,11 @@ export const portfolioRouter = router({
       };
     }),
   assetClassDetail: protectedProcedure
-    .input(z.object({ assetClass: z.string() }))
+    .input(z.object({ assetClass: z.enum(assetClassEnum.enumValues) }))
     .query(async ({ ctx, input }) => {
       const [holdings, assetClassSnapshots] = await Promise.all([
         currentHoldings(ctx),
-        assetClassSnapshotRows(ctx, input.assetClass as AssetClass),
+        assetClassSnapshotRows(ctx, input.assetClass),
       ]);
       const latestHoldings = latestNonAggregateHoldings(holdings);
       const exitedHoldings = exitedNonAggregateHoldings(holdings);
@@ -844,30 +853,17 @@ function snapshotGroupKey(holding: {
   currency?: string;
   sourcePayload?: Record<string, unknown>;
 }) {
+  const sourceSheet =
+    typeof holding.sourcePayload?.sourceSheet === "string"
+      ? holding.sourcePayload.sourceSheet
+      : "";
   return [
     holding.accountName ?? "",
     holding.provider ?? "",
     holding.assetClass,
     holding.currency ?? "",
-    String(holding.sourcePayload?.sourceSheet ?? ""),
+    sourceSheet,
   ].join("|");
-}
-
-function isAggregateHolding(holding: {
-  instrumentName: string;
-  sourcePayload?: Record<string, unknown>;
-}) {
-  return (
-    holding.sourcePayload?.isAggregate === true ||
-    holding.instrumentName.endsWith(" Summary")
-  );
-}
-
-function sourceXirrFromPayload(payload?: Record<string, unknown>) {
-  const value = payload?.xirr;
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
 }
 
 function toPerformanceValuation(
@@ -1008,7 +1004,10 @@ async function historyByInstrumentIds(
 
   const grouped = new Map<string, SnapshotValuationRow[]>();
   for (const row of rows) {
-    grouped.set(row.instrumentId, [...(grouped.get(row.instrumentId) ?? []), row]);
+    grouped.set(row.instrumentId, [
+      ...(grouped.get(row.instrumentId) ?? []),
+      row,
+    ]);
   }
   return grouped;
 }
@@ -1016,7 +1015,7 @@ async function historyByInstrumentIds(
 async function transactionsByInstrumentIds(
   ctx: PortfolioContext,
   instrumentIds: string[],
-) {
+): Promise<Map<string, InstrumentTransactionRow[]>> {
   if (instrumentIds.length === 0) return new Map();
 
   const rows = await ctx.db
@@ -1039,44 +1038,10 @@ async function transactionsByInstrumentIds(
   const grouped = new Map<string, InstrumentTransactionRow[]>();
   for (const row of rows) {
     if (!row.instrumentId) continue;
-    grouped.set(row.instrumentId, [...(grouped.get(row.instrumentId) ?? []), row]);
+    grouped.set(row.instrumentId, [
+      ...(grouped.get(row.instrumentId) ?? []),
+      row,
+    ]);
   }
   return grouped;
-}
-
-function parseDate(value: string | Date | null | undefined): Date | undefined {
-  if (!value) return undefined;
-  if (value instanceof Date) return value;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-}
-
-async function getUsdInrRateIfNeeded(currencies: Currency[]) {
-  return currencies.includes("USD") ? getUsdInrRate() : undefined;
-}
-
-function convertToInr(
-  amount: number,
-  currency: Currency,
-  usdInrRate?: number,
-): number {
-  if (!Number.isFinite(amount)) return 0;
-  if (currency === "INR") return amount;
-  if (currency === "USD" && usdInrRate) return amount * usdInrRate;
-  return amount;
-}
-
-function sum(values: number[]): number {
-  return values.reduce(
-    (total, value) => total + (Number.isFinite(value) ? value : 0),
-    0,
-  );
-}
-
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-function roundPercent(value: number): number {
-  return Math.round(value * 100) / 100;
 }

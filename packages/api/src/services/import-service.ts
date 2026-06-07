@@ -40,17 +40,6 @@ async function ensureImportBucket(ctx: ApiContext) {
   }
 }
 
-type AssetClass =
-  | "indian_stock"
-  | "mutual_fund"
-  | "us_stock"
-  | "nps"
-  | "ulip"
-  | "crypto"
-  | "cash"
-  | "other";
-type Currency = "INR" | "USD" | "BTC" | "ETH" | "OTHER";
-
 export async function createImportUpload(
   ctx: ApiContext,
   membership: MembershipContext,
@@ -607,8 +596,8 @@ async function findOrCreateInstrument(
       name: row.instrumentName,
       symbol: row.symbol,
       isin: "isin" in row ? row.isin : undefined,
-      assetClass: row.assetClass as AssetClass,
-      currency: row.currency as Currency,
+      assetClass: row.assetClass,
+      currency: row.currency,
     })
     .returning({ id: instruments.id });
 

@@ -1,7 +1,12 @@
 "use client";
 
 import { Database, ShieldCheck, Users } from "lucide-react";
-import { MetricCard, PageHeader, PageShell, SectionCard } from "@/components/portfolio-ui";
+import {
+  MetricCard,
+  PageHeader,
+  PageShell,
+  SectionCard,
+} from "@/components/portfolio-ui";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -59,7 +64,9 @@ export function SettingsClient() {
             <TableBody>
               {accounts.data?.map((account) => (
                 <TableRow key={account.id}>
-                  <TableCell className="font-semibold">{account.name}</TableCell>
+                  <TableCell className="font-semibold">
+                    {account.name}
+                  </TableCell>
                   <TableCell>{account.provider}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{account.accountType}</Badge>

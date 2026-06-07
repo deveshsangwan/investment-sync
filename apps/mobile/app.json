@@ -13,11 +13,7 @@
     "android": {
       "package": "com.investmentsync.app"
     },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      "expo-web-browser"
-    ],
+    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"],
     "experiments": {
       "typedRoutes": true
     }

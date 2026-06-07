@@ -1,7 +1,10 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-function Table({ className, ...props }: React.HTMLAttributes<HTMLTableElement>) {
+function Table({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLTableElement>) {
   return (
     <div className="w-full overflow-auto">
       <table

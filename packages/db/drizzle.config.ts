@@ -34,5 +34,5 @@ function loadEnvFile(filePath: string) {
 }
 
 function stripQuotes(value: string) {
-  return value.replace(/^['\"]|['\"]$/g, "");
+  return value.replace(/^['"]|['"]$/g, "");
 }

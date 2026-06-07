@@ -16,6 +16,7 @@ import {
   SectionCard,
   TrendRow,
 } from "@/components/portfolio-ui";
+import { MissingHolding, SetupRequired } from "@/components/dashboard-states";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -25,20 +26,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  formatCurrency,
+  formatDate,
+  formatPercent,
+  labelize,
+  numberOrUndefined,
+  qualityLabel,
+  trendWidth,
+} from "@/lib/format";
 import { trpc } from "../../../providers";
-
-const inrCurrency = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-});
-
-const usdCurrency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
 
 export function HoldingDetailClient({
   id,
@@ -54,7 +51,8 @@ export function HoldingDetailClient({
   const data = detail.data;
   const holding = data?.holding;
   const pnlTone = (holding?.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
-  const historyValues = data?.history.map((point) => point.currentValueInInr) ?? [];
+  const historyValues =
+    data?.history.map((point) => point.currentValueInInr) ?? [];
 
   return (
     <PageShell>
@@ -88,7 +86,9 @@ export function HoldingDetailClient({
       />
 
       {!isDataConfigured ? <SetupRequired /> : null}
-      {isDataConfigured && !detail.isLoading && !holding ? <MissingHolding /> : null}
+      {isDataConfigured && !detail.isLoading && !holding ? (
+        <MissingHolding />
+      ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -136,7 +136,9 @@ export function HoldingDetailClient({
               : formatPercent(holding?.portfolioWeight)
           }
           detail={
-            holding?.isCurrent === false ? "Absent from latest snapshot" : undefined
+            holding?.isCurrent === false
+              ? "Absent from latest snapshot"
+              : undefined
           }
         />
         <MetricCard
@@ -165,7 +167,10 @@ export function HoldingDetailClient({
                     Number(point.investedAmount),
                     point.currency,
                   )}`}
-                  value={formatCurrency(Number(point.currentValue), point.currency)}
+                  value={formatCurrency(
+                    Number(point.currentValue),
+                    point.currency,
+                  )}
                   width={trendWidth(point.currentValueInInr, historyValues)}
                 />
               ))}
@@ -177,7 +182,10 @@ export function HoldingDetailClient({
           <dl className="grid gap-3 sm:grid-cols-2">
             {[
               ["Quantity", holding?.quantity ?? "N/A"],
-              ["Last updated", holding ? formatDate(holding.snapshotDate) : "N/A"],
+              [
+                "Last updated",
+                holding ? formatDate(holding.snapshotDate) : "N/A",
+              ],
               ["Currency", holding?.currency ?? "N/A"],
               ["ISIN", holding?.isin ?? "N/A"],
               ["Exchange", holding?.exchange ?? "N/A"],
@@ -186,7 +194,9 @@ export function HoldingDetailClient({
                 <dt className="text-xs font-semibold uppercase text-muted-foreground">
                   {label}
                 </dt>
-                <dd className="mt-1 break-words text-sm font-semibold">{value}</dd>
+                <dd className="mt-1 wrap-break-word text-sm font-semibold">
+                  {value}
+                </dd>
               </div>
             ))}
           </dl>
@@ -219,11 +229,17 @@ export function HoldingDetailClient({
                   <TableCell>{transaction.quantity ?? "N/A"}</TableCell>
                   <TableCell>
                     {transaction.price
-                      ? formatCurrency(Number(transaction.price), transaction.currency)
+                      ? formatCurrency(
+                          Number(transaction.price),
+                          transaction.currency,
+                        )
                       : "N/A"}
                   </TableCell>
                   <TableCell className="font-semibold">
-                    {formatCurrency(Number(transaction.amount), transaction.currency)}
+                    {formatCurrency(
+                      Number(transaction.amount),
+                      transaction.currency,
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -233,73 +249,4 @@ export function HoldingDetailClient({
       </SectionCard>
     </PageShell>
   );
-}
-
-function SetupRequired() {
-  return (
-    <Alert className="mb-4 border-amber-500/30 bg-amber-500/10">
-      <AlertTitle>Connect Supabase before loading portfolio data</AlertTitle>
-      <AlertDescription>
-        Add the database and Supabase environment variables, then restart.
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-function MissingHolding() {
-  return (
-    <div className="mb-4">
-      <EmptyState
-        icon={FileSpreadsheet}
-        title="This holding was not found"
-        description="It may have been replaced by a newer import or removed."
-        action={
-          <Button variant="secondary" asChild>
-            <Link href="/dashboard">Back to dashboard</Link>
-          </Button>
-        }
-      />
-    </div>
-  );
-}
-
-function formatCurrency(value: number, currency: string) {
-  if (currency === "USD") return usdCurrency.format(value);
-  return inrCurrency.format(value);
-}
-
-function formatPercent(value: number | undefined | null) {
-  return value === undefined || value === null ? "N/A" : `${value}%`;
-}
-
-function qualityLabel(value: string | undefined) {
-  if (value === "exact") return "Exact cash-flow XIRR";
-  if (value === "source_provided") return "Imported";
-  if (value === "estimated") return "Estimated from snapshots";
-  return "Needs cash flows";
-}
-
-function numberOrUndefined(value: string | number | null | undefined) {
-  if (value === null || value === undefined) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function labelize(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
-function formatDate(value: string | Date) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function trendWidth(value: number, values: number[]) {
-  const max = Math.max(...values, 1);
-  return Math.max(6, Math.round((value / max) * 100));
 }
