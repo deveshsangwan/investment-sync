@@ -14,8 +14,8 @@ import {
   PageHeader,
   PageShell,
   SectionCard,
-  TrendRow,
 } from "@/components/portfolio-ui";
+import { PortfolioTimelineChart } from "@/components/portfolio-charts";
 import { MissingHolding, SetupRequired } from "@/components/dashboard-states";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +33,6 @@ import {
   labelize,
   numberOrUndefined,
   qualityLabel,
-  trendWidth,
 } from "@/lib/format";
 import { trpc } from "../../../providers";
 
@@ -51,8 +50,6 @@ export function HoldingDetailClient({
   const data = detail.data;
   const holding = data?.holding;
   const pnlTone = (holding?.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
-  const historyValues =
-    data?.history.map((point) => point.currentValueInInr) ?? [];
 
   return (
     <PageShell>
@@ -150,7 +147,10 @@ export function HoldingDetailClient({
       </section>
 
       <section className="mt-4 grid gap-4 lg:grid-cols-2">
-        <SectionCard title="Value history">
+        <SectionCard
+          title="Value history"
+          description="Holding value and invested amount across dated uploads."
+        >
           {(data?.history.length ?? 0) < 2 ? (
             <EmptyState
               icon={FileSpreadsheet}
@@ -158,23 +158,15 @@ export function HoldingDetailClient({
               description="More dated uploads will build this holding history."
             />
           ) : (
-            <div className="divide-y">
-              {data?.history.slice(-10).map((point) => (
-                <TrendRow
-                  key={point.id}
-                  label={formatDate(point.snapshotDate)}
-                  sublabel={`${point.accountName} · ${point.provider} · invested ${formatCurrency(
-                    Number(point.investedAmount),
-                    point.currency,
-                  )}`}
-                  value={formatCurrency(
-                    Number(point.currentValue),
-                    point.currency,
-                  )}
-                  width={trendWidth(point.currentValueInInr, historyValues)}
-                />
-              ))}
-            </div>
+            <PortfolioTimelineChart
+              data={
+                data?.history.map((point) => ({
+                  snapshotDate: point.snapshotDate,
+                  currentValue: point.currentValueInInr,
+                  investedAmount: point.investedAmountInInr,
+                })) ?? []
+              }
+            />
           )}
         </SectionCard>
 

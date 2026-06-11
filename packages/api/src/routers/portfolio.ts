@@ -543,6 +543,11 @@ export const portfolioRouter = router({
           xirr: assetClassXirr.xirr,
           xirrDataQuality: assetClassXirr.dataQuality,
         },
+        timeline: assetClassValuations.map((point) => ({
+          snapshotDate: point.date.toISOString(),
+          investedAmount: roundMoney(point.investedAmount),
+          currentValue: roundMoney(point.currentValue),
+        })),
         exitedHoldings: assetExitedHoldings,
       };
     }),
