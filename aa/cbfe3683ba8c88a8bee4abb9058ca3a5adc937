@@ -1,0 +1,34 @@
+apps/web/package.json
+  s_8d5d18d2ec37d8::t_c2d11ad3e40dd6 30
+apps/web/src/app/dashboard/asset-class/[assetClass]/asset-class-client.tsx
+  s_8d5d18d2ec37d8::t_cc924374895e62 18,118-171
+apps/web/src/components/portfolio-charts.tsx
+  s_8d5d18d2ec37d8::t_cc924374895e62 1-2,4-16,18-22,24-74,76-94,96-128,130,132-135,137-143,145-164,166-171,175-196,198-231,233-242,244-257,259-287,293
+  s_8d5d18d2ec37d8::t_59cb4756a8bba4 165,288-289
+  s_8d5d18d2ec37d8::t_463a9815e4c7fe 17,23,258
+  s_8d5d18d2ec37d8::t_ad3ffdb8c80ae4 129,131,136,197
+  s_8d5d18d2ec37d8::t_4e54a90e7e6431 232
+  s_8d5d18d2ec37d8::t_2108360e792787 3,75,95,144,172-174,243,290-292
+apps/web/src/app/dashboard/holdings/[id]/holding-detail-client.tsx
+  s_8d5d18d2ec37d8::t_cc924374895e62 18,150-153,161-169
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_8d5d18d2ec37d8::t_cc924374895e62 21-24,134-137,145-147,257-260,268
+packages/api/src/routers/portfolio.ts
+  s_8d5d18d2ec37d8::t_cc924374895e62 546-550
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "aacbfe3683ba8c88a8bee4abb9058ca3a5adc937",
+  "prompts": {},
+  "sessions": {
+    "s_8d5d18d2ec37d8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb519-a708-79f1-82c5-9d863047c2af",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
