@@ -17,8 +17,11 @@ import {
   PageShell,
   QualityBadge,
   SectionCard,
-  TrendRow,
 } from "@/components/portfolio-ui";
+import {
+  AllocationDonutChart,
+  PortfolioTimelineChart,
+} from "@/components/portfolio-charts";
 import { EmptyPortfolio, SetupRequired } from "@/components/dashboard-states";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,12 +34,10 @@ import {
 } from "@/components/ui/table";
 import {
   formatCurrency,
-  formatDate,
   formatInr,
   formatPercent,
   labelize,
   qualityLabel,
-  trendWidth,
 } from "@/lib/format";
 import { trpc } from "../providers";
 
@@ -130,7 +131,10 @@ export function DashboardClient({
       </section>
 
       <section className="mt-4 grid gap-4 lg:grid-cols-2">
-        <SectionCard title="Allocation">
+        <SectionCard
+          title="Allocation"
+          description="Current portfolio mix by asset class."
+        >
           {(summary.data?.allocationByAssetClass.length ?? 0) === 0 ? (
             <EmptyState
               icon={PieChart}
@@ -138,33 +142,9 @@ export function DashboardClient({
               description="Allocation will appear after your first committed import."
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Asset class</TableHead>
-                  <TableHead>Value</TableHead>
-                  <TableHead className="text-right">Weight</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summary.data?.allocationByAssetClass.map((item) => (
-                  <TableRow key={item.assetClass}>
-                    <TableCell>
-                      <Link
-                        className="font-semibold text-primary hover:underline"
-                        href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
-                      >
-                        {labelize(item.assetClass)}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{formatInr(item.currentValue)}</TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {item.weight}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <AllocationDonutChart
+              data={summary.data?.allocationByAssetClass ?? []}
+            />
           )}
         </SectionCard>
 
@@ -274,7 +254,10 @@ export function DashboardClient({
           )}
         </SectionCard>
 
-        <SectionCard title="Portfolio trend">
+        <SectionCard
+          title="Portfolio trend"
+          description="Current value against invested amount over time."
+        >
           {(timeline.data?.length ?? 0) < 2 ? (
             <EmptyState
               icon={TrendingUp}
@@ -282,25 +265,7 @@ export function DashboardClient({
               description="Upload dated snapshots to build portfolio history."
             />
           ) : (
-            <div className="divide-y">
-              {timeline.data?.slice(-8).map((point) => {
-                const currentValue = Number(point.currentValue);
-                const investedAmount = Number(point.investedAmount);
-                const width = trendWidth(
-                  currentValue,
-                  timeline.data.map((item) => Number(item.currentValue)),
-                );
-                return (
-                  <TrendRow
-                    key={point.snapshotDate}
-                    label={formatDate(point.snapshotDate)}
-                    sublabel={formatInr(investedAmount)}
-                    value={formatInr(currentValue)}
-                    width={width}
-                  />
-                );
-              })}
-            </div>
+            <PortfolioTimelineChart data={timeline.data ?? []} />
           )}
         </SectionCard>
       </section>

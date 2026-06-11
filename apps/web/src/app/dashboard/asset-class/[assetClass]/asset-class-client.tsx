@@ -15,6 +15,7 @@ import {
   PageShell,
   SectionCard,
 } from "@/components/portfolio-ui";
+import { PortfolioTimelineChart } from "@/components/portfolio-charts";
 import { SetupRequired } from "@/components/dashboard-states";
 import { Button } from "@/components/ui/button";
 import {
@@ -112,6 +113,62 @@ export function AssetClassClient({
           value={formatPercent(summary?.xirr)}
           detail={qualityLabel(summary?.xirrDataQuality)}
         />
+      </section>
+
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <SectionCard
+          title="Value history"
+          description="Asset-class value and invested amount over time."
+        >
+          {(detail.data?.timeline.length ?? 0) < 2 ? (
+            <EmptyState
+              icon={BarChart3}
+              title="No history yet"
+              description="More dated uploads will build this asset-class trend."
+            />
+          ) : (
+            <PortfolioTimelineChart data={detail.data?.timeline ?? []} />
+          )}
+        </SectionCard>
+        <SectionCard
+          title="Concentration"
+          description="Largest positions inside this asset class."
+        >
+          {(detail.data?.holdings.length ?? 0) === 0 ? (
+            <EmptyState
+              icon={PieChart}
+              title="No holdings found"
+              description="No holdings found for this asset class."
+            />
+          ) : (
+            <div className="space-y-3">
+              {detail.data?.holdings.slice(0, 5).map((holding) => (
+                <div
+                  key={holding.id}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-muted/25 p-3"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      className="truncate font-semibold text-primary hover:underline"
+                      href={`/dashboard/holdings/${holding.id}`}
+                    >
+                      {holding.symbol ?? holding.instrumentName}
+                    </Link>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {formatCurrency(
+                        Number(holding.currentValue),
+                        holding.currency,
+                      )}
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold">
+                    {formatPercent(holding.weightInAssetClass)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
       </section>
 
       <HoldingsTable title="Holdings" holdings={detail.data?.holdings ?? []} />
