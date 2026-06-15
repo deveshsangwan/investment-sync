@@ -1,0 +1,111 @@
+packages/importers/src/utils.test.ts
+  s_0ebedee88d03cd::t_584dbcff74ea2d 1-63
+apps/web/src/app/api/imports/upload/route.ts
+  s_0ebedee88d03cd::t_b1f10eadbacfcb 5,23-27
+apps/web/src/app/dashboard/page.tsx
+  s_0ebedee88d03cd::t_4c5dd19853c9de 1,5
+apps/web/src/app/dashboard/holdings/[id]/page.tsx
+  s_0ebedee88d03cd::t_4c5dd19853c9de 1,11
+packages/api/src/services/portfolio-cache.ts
+  s_0ebedee88d03cd::t_6e82873b154bd7 1-2,22,26
+apps/web/package.json
+  s_0ebedee88d03cd::t_bcaa3e3343fff9 8
+apps/mobile/src/trpc.tsx
+  s_0ebedee88d03cd::t_5678dda02a9e24 13-23
+apps/web/src/app/api/cron/cleanup-imports/route.ts
+  s_0ebedee88d03cd::t_b313582e090dcc 4,9
+packages/api/src/services/import-service.integration.test.ts
+  s_0ebedee88d03cd::t_0066b11a04827d 1-10,12-19,21-23,25-30,32-63,65-127
+  s_0ebedee88d03cd::t_936229b87dd832 20,24,31,64
+  s_0ebedee88d03cd::t_d7d263572e12d0 11
+packages/api/src/services/membership.ts
+  s_0ebedee88d03cd::t_6e82873b154bd7 9,88,92
+packages/importers/src/xlsx.ts
+  s_0ebedee88d03cd::t_90a3e47c04f5e3 20-31,36-39,41,46-47,77-78,165-166,203-208,228,231,282,285,336,339,389,393,407,411,426,430
+  s_0ebedee88d03cd::t_01eff000f3033a 32-35
+packages/api/src/routers/portfolio.ts
+  s_0ebedee88d03cd::t_169f271d8c2cc3 37-48,51
+  s_0ebedee88d03cd::t_8f480c1be4ce58 421-454,456-553,559-583
+  s_0ebedee88d03cd::t_01eff000f3033a 120-126,260-267,455,554-558
+  s_0ebedee88d03cd::t_49f009a6bb8ff0 687-688,692-772,774-792,794-797
+  s_0ebedee88d03cd::t_c6e8fa05c09f47 773,793
+eslint.config.mjs
+  s_0ebedee88d03cd::t_1e6f6da20d5908 21,23,25,28
+  s_0ebedee88d03cd::t_bcaa3e3343fff9 5,91-95
+  s_0ebedee88d03cd::t_4d667ff8ec232c 96
+  s_0ebedee88d03cd::t_e893cb5ea39b72 31-40
+apps/web/src/app/uploads/page.tsx
+  s_0ebedee88d03cd::t_4c5dd19853c9de 1,5
+packages/analytics/src/xirr.test.ts
+  s_0ebedee88d03cd::t_645532956c6903 1-34
+packages/api/src/index.ts
+  s_0ebedee88d03cd::t_2c9c7bfaaf6fdd 2-3
+packages/api/src/config.ts
+  s_0ebedee88d03cd::t_63090e8dfe6356 12-20,22-24,26-28
+  s_0ebedee88d03cd::t_01eff000f3033a 42-43
+  s_0ebedee88d03cd::t_2c9c7bfaaf6fdd 1-11,21,25,29-41,44-76
+packages/api/src/logger.ts
+  s_0ebedee88d03cd::t_2c9c7bfaaf6fdd 1-33
+packages/db/drizzle/0004_identity_performance_currency_rates.sql
+  s_0ebedee88d03cd::t_ac02987e289bd6 1-289
+packages/api/src/services/import-service.ts
+  s_0ebedee88d03cd::t_3f32b224d64b15 163-191,199,211,213,225-226
+  s_0ebedee88d03cd::t_79084b125775db 11,14,18,28,31-32,35,53,55,78,96-100,133,135
+  s_0ebedee88d03cd::t_b40dc0ea5e9cb2 238-248,251-270,277,280-290,292,303-308,311,313-318,325-336,338,351-353,356-375,377,384-388,393-399,401-412,424-431,433-439,442-448,455
+  s_0ebedee88d03cd::t_385ad1a2288af5 2,271-276,319-324
+  s_0ebedee88d03cd::t_5291523c203ae8 618-621,623-628,630-637,639-647,649-662,664-668,670-675,677-680,683-694,696-706,708-721,723-729,731-794,796-803
+  s_0ebedee88d03cd::t_01eff000f3033a 22,278-279,449-454
+packages/api/src/services/currency-rates.ts
+  s_0ebedee88d03cd::t_1f0341cef7e0da 1-4,7,35,42-85,89,95-99,103-107,109-120,122-128,130-155
+  s_0ebedee88d03cd::t_01eff000f3033a 27,121
+packages/importers/src/utils.ts
+  s_0ebedee88d03cd::t_d22b680d2a3ac9 37
+  s_0ebedee88d03cd::t_fcfa71c8fe2658 45-46,55,58-67,71-73,75,79-92,98-113
+  s_0ebedee88d03cd::t_01eff000f3033a 68-70,93-97
+packages/api/src/services/portfolio/utils.ts
+  s_0ebedee88d03cd::t_62e61e1f5b3544 1,15-19
+packages/api/src/routers/imports.ts
+  s_0ebedee88d03cd::t_b1f10eadbacfcb 18
+packages/analytics/src/xirr.ts
+  s_0ebedee88d03cd::t_7f0ad60c66b107 12-25,39-40,43-91
+  s_0ebedee88d03cd::t_01eff000f3033a 41-42
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_0ebedee88d03cd::t_9d6a5d1a4f5677 49,52-58,83,88,93,99,107,109,113,118,123-124,133,141,147,164,207,224,256,263
+apps/web/src/app/providers.tsx
+  s_0ebedee88d03cd::t_5678dda02a9e24 14-24
+apps/web/src/app/dashboard/asset-class/[assetClass]/page.tsx
+  s_0ebedee88d03cd::t_4c5dd19853c9de 1,21
+apps/web/src/app/uploads/uploads-client.tsx
+  s_0ebedee88d03cd::t_521187ec25f451 182-184,191-195,204,243
+  s_0ebedee88d03cd::t_b1feb5a8fee9e0 255-271
+  s_0ebedee88d03cd::t_9ad9dccfd5a848 20-21,31,40,45
+  s_0ebedee88d03cd::t_42f94c7fadbabf 57-63,66,121-137
+  s_0ebedee88d03cd::t_68e760f5887f08 113
+package.json
+  s_0ebedee88d03cd::t_c80c9c5b2bdd62 27
+packages/db/src/schema.ts
+  s_0ebedee88d03cd::t_295dbae76f42c4 407-431
+  s_0ebedee88d03cd::t_7b7e178fb5692e 146-150,178-183,277-279,334-340
+packages/importers/src/types.ts
+  s_0ebedee88d03cd::t_dbe41123c488b0 1-2,108-193
+.env.example
+  s_0ebedee88d03cd::t_f90da6571d02d1 19
+turbo.json
+  s_0ebedee88d03cd::t_bcaa3e3343fff9 6,12,14-15,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "0f947bf73d96cdcf74e06f852370c2a21c43cd95",
+  "prompts": {},
+  "sessions": {
+    "s_0ebedee88d03cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe7-1cd6-76a0-989e-6a0a345aedaf",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
