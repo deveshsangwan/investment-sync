@@ -3,21 +3,19 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "dist/**", "build/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
-    "lint": {
-      "dependsOn": ["^build"]
-    },
+    "lint": {},
     "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "env": ["TEST_DATABASE_URL"],
+      "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "outputs": []
     }
   }
 }

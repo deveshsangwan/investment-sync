@@ -15,6 +15,7 @@ export const importsRouter = router({
     .mutation(async ({ ctx, input }) =>
       createImportUpload(ctx, ctx.membership, input.fileName),
     ),
+  // Legacy/internal path for clients that cannot use multipart uploads.
   process: protectedProcedure
     .input(
       z.object({

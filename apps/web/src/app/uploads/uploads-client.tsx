@@ -17,6 +17,8 @@ import { formatDate } from "@/lib/format";
 import { trpc } from "../providers";
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
+const MAX_IMPORT_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_IMPORT_EXTENSIONS = [".csv", ".xlsx"];
 
 export function UploadsClient({
   isDataConfigured,
@@ -26,6 +28,7 @@ export function UploadsClient({
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [warningDetails, setWarningDetails] = useState<string[]>([]);
   const utils = trpc.useUtils();
   const list = trpc.imports.list.useQuery(undefined, {
@@ -34,15 +37,12 @@ export function UploadsClient({
   const commit = trpc.imports.commit.useMutation({
     onSuccess: () => {
       void utils.imports.list.invalidate();
-      void utils.portfolio.summary.invalidate();
-      void utils.portfolio.holdings.invalidate();
-      void utils.portfolio.performance.invalidate();
-      void utils.portfolio.timeline.invalidate();
+      void utils.portfolio.overview.invalidate();
     },
   });
 
   const isBusy = status === "uploading" || commit.isLoading;
-  const canUpload = Boolean(isDataConfigured && file);
+  const canUpload = Boolean(isDataConfigured && file && !fileError);
   const statusTone: Record<string, "positive" | "negative" | "secondary"> = {
     committed: "positive",
     parsed: "secondary",
@@ -54,8 +54,16 @@ export function UploadsClient({
 
   const handleUpload = async () => {
     if (!file) return;
+    const validationError = validateSelectedFile(file);
+    if (validationError) {
+      setStatus("error");
+      setFileError(validationError);
+      setMessage(validationError);
+      return;
+    }
     setStatus("uploading");
     setMessage(null);
+    setFileError(null);
     setWarningDetails([]);
 
     const body = new FormData();
@@ -102,10 +110,31 @@ export function UploadsClient({
         `Parsed ${rowCount} rows${sourceType ? ` from ${sourceType}` : ""}${warningSuffix}.`,
       );
       setFile(null);
+      setFileError(null);
       void list.refetch();
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Upload failed.");
+    }
+  };
+
+  const handleFileChange = (selectedFile: File | null) => {
+    setFile(selectedFile);
+    setWarningDetails([]);
+    if (!selectedFile) {
+      setFileError(null);
+      if (status === "error") setMessage(null);
+      return;
+    }
+
+    const validationError = validateSelectedFile(selectedFile);
+    setFileError(validationError);
+    if (validationError) {
+      setStatus("error");
+      setMessage(validationError);
+    } else {
+      setStatus("idle");
+      setMessage(null);
     }
   };
 
@@ -150,11 +179,18 @@ export function UploadsClient({
               accept=".csv,.xlsx"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               disabled={!isDataConfigured}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) =>
+                handleFileChange(event.target.files?.[0] ?? null)
+              }
             />
             {file ? (
               <p className="mt-2 text-xs text-muted-foreground">
                 Selected: {file.name}
+              </p>
+            ) : null}
+            {fileError ? (
+              <p className="mt-2 text-xs font-medium text-rose-600">
+                {fileError}
               </p>
             ) : null}
           </div>
@@ -165,7 +201,7 @@ export function UploadsClient({
             disabled={!canUpload || isBusy}
           >
             <UploadCloud className="size-4" />
-            {status === "uploading" ? "Uploading..." : "Upload"}
+            {status === "uploading" ? "Uploading and parsing..." : "Upload"}
           </Button>
         </div>
       </SectionCard>
@@ -204,7 +240,7 @@ export function UploadsClient({
                       disabled={commit.isLoading}
                       onClick={() => commit.mutate({ importBatchId: batch.id })}
                     >
-                      Commit
+                      {commit.isLoading ? "Committing..." : "Commit"}
                     </Button>
                   ) : null}
                 </div>
@@ -215,4 +251,21 @@ export function UploadsClient({
       </SectionCard>
     </PageShell>
   );
+}
+
+function validateSelectedFile(file: File): string | null {
+  if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
+    return "Import files must be 50 MB or smaller.";
+  }
+
+  const lowerName = file.name.toLowerCase();
+  if (
+    !ALLOWED_IMPORT_EXTENSIONS.some((extension) =>
+      lowerName.endsWith(extension),
+    )
+  ) {
+    return "Import files must be CSV or XLSX files.";
+  }
+
+  return null;
 }

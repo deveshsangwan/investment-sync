@@ -34,162 +34,21 @@ import {
 type PortfolioContext = ApiContext & { membership: { householdId: string } };
 
 export const portfolioRouter = router({
-  holdings: protectedProcedure.query(async ({ ctx }) => {
-    const latestHoldings = await latestCurrentHoldings(ctx);
-    const usdInrRate = await getUsdInrRateIfNeeded(
-      latestHoldings.map((holding) => holding.currency),
-    );
-
-    return latestHoldings
-      .map((holding) => {
-        const investedAmount = Number(holding.investedAmount);
-        const currentValue = Number(holding.currentValue);
-        const pnlAmount =
-          holding.pnlAmount === null ? null : Number(holding.pnlAmount);
-
-        return {
-          ...holding,
-          currentValueInInr: convertToInr(
-            currentValue,
-            holding.currency,
-            usdInrRate?.rate,
-          ),
-          investedAmountInInr: convertToInr(
-            investedAmount,
-            holding.currency,
-            usdInrRate?.rate,
-          ),
-          pnlAmountInInr:
-            pnlAmount === null
-              ? null
-              : convertToInr(pnlAmount, holding.currency, usdInrRate?.rate),
-        };
-      })
-      .sort((a, b) => {
-        const dateOrder =
-          new Date(b.snapshotDate).getTime() -
-          new Date(a.snapshotDate).getTime();
-        if (dateOrder !== 0) return dateOrder;
-        return b.currentValueInInr - a.currentValueInInr;
-      });
-  }),
-  summary: protectedProcedure.query(async ({ ctx }) => {
-    const latestHoldings = await latestCurrentHoldings(ctx);
-    const usdInrRate = await getUsdInrRateIfNeeded(
-      latestHoldings.map((holding) => holding.currency),
-    );
-    const summary = summarizePortfolio(
-      latestHoldings.map((holding) => ({
-        assetClass: holding.assetClass,
-        investedAmount: convertToInr(
-          Number(holding.investedAmount),
-          holding.currency,
-          usdInrRate?.rate,
-        ),
-        currentValue: convertToInr(
-          Number(holding.currentValue),
-          holding.currency,
-          usdInrRate?.rate,
-        ),
-      })),
-    );
-
-    return {
-      ...summary,
-      currency: "INR" as const,
-      exchangeRates: usdInrRate ? [usdInrRate] : [],
-      asOfDate: latestHoldings[0]?.snapshotDate ?? null,
-    };
-  }),
-  timeline: protectedProcedure.query(async ({ ctx }) => {
-    const valuations = await portfolioValuationRows(ctx);
-
-    if (valuations.length > 0) {
-      return valuations.map((valuation) => ({
-        snapshotDate: valuation.valuationDate,
-        currentValue: valuation.currentValue,
-        investedAmount: valuation.investedAmount,
-        pnlAmount: valuation.pnlAmount,
-        currency: valuation.currency,
-      }));
-    }
-
-    return ctx.db
-      .select({
-        snapshotDate: holdingSnapshots.snapshotDate,
-        currentValue: sql<string>`sum(${holdingSnapshots.currentValue})`.as(
-          "current_value",
-        ),
-        investedAmount: sql<string>`sum(${holdingSnapshots.investedAmount})`.as(
-          "invested_amount",
-        ),
-      })
-      .from(holdingSnapshots)
-      .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
-      .groupBy(holdingSnapshots.snapshotDate)
-      .orderBy(holdingSnapshots.snapshotDate);
-  }),
-  performance: protectedProcedure.query(async ({ ctx }) => {
-    const [latestHoldings, valuations, cashFlows] = await Promise.all([
-      latestCurrentHoldings(ctx),
-      portfolioValuationRows(ctx),
-      cashFlowRows(ctx),
+  holdings: protectedProcedure.query(async ({ ctx }) => portfolioHoldings(ctx)),
+  summary: protectedProcedure.query(async ({ ctx }) => portfolioSummary(ctx)),
+  timeline: protectedProcedure.query(async ({ ctx }) => portfolioTimeline(ctx)),
+  performance: protectedProcedure.query(async ({ ctx }) =>
+    portfolioPerformance(ctx),
+  ),
+  overview: protectedProcedure.query(async ({ ctx }) => {
+    const [holdings, summary, performance, timeline] = await Promise.all([
+      portfolioHoldings(ctx),
+      portfolioSummary(ctx),
+      portfolioPerformance(ctx),
+      portfolioTimeline(ctx),
     ]);
 
-    const usdInrRate = await getUsdInrRateIfNeeded([
-      ...latestHoldings.map((holding) => holding.currency),
-      ...cashFlows.map((flow) => flow.currency),
-      ...valuations.map((valuation) => valuation.currency),
-    ]);
-    const asOfDate = parseDate(latestHoldings[0]?.snapshotDate) ?? new Date();
-    const performanceHoldings = latestHoldings.map((holding) => ({
-      assetClass: holding.assetClass,
-      investedAmount: convertToInr(
-        Number(holding.investedAmount),
-        holding.currency,
-        usdInrRate?.rate,
-      ),
-      currentValue: convertToInr(
-        Number(holding.currentValue),
-        holding.currency,
-        usdInrRate?.rate,
-      ),
-      sourceXirr: sourceXirrFromPayload(holding.sourcePayload),
-    }));
-    const performance = summarizePerformance({
-      holdings: performanceHoldings,
-      cashFlows: cashFlows.map((flow) => ({
-        date: parseDate(flow.tradeDate) ?? new Date(flow.tradeDate),
-        amount: convertToInr(
-          Number(flow.amount),
-          flow.currency,
-          usdInrRate?.rate,
-        ),
-        type: flow.type,
-      })),
-      valuations: valuations.map((valuation) => ({
-        date:
-          parseDate(valuation.valuationDate) ??
-          new Date(valuation.valuationDate),
-        investedAmount: convertToInr(
-          Number(valuation.investedAmount),
-          valuation.currency,
-          usdInrRate?.rate,
-        ),
-        currentValue: convertToInr(
-          Number(valuation.currentValue),
-          valuation.currency,
-          usdInrRate?.rate,
-        ),
-      })),
-      asOfDate,
-    });
-
-    return {
-      ...performance,
-      byAssetClass: xirrByAssetClass({ holdings: performanceHoldings }),
-      asOfDate: latestHoldings[0]?.snapshotDate ?? null,
-    };
+    return { holdings, summary, performance, timeline };
   }),
   holdingDetail: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
@@ -258,10 +117,13 @@ export const portfolioRouter = router({
       const allHoldings = await currentHoldings(ctx);
       const latestHoldings = await latestCurrentHoldings(ctx);
       const latest = latestHoldingForSelection(selected, history) ?? selected;
-      const usdInrRate = await getUsdInrRateIfNeeded([
-        selected.currency,
-        ...latestHoldings.map((holding) => holding.currency),
-      ]);
+      const usdInrRate = await getUsdInrRateIfNeeded(
+        [
+          selected.currency,
+          ...latestHoldings.map((holding) => holding.currency),
+        ],
+        ctx.db,
+      );
       const portfolioCurrentValue = sum(
         latestHoldings.map((holding) =>
           convertToInr(
@@ -395,11 +257,14 @@ export const portfolioRouter = router({
       ]);
       const latestHoldings = latestNonAggregateHoldings(holdings);
       const exitedHoldings = exitedNonAggregateHoldings(holdings);
-      const usdInrRate = await getUsdInrRateIfNeeded([
-        ...latestHoldings.map((holding) => holding.currency),
-        ...exitedHoldings.map((holding) => holding.currency),
-        ...assetClassSnapshots.map((row) => row.currency),
-      ]);
+      const usdInrRate = await getUsdInrRateIfNeeded(
+        [
+          ...latestHoldings.map((holding) => holding.currency),
+          ...exitedHoldings.map((holding) => holding.currency),
+          ...assetClassSnapshots.map((row) => row.currency),
+        ],
+        ctx.db,
+      );
       const converted = latestHoldings.map((holding) => {
         const currentValueInInr = convertToInr(
           Number(holding.currentValue),
@@ -553,6 +418,170 @@ export const portfolioRouter = router({
     }),
 });
 
+async function portfolioHoldings(ctx: PortfolioContext) {
+  const latestHoldings = await latestCurrentHoldings(ctx);
+  const usdInrRate = await getUsdInrRateIfNeeded(
+    latestHoldings.map((holding) => holding.currency),
+    ctx.db,
+  );
+
+  return latestHoldings
+    .map((holding) => {
+      const investedAmount = Number(holding.investedAmount);
+      const currentValue = Number(holding.currentValue);
+      const pnlAmount =
+        holding.pnlAmount === null ? null : Number(holding.pnlAmount);
+
+      return {
+        ...holding,
+        currentValueInInr: convertToInr(
+          currentValue,
+          holding.currency,
+          usdInrRate?.rate,
+        ),
+        investedAmountInInr: convertToInr(
+          investedAmount,
+          holding.currency,
+          usdInrRate?.rate,
+        ),
+        pnlAmountInInr:
+          pnlAmount === null
+            ? null
+            : convertToInr(pnlAmount, holding.currency, usdInrRate?.rate),
+      };
+    })
+    .sort((a, b) => {
+      const dateOrder =
+        new Date(b.snapshotDate).getTime() - new Date(a.snapshotDate).getTime();
+      if (dateOrder !== 0) return dateOrder;
+      return b.currentValueInInr - a.currentValueInInr;
+    });
+}
+
+async function portfolioSummary(ctx: PortfolioContext) {
+  const latestHoldings = await latestCurrentHoldings(ctx);
+  const usdInrRate = await getUsdInrRateIfNeeded(
+    latestHoldings.map((holding) => holding.currency),
+    ctx.db,
+  );
+  const summary = summarizePortfolio(
+    latestHoldings.map((holding) => ({
+      assetClass: holding.assetClass,
+      investedAmount: convertToInr(
+        Number(holding.investedAmount),
+        holding.currency,
+        usdInrRate?.rate,
+      ),
+      currentValue: convertToInr(
+        Number(holding.currentValue),
+        holding.currency,
+        usdInrRate?.rate,
+      ),
+    })),
+  );
+
+  return {
+    ...summary,
+    currency: "INR" as const,
+    exchangeRates: usdInrRate ? [usdInrRate] : [],
+    asOfDate: latestHoldings[0]?.snapshotDate ?? null,
+  };
+}
+
+async function portfolioTimeline(ctx: PortfolioContext) {
+  const valuations = await portfolioValuationRows(ctx);
+
+  if (valuations.length > 0) {
+    return valuations.map((valuation) => ({
+      snapshotDate: valuation.valuationDate,
+      currentValue: valuation.currentValue,
+      investedAmount: valuation.investedAmount,
+      pnlAmount: valuation.pnlAmount,
+      currency: valuation.currency,
+    }));
+  }
+
+  return ctx.db
+    .select({
+      snapshotDate: holdingSnapshots.snapshotDate,
+      currentValue: sql<string>`sum(${holdingSnapshots.currentValue})`.as(
+        "current_value",
+      ),
+      investedAmount: sql<string>`sum(${holdingSnapshots.investedAmount})`.as(
+        "invested_amount",
+      ),
+    })
+    .from(holdingSnapshots)
+    .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
+    .groupBy(holdingSnapshots.snapshotDate)
+    .orderBy(holdingSnapshots.snapshotDate);
+}
+
+async function portfolioPerformance(ctx: PortfolioContext) {
+  const [latestHoldings, valuations, cashFlows] = await Promise.all([
+    latestCurrentHoldings(ctx),
+    portfolioValuationRows(ctx),
+    cashFlowRows(ctx),
+  ]);
+
+  const usdInrRate = await getUsdInrRateIfNeeded(
+    [
+      ...latestHoldings.map((holding) => holding.currency),
+      ...cashFlows.map((flow) => flow.currency),
+      ...valuations.map((valuation) => valuation.currency),
+    ],
+    ctx.db,
+  );
+  const asOfDate = parseDate(latestHoldings[0]?.snapshotDate) ?? new Date();
+  const performanceHoldings = latestHoldings.map((holding) => ({
+    assetClass: holding.assetClass,
+    investedAmount: convertToInr(
+      Number(holding.investedAmount),
+      holding.currency,
+      usdInrRate?.rate,
+    ),
+    currentValue: convertToInr(
+      Number(holding.currentValue),
+      holding.currency,
+      usdInrRate?.rate,
+    ),
+    sourceXirr: sourceXirrFromPayload(holding.sourcePayload),
+  }));
+  const performance = summarizePerformance({
+    holdings: performanceHoldings,
+    cashFlows: cashFlows.map((flow) => ({
+      date: parseDate(flow.tradeDate) ?? new Date(flow.tradeDate),
+      amount: convertToInr(
+        Number(flow.amount),
+        flow.currency,
+        usdInrRate?.rate,
+      ),
+      type: flow.type,
+    })),
+    valuations: valuations.map((valuation) => ({
+      date:
+        parseDate(valuation.valuationDate) ?? new Date(valuation.valuationDate),
+      investedAmount: convertToInr(
+        Number(valuation.investedAmount),
+        valuation.currency,
+        usdInrRate?.rate,
+      ),
+      currentValue: convertToInr(
+        Number(valuation.currentValue),
+        valuation.currency,
+        usdInrRate?.rate,
+      ),
+    })),
+    asOfDate,
+  });
+
+  return {
+    ...performance,
+    byAssetClass: xirrByAssetClass({ holdings: performanceHoldings }),
+    asOfDate: latestHoldings[0]?.snapshotDate ?? null,
+  };
+}
+
 type CurrentHoldingRow = {
   id: string;
   instrumentId: string;
@@ -655,9 +684,117 @@ async function currentHoldings(
 async function latestCurrentHoldings(
   ctx: PortfolioContext,
 ): Promise<CurrentHoldingRow[]> {
-  return cachedPortfolioData(ctx, "portfolio.latestCurrentHoldings", async () =>
-    latestNonAggregateHoldings(await currentHoldings(ctx)),
+  return cachedPortfolioData(ctx, "portfolio.latestCurrentHoldings", () =>
+    latestCurrentHoldingRows(ctx),
   );
+}
+
+async function latestCurrentHoldingRows(
+  ctx: PortfolioContext,
+): Promise<CurrentHoldingRow[]> {
+  const rows = await ctx.db.execute(sql<CurrentHoldingRow>`
+    with base as (
+      select
+        hs.id::text as "id",
+        hs.instrument_id::text as "instrumentId",
+        hs.snapshot_date::text as "snapshotDate",
+        hs.quantity::text as "quantity",
+        hs.invested_amount::text as "investedAmount",
+        hs.current_value::text as "currentValue",
+        hs.pnl_amount::text as "pnlAmount",
+        hs.pnl_percent::text as "pnlPercent",
+        hs.currency as "currency",
+        hs.source_payload as "sourcePayload",
+        a.name as "accountName",
+        a.provider as "provider",
+        i.name as "instrumentName",
+        i.symbol as "symbol",
+        i.asset_class as "assetClass",
+        coalesce(hs.source_payload->>'sourceSheet', '') as "sourceSheet",
+        (
+          hs.source_payload->>'isAggregate' = 'true'
+          or i.name ilike '% Summary'
+        ) as "isAggregate",
+        coalesce(upper(i.symbol), upper(i.name)) as "instrumentKey"
+      from holding_snapshots hs
+      inner join accounts a on a.id = hs.account_id
+      inner join instruments i on i.id = hs.instrument_id
+      where hs.household_id = ${ctx.membership.householdId}
+    ),
+    asset_classes_with_details as (
+      select distinct "assetClass"
+      from base
+      where "isAggregate" = false
+    ),
+    eligible as (
+      select *
+      from base
+      where
+        "isAggregate" = false
+        or not exists (
+          select 1
+          from asset_classes_with_details details
+          where details."assetClass" = base."assetClass"
+        )
+    ),
+    latest_group_dates as (
+      select
+        "accountName",
+        "provider",
+        "assetClass",
+        "currency",
+        "sourceSheet",
+        max("snapshotDate") as "snapshotDate"
+      from eligible
+      group by
+        "accountName",
+        "provider",
+        "assetClass",
+        "currency",
+        "sourceSheet"
+    ),
+    latest_group_rows as (
+      select eligible.*
+      from eligible
+      inner join latest_group_dates latest
+        on latest."accountName" = eligible."accountName"
+        and latest."provider" = eligible."provider"
+        and latest."assetClass" = eligible."assetClass"
+        and latest."currency" = eligible."currency"
+        and latest."sourceSheet" = eligible."sourceSheet"
+        and latest."snapshotDate" = eligible."snapshotDate"
+    ),
+    ranked as (
+      select
+        *,
+        row_number() over (
+          partition by "assetClass", "instrumentKey", "currency"
+          order by "snapshotDate" desc, "instrumentName" asc
+        ) as "holdingRank"
+      from latest_group_rows
+    )
+    select
+      "id",
+      "instrumentId",
+      "snapshotDate",
+      "quantity",
+      "investedAmount",
+      "currentValue",
+      "pnlAmount",
+      "pnlPercent",
+      "currency",
+      "sourcePayload",
+      "accountName",
+      "provider",
+      "instrumentName",
+      "symbol",
+      "assetClass"
+    from ranked
+    where "holdingRank" = 1
+    order by "snapshotDate" desc, "instrumentName" asc
+  `);
+
+  return Array.from(rows) as CurrentHoldingRow[];
 }
 
 async function portfolioValuationRows(ctx: PortfolioContext) {

@@ -1,3 +1,4 @@
+import { isDataConfigured } from "@investment-sync/api";
 import { notFound } from "next/navigation";
 import { parseAssetClass } from "@/lib/asset-classes";
 import { AssetClassClient } from "./asset-class-client";
@@ -8,12 +9,6 @@ export default async function AssetClassPage({
   params: Promise<{ assetClass: string }>;
 }) {
   const { assetClass } = await params;
-  const isDataConfigured = Boolean(
-    process.env.DATABASE_URL &&
-    process.env.SUPABASE_URL &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-  );
-
   const decodedAssetClass = decodeURIComponent(assetClass);
   const parsedAssetClass = parseAssetClass(decodedAssetClass);
   if (!parsedAssetClass) {
@@ -23,7 +18,7 @@ export default async function AssetClassPage({
   return (
     <AssetClassClient
       assetClass={parsedAssetClass}
-      isDataConfigured={isDataConfigured}
+      isDataConfigured={isDataConfigured()}
     />
   );
 }

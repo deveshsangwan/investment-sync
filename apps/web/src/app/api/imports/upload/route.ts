@@ -2,6 +2,7 @@ import {
   createApiContext,
   ensureMembership,
   uploadAndProcessImport,
+  validateImportFile,
 } from "@investment-sync/api";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
@@ -19,6 +20,11 @@ export async function POST(request: Request) {
   }
 
   try {
+    validateImportFile({
+      fileName: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+    });
     const user = await currentUser();
     const ctx = createApiContext({
       auth: {

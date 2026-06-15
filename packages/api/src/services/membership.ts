@@ -6,6 +6,7 @@ import {
   users,
 } from "@investment-sync/db";
 import type { ApiContext } from "../context";
+import { logger } from "../logger";
 
 export interface MembershipContext {
   userId: string;
@@ -84,11 +85,11 @@ function cachedMembership(
   const existing = membershipCache.get(clerkUserId);
 
   if (existing && existing.expiresAt > now) {
-    console.log("membership cache hit");
+    logger.debug("membership cache hit");
     return existing.promise;
   }
 
-  console.log("membership cache miss");
+  logger.debug("membership cache miss");
 
   const promise = load().catch((error) => {
     const latest = membershipCache.get(clerkUserId);

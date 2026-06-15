@@ -46,21 +46,16 @@ export function DashboardClient({
 }: {
   isDataConfigured: boolean;
 }) {
-  const summary = trpc.portfolio.summary.useQuery(undefined, {
+  const overview = trpc.portfolio.overview.useQuery(undefined, {
     enabled: isDataConfigured,
   });
-  const holdings = trpc.portfolio.holdings.useQuery(undefined, {
-    enabled: isDataConfigured,
-  });
-  const performance = trpc.portfolio.performance.useQuery(undefined, {
-    enabled: isDataConfigured,
-  });
-  const timeline = trpc.portfolio.timeline.useQuery(undefined, {
-    enabled: isDataConfigured,
-  });
-  const hasHoldings = (holdings.data?.length ?? 0) > 0;
-  const pnlTone = (summary.data?.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
-  const xirrTone = (performance.data?.xirr ?? 0) >= 0 ? "positive" : "negative";
+  const summary = overview.data?.summary;
+  const holdings = overview.data?.holdings ?? [];
+  const performance = overview.data?.performance;
+  const timeline = overview.data?.timeline ?? [];
+  const hasHoldings = holdings.length > 0;
+  const pnlTone = (summary?.pnlAmount ?? 0) >= 0 ? "positive" : "negative";
+  const xirrTone = (performance?.xirr ?? 0) >= 0 ? "positive" : "negative";
 
   return (
     <PageShell>
@@ -85,23 +80,23 @@ export function DashboardClient({
         <MetricCard
           icon={Wallet}
           label="Current value"
-          value={formatInr(summary.data?.currentValue ?? 0)}
+          value={formatInr(summary?.currentValue ?? 0)}
         />
         <MetricCard
           icon={Activity}
           label="Invested"
-          value={formatInr(summary.data?.investedAmount ?? 0)}
+          value={formatInr(summary?.investedAmount ?? 0)}
         />
         <MetricCard
           icon={TrendingUp}
           label="Gain/Loss"
-          value={formatInr(summary.data?.pnlAmount ?? 0)}
+          value={formatInr(summary?.pnlAmount ?? 0)}
           tone={pnlTone}
         />
         <MetricCard
           icon={LineChart}
           label="Return"
-          value={`${summary.data?.pnlPercent ?? 0}%`}
+          value={`${summary?.pnlPercent ?? 0}%`}
           tone={pnlTone}
         />
       </section>
@@ -109,24 +104,24 @@ export function DashboardClient({
       <section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="XIRR"
-          value={formatPercent(performance.data?.xirr)}
+          value={formatPercent(performance?.xirr)}
           tone={xirrTone}
-          detail={qualityLabel(performance.data?.dataQuality)}
+          detail={qualityLabel(performance?.dataQuality)}
         />
         <MetricCard
           label="Absolute return"
-          value={formatPercent(performance.data?.absoluteReturnPercent)}
+          value={formatPercent(performance?.absoluteReturnPercent)}
           tone={pnlTone}
         />
         <MetricCard
           label="CAGR"
-          value={formatPercent(performance.data?.cagr)}
+          value={formatPercent(performance?.cagr)}
           detail="Valuation trend"
         />
         <MetricCard
           label="XIRR coverage"
-          value={formatPercent(performance.data?.sourceXirrCoveragePercent)}
-          detail={`${performance.data?.cashFlowCount ?? 0} cash flows`}
+          value={formatPercent(performance?.sourceXirrCoveragePercent)}
+          detail={`${performance?.cashFlowCount ?? 0} cash flows`}
         />
       </section>
 
@@ -135,7 +130,7 @@ export function DashboardClient({
           title="Allocation"
           description="Current portfolio mix by asset class."
         >
-          {(summary.data?.allocationByAssetClass.length ?? 0) === 0 ? (
+          {(summary?.allocationByAssetClass.length ?? 0) === 0 ? (
             <EmptyState
               icon={PieChart}
               title="No allocation yet"
@@ -143,13 +138,13 @@ export function DashboardClient({
             />
           ) : (
             <AllocationDonutChart
-              data={summary.data?.allocationByAssetClass ?? []}
+              data={summary?.allocationByAssetClass ?? []}
             />
           )}
         </SectionCard>
 
         <SectionCard title="Top holdings">
-          {(holdings.data?.length ?? 0) === 0 ? (
+          {holdings.length === 0 ? (
             <EmptyState
               icon={FileSpreadsheet}
               title="No holdings yet"
@@ -166,7 +161,7 @@ export function DashboardClient({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {holdings.data?.slice(0, 8).map((holding) => {
+                {holdings.slice(0, 8).map((holding) => {
                   const rowTone =
                     Number(holding.pnlAmount ?? 0) >= 0
                       ? "positive"
@@ -209,7 +204,7 @@ export function DashboardClient({
 
       <section className="mt-4 grid gap-4 lg:grid-cols-2">
         <SectionCard title="Performance by asset class">
-          {(performance.data?.byAssetClass.length ?? 0) === 0 ? (
+          {(performance?.byAssetClass.length ?? 0) === 0 ? (
             <EmptyState
               icon={Activity}
               title="No performance data yet"
@@ -226,7 +221,7 @@ export function DashboardClient({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {performance.data?.byAssetClass.map((item) => {
+                {performance?.byAssetClass.map((item) => {
                   const rowTone =
                     (item.xirr ?? 0) >= 0 ? "positive" : "negative";
                   return (
@@ -258,14 +253,14 @@ export function DashboardClient({
           title="Portfolio trend"
           description="Current value against invested amount over time."
         >
-          {(timeline.data?.length ?? 0) < 2 ? (
+          {timeline.length < 2 ? (
             <EmptyState
               icon={TrendingUp}
               title="No trend yet"
               description="Upload dated snapshots to build portfolio history."
             />
           ) : (
-            <PortfolioTimelineChart data={timeline.data ?? []} />
+            <PortfolioTimelineChart data={timeline} />
           )}
         </SectionCard>
       </section>

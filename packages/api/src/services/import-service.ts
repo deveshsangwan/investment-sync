@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import {
   accounts,
   holdingSnapshots,
@@ -8,26 +8,31 @@ import {
   instruments,
   portfolioValuations,
   transactions,
+  type Database,
 } from "@investment-sync/db";
 import {
+  normalizedImportRowSchema,
   parseImportFile,
   type ImportFile,
   type NormalizedHoldingRow,
+  type NormalizedImportRow,
   type NormalizedTransactionRow,
   type NormalizedValuationRow,
 } from "@investment-sync/importers";
+import { getImportBucketName, validateImportFile } from "../config";
 import type { ApiContext } from "../context";
 import type { MembershipContext } from "./membership";
 import { clearHouseholdPortfolioCache } from "./portfolio-cache";
 
 const IMPORT_TTL_DAYS = 30;
-const IMPORT_BUCKET = process.env.SUPABASE_IMPORT_BUCKET ?? "portfolio-imports";
+const CLEANUP_BATCH_SIZE = 100;
 
 async function ensureImportBucket(ctx: ApiContext) {
-  const existing = await ctx.supabase.storage.getBucket(IMPORT_BUCKET);
+  const bucket = getImportBucketName();
+  const existing = await ctx.supabase.storage.getBucket(bucket);
   if (!existing.error) return;
 
-  const created = await ctx.supabase.storage.createBucket(IMPORT_BUCKET, {
+  const created = await ctx.supabase.storage.createBucket(bucket, {
     public: false,
     fileSizeLimit: "50MB",
   });
@@ -45,7 +50,9 @@ export async function createImportUpload(
   membership: MembershipContext,
   fileName: string,
 ) {
+  validateImportFile({ fileName, sizeBytes: 0 });
   await ensureImportBucket(ctx);
+  const bucket = getImportBucketName();
   const expiresAt = new Date(
     Date.now() + IMPORT_TTL_DAYS * 24 * 60 * 60 * 1000,
   );
@@ -68,7 +75,7 @@ export async function createImportUpload(
   if (!batch) throw new Error("Failed to create import batch");
 
   const signed = await ctx.supabase.storage
-    .from(IMPORT_BUCKET)
+    .from(bucket)
     .createSignedUploadUrl(storagePath);
   if (signed.error) throw signed.error;
 
@@ -86,6 +93,11 @@ export async function uploadAndProcessImport(
   membership: MembershipContext,
   input: { fileName: string; mimeType?: string; content: Buffer },
 ) {
+  validateImportFile({
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.content.length,
+  });
   const fileHash = createHash("sha256").update(input.content).digest("hex");
   const existing = await ctx.db
     .select({
@@ -118,8 +130,9 @@ export async function uploadAndProcessImport(
   }
 
   const upload = await createImportUpload(ctx, membership, input.fileName);
+  const bucket = getImportBucketName();
   const storageUpload = await ctx.supabase.storage
-    .from(IMPORT_BUCKET)
+    .from(bucket)
     .upload(upload.storagePath, input.content, {
       contentType: input.mimeType,
       upsert: true,
@@ -147,7 +160,35 @@ export async function processImport(
   membership: MembershipContext,
   input: ImportFile & { importBatchId: string; fileHash?: string },
 ) {
-  const parsed = parseImportFile(input);
+  validateImportFile({
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.content.length,
+  });
+
+  let parsed: ReturnType<typeof parseImportFile>;
+  let validatedRows: NormalizedImportRow[];
+  try {
+    parsed = parseImportFile(input);
+    validatedRows = parsed.rows.map((row) =>
+      normalizedImportRowSchema.parse(row),
+    );
+  } catch (error) {
+    await ctx.db
+      .update(importBatches)
+      .set({
+        status: "failed",
+        errors: [error instanceof Error ? error.message : "Import failed"],
+        processedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(importBatches.id, input.importBatchId),
+          eq(importBatches.householdId, membership.householdId),
+        ),
+      );
+    throw error;
+  }
 
   await ctx.db
     .update(importBatches)
@@ -155,7 +196,7 @@ export async function processImport(
       sourceType: parsed.sourceType,
       status: "parsed",
       parserVersion: parsed.parserVersion,
-      rowCount: parsed.rows.length,
+      rowCount: validatedRows.length,
       warnings: parsed.warnings,
       fileHash: input.fileHash,
       processedAt: new Date(),
@@ -167,9 +208,9 @@ export async function processImport(
       ),
     );
 
-  if (parsed.rows.length > 0) {
+  if (validatedRows.length > 0) {
     await ctx.db.insert(importRows).values(
-      parsed.rows.map((row, index) => ({
+      validatedRows.map((row, index) => ({
         importBatchId: input.importBatchId,
         rowNumber: index + 1,
         normalizedPayload: row as unknown as Record<string, unknown>,
@@ -181,8 +222,8 @@ export async function processImport(
     importBatchId: input.importBatchId,
     sourceType: parsed.sourceType,
     parserVersion: parsed.parserVersion,
-    rowCount: parsed.rows.length,
-    rows: parsed.rows,
+    rowCount: validatedRows.length,
+    rows: validatedRows,
     warnings: parsed.warnings,
   };
 }
@@ -194,47 +235,61 @@ export async function commitImport(
 ) {
   clearHouseholdPortfolioCache(membership.householdId);
 
-  const batchRows = await ctx.db
-    .select({ id: importRows.id, payload: importRows.normalizedPayload })
-    .from(importRows)
-    .innerJoin(importBatches, eq(importRows.importBatchId, importBatches.id))
-    .where(
-      and(
-        eq(importRows.importBatchId, importBatchId),
-        eq(importBatches.householdId, membership.householdId),
-      ),
-    );
-
-  let committed = 0;
-
-  for (const row of batchRows) {
-    const payload = row.payload as unknown;
-    if (isHoldingRow(payload)) {
-      const accountId = await findOrCreateAccount(
-        ctx,
-        membership.householdId,
-        payload,
+  const committed = await ctx.db.transaction(async (tx) => {
+    const db = tx as Database;
+    const batchRows = await db
+      .select({ id: importRows.id, payload: importRows.normalizedPayload })
+      .from(importRows)
+      .innerJoin(importBatches, eq(importRows.importBatchId, importBatches.id))
+      .where(
+        and(
+          eq(importRows.importBatchId, importBatchId),
+          eq(importBatches.householdId, membership.householdId),
+        ),
       );
-      const instrumentId = await findOrCreateInstrument(ctx, payload);
-      const snapshotDate =
-        payload.sourceDate ?? new Date().toISOString().slice(0, 10);
 
-      await ctx.db
+    const parsedRows = batchRows.map((row) => ({
+      id: row.id,
+      payload: normalizedImportRowSchema.parse(row.payload),
+    }));
+    const accountRows = parsedRows
+      .map((row) => row.payload)
+      .filter(isAccountImportRow);
+    const accountIds = await ensureAccounts(
+      db,
+      membership.householdId,
+      accountRows,
+    );
+    const instrumentIds = await ensureInstruments(db, accountRows);
+
+    const holdingValues = parsedRows
+      .filter((row): row is ImportRowWithPayload<NormalizedHoldingRow> =>
+        isHoldingRow(row.payload),
+      )
+      .map(({ payload }) => ({
+        householdId: membership.householdId,
+        accountId: requiredMapValue(accountIds, accountKey(payload), "account"),
+        instrumentId: requiredMapValue(
+          instrumentIds,
+          instrumentKey(payload),
+          "instrument",
+        ),
+        importBatchId,
+        snapshotDate:
+          payload.sourceDate ?? new Date().toISOString().slice(0, 10),
+        quantity: payload.quantity?.toString(),
+        investedAmount: payload.investedAmount.toString(),
+        currentValue: payload.currentValue.toString(),
+        pnlAmount: payload.pnlAmount?.toString(),
+        pnlPercent: payload.pnlPercent?.toString(),
+        currency: payload.currency,
+        sourcePayload: payload.metadata,
+      }));
+
+    if (holdingValues.length > 0) {
+      await db
         .insert(holdingSnapshots)
-        .values({
-          householdId: membership.householdId,
-          accountId,
-          instrumentId,
-          importBatchId,
-          snapshotDate,
-          quantity: payload.quantity?.toString(),
-          investedAmount: payload.investedAmount.toString(),
-          currentValue: payload.currentValue.toString(),
-          pnlAmount: payload.pnlAmount?.toString(),
-          pnlPercent: payload.pnlPercent?.toString(),
-          currency: payload.currency,
-          sourcePayload: payload.metadata,
-        })
+        .values(holdingValues)
         .onConflictDoUpdate({
           target: [
             holdingSnapshots.householdId,
@@ -245,37 +300,42 @@ export async function commitImport(
           ],
           set: {
             importBatchId,
-            quantity: payload.quantity?.toString(),
-            investedAmount: payload.investedAmount.toString(),
-            currentValue: payload.currentValue.toString(),
-            pnlAmount: payload.pnlAmount?.toString(),
-            pnlPercent: payload.pnlPercent?.toString(),
-            sourcePayload: payload.metadata,
+            quantity: sql`excluded.quantity`,
+            investedAmount: sql`excluded.invested_amount`,
+            currentValue: sql`excluded.current_value`,
+            pnlAmount: sql`excluded.pnl_amount`,
+            pnlPercent: sql`excluded.pnl_percent`,
+            sourcePayload: sql`excluded.source_payload`,
           },
         });
-    } else if (isTransactionRow(payload)) {
-      const accountId = await findOrCreateAccount(
-        ctx,
-        membership.householdId,
-        payload,
-      );
-      const instrumentId = await findOrCreateInstrument(ctx, payload);
+    }
 
-      await ctx.db
+    const transactionValues = parsedRows
+      .filter((row): row is ImportRowWithPayload<NormalizedTransactionRow> =>
+        isTransactionRow(row.payload),
+      )
+      .map(({ payload }) => ({
+        householdId: membership.householdId,
+        accountId: requiredMapValue(accountIds, accountKey(payload), "account"),
+        instrumentId: requiredMapValue(
+          instrumentIds,
+          instrumentKey(payload),
+          "instrument",
+        ),
+        importBatchId,
+        type: payload.type,
+        tradeDate: payload.tradeDate,
+        quantity: payload.quantity?.toString(),
+        price: payload.price?.toString(),
+        amount: payload.amount.toString(),
+        currency: payload.currency,
+        metadata: payload.metadata,
+      }));
+
+    if (transactionValues.length > 0) {
+      await db
         .insert(transactions)
-        .values({
-          householdId: membership.householdId,
-          accountId,
-          instrumentId,
-          importBatchId,
-          type: payload.type,
-          tradeDate: payload.tradeDate,
-          quantity: payload.quantity?.toString(),
-          price: payload.price?.toString(),
-          amount: payload.amount.toString(),
-          currency: payload.currency,
-          metadata: payload.metadata,
-        })
+        .values(transactionValues)
         .onConflictDoUpdate({
           target: [
             transactions.householdId,
@@ -288,60 +348,68 @@ export async function commitImport(
           ],
           set: {
             importBatchId,
-            quantity: payload.quantity?.toString(),
-            price: payload.price?.toString(),
-            metadata: payload.metadata,
+            quantity: sql`excluded.quantity`,
+            price: sql`excluded.price`,
+            metadata: sql`excluded.metadata`,
           },
         });
-    } else if (isValuationRow(payload)) {
-      await ctx.db
+    }
+
+    const valuationValues = parsedRows
+      .filter((row): row is ImportRowWithPayload<NormalizedValuationRow> =>
+        isValuationRow(row.payload),
+      )
+      .map(({ payload }) => ({
+        householdId: membership.householdId,
+        valuationDate: payload.valuationDate,
+        investedAmount: payload.investedAmount.toString(),
+        currentValue: payload.currentValue.toString(),
+        pnlAmount: (
+          payload.pnlAmount ?? payload.currentValue - payload.investedAmount
+        ).toString(),
+        currency: payload.currency,
+        metadata: payload.metadata,
+      }));
+
+    if (valuationValues.length > 0) {
+      await db
         .insert(portfolioValuations)
-        .values({
-          householdId: membership.householdId,
-          valuationDate: payload.valuationDate,
-          investedAmount: payload.investedAmount.toString(),
-          currentValue: payload.currentValue.toString(),
-          pnlAmount: (
-            payload.pnlAmount ?? payload.currentValue - payload.investedAmount
-          ).toString(),
-          currency: payload.currency,
-          metadata: payload.metadata,
-        })
+        .values(valuationValues)
         .onConflictDoUpdate({
           target: [
             portfolioValuations.householdId,
             portfolioValuations.valuationDate,
           ],
           set: {
-            investedAmount: payload.investedAmount.toString(),
-            currentValue: payload.currentValue.toString(),
-            pnlAmount: (
-              payload.pnlAmount ?? payload.currentValue - payload.investedAmount
-            ).toString(),
-            currency: payload.currency,
-            metadata: payload.metadata,
+            investedAmount: sql`excluded.invested_amount`,
+            currentValue: sql`excluded.current_value`,
+            pnlAmount: sql`excluded.pnl_amount`,
+            currency: sql`excluded.currency`,
+            metadata: sql`excluded.metadata`,
           },
         });
-    } else {
-      continue;
     }
 
-    await ctx.db
-      .update(importRows)
-      .set({ isCommitted: true })
-      .where(eq(importRows.id, row.id));
-    committed += 1;
-  }
+    const committedRowIds = parsedRows.map((row) => row.id);
+    if (committedRowIds.length > 0) {
+      await db
+        .update(importRows)
+        .set({ isCommitted: true })
+        .where(inArray(importRows.id, committedRowIds));
+    }
 
-  await ctx.db
-    .update(importBatches)
-    .set({ status: "committed", committedAt: new Date() })
-    .where(
-      and(
-        eq(importBatches.id, importBatchId),
-        eq(importBatches.householdId, membership.householdId),
-      ),
-    );
+    await db
+      .update(importBatches)
+      .set({ status: "committed", committedAt: new Date() })
+      .where(
+        and(
+          eq(importBatches.id, importBatchId),
+          eq(importBatches.householdId, membership.householdId),
+        ),
+      );
+
+    return parsedRows.length;
+  });
 
   clearHouseholdPortfolioCache(membership.householdId);
 
@@ -353,30 +421,38 @@ export async function cleanupExpiredImportFiles(ctx: ApiContext) {
   const expired = await ctx.db
     .select({ id: importBatches.id, storagePath: importBatches.storagePath })
     .from(importBatches)
-    .where(eq(importBatches.status, "committed"));
+    .where(
+      and(
+        eq(importBatches.status, "committed"),
+        isNotNull(importBatches.storagePath),
+        lte(importBatches.expiresAt, now),
+      ),
+    )
+    .limit(CLEANUP_BATCH_SIZE);
 
-  const toDelete = expired.filter((batch) => batch.storagePath);
+  const toDelete = expired.filter(
+    (batch): batch is { id: string; storagePath: string } =>
+      typeof batch.storagePath === "string" && batch.storagePath.length > 0,
+  );
+  if (toDelete.length === 0) return { deleted: 0 };
+
+  const bucket = getImportBucketName();
   let deleted = 0;
 
-  for (const batch of toDelete) {
-    const fullBatch = await ctx.db
-      .select({ expiresAt: importBatches.expiresAt })
-      .from(importBatches)
-      .where(eq(importBatches.id, batch.id))
-      .limit(1);
-    if (!fullBatch[0] || fullBatch[0].expiresAt > now || !batch.storagePath)
-      continue;
-
-    const removed = await ctx.supabase.storage
-      .from(IMPORT_BUCKET)
-      .remove([batch.storagePath]);
-    if (!removed.error) {
-      await ctx.db
-        .update(importBatches)
-        .set({ status: "expired", storagePath: null })
-        .where(eq(importBatches.id, batch.id));
-      deleted += 1;
-    }
+  const removed = await ctx.supabase.storage
+    .from(bucket)
+    .remove(toDelete.map((batch) => batch.storagePath));
+  if (!removed.error) {
+    await ctx.db
+      .update(importBatches)
+      .set({ status: "expired", storagePath: null })
+      .where(
+        inArray(
+          importBatches.id,
+          toDelete.map((batch) => batch.id),
+        ),
+      );
+    deleted = toDelete.length;
   }
 
   return { deleted };
@@ -539,70 +615,192 @@ function isValuationRow(value: unknown): value is NormalizedValuationRow {
 }
 
 type AccountImportRow = NormalizedHoldingRow | NormalizedTransactionRow;
+type ImportRowWithPayload<T extends NormalizedImportRow> = {
+  id: string;
+  payload: T;
+};
 
-async function findOrCreateAccount(
-  ctx: ApiContext,
-  householdId: string,
-  row: AccountImportRow,
-): Promise<string> {
-  const existing = await ctx.db
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(
-      and(
-        eq(accounts.householdId, householdId),
-        eq(accounts.name, row.accountName),
-        eq(accounts.provider, row.provider),
-      ),
-    )
-    .limit(1);
-
-  if (existing[0]) return existing[0].id;
-
-  const [created] = await ctx.db
-    .insert(accounts)
-    .values({
-      householdId,
-      name: row.accountName,
-      provider: row.provider,
-      accountType: row.assetClass,
-      currency: row.currency,
-    })
-    .returning({ id: accounts.id });
-
-  if (!created) throw new Error("Failed to create account");
-  return created.id;
+function isAccountImportRow(row: NormalizedImportRow): row is AccountImportRow {
+  return row.kind === "holding" || row.kind === "transaction";
 }
 
-async function findOrCreateInstrument(
-  ctx: ApiContext,
-  row: AccountImportRow,
-): Promise<string> {
-  const existing = await ctx.db
-    .select({ id: instruments.id })
-    .from(instruments)
-    .where(
-      row.symbol
-        ? eq(instruments.symbol, row.symbol)
-        : eq(instruments.name, row.instrumentName),
-    )
-    .limit(1);
-
-  if (existing[0]) return existing[0].id;
-
-  const [created] = await ctx.db
-    .insert(instruments)
-    .values({
-      name: row.instrumentName,
-      symbol: row.symbol,
-      isin: "isin" in row ? row.isin : undefined,
-      assetClass: row.assetClass,
-      currency: row.currency,
+async function ensureAccounts(
+  db: Database,
+  householdId: string,
+  rows: AccountImportRow[],
+): Promise<Map<string, string>> {
+  const existing = await db
+    .select({
+      id: accounts.id,
+      name: accounts.name,
+      provider: accounts.provider,
     })
-    .returning({ id: instruments.id });
+    .from(accounts)
+    .where(eq(accounts.householdId, householdId))
+    .orderBy(asc(accounts.createdAt), asc(accounts.id));
+  const existingByKey = new Map(
+    existing.map((account) => [accountIdentityKey(account), account.id]),
+  );
+  const missing = uniqueByKey(
+    rows.filter((row) => !existingByKey.has(accountKey(row))),
+    accountKey,
+  );
 
-  if (!created) throw new Error("Failed to create instrument");
-  return created.id;
+  if (missing.length > 0) {
+    await db
+      .insert(accounts)
+      .values(
+        missing.map((row) => ({
+          householdId,
+          name: row.accountName,
+          provider: row.provider,
+          accountType: row.assetClass,
+          currency: row.currency,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  const allAccounts = await db
+    .select({
+      id: accounts.id,
+      name: accounts.name,
+      provider: accounts.provider,
+    })
+    .from(accounts)
+    .where(eq(accounts.householdId, householdId))
+    .orderBy(asc(accounts.createdAt), asc(accounts.id));
+  const ids = new Map(
+    allAccounts.map((account) => [accountIdentityKey(account), account.id]),
+  );
+
+  for (const row of rows) {
+    requiredMapValue(ids, accountKey(row), "account");
+  }
+  return ids;
+}
+
+async function ensureInstruments(
+  db: Database,
+  rows: AccountImportRow[],
+): Promise<Map<string, string>> {
+  const existing = await db
+    .select({
+      id: instruments.id,
+      name: instruments.name,
+      symbol: instruments.symbol,
+      assetClass: instruments.assetClass,
+      currency: instruments.currency,
+    })
+    .from(instruments)
+    .orderBy(asc(instruments.createdAt), asc(instruments.id));
+  const existingByKey = new Map(
+    existing.map((instrument) => [
+      instrumentIdentityKey(instrument),
+      instrument.id,
+    ]),
+  );
+  const missing = uniqueByKey(
+    rows.filter((row) => !existingByKey.has(instrumentKey(row))),
+    instrumentKey,
+  );
+
+  if (missing.length > 0) {
+    await db
+      .insert(instruments)
+      .values(
+        missing.map((row) => ({
+          name: row.instrumentName,
+          symbol: row.symbol,
+          isin: "isin" in row ? row.isin : undefined,
+          assetClass: row.assetClass,
+          currency: row.currency,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  const allInstruments = await db
+    .select({
+      id: instruments.id,
+      name: instruments.name,
+      symbol: instruments.symbol,
+      assetClass: instruments.assetClass,
+      currency: instruments.currency,
+    })
+    .from(instruments)
+    .orderBy(asc(instruments.createdAt), asc(instruments.id));
+  const ids = new Map(
+    allInstruments.map((instrument) => [
+      instrumentIdentityKey(instrument),
+      instrument.id,
+    ]),
+  );
+
+  for (const row of rows) {
+    requiredMapValue(ids, instrumentKey(row), "instrument");
+  }
+  return ids;
+}
+
+function accountKey(row: AccountImportRow): string {
+  return accountIdentityKey({
+    provider: row.provider,
+    name: row.accountName,
+  });
+}
+
+function accountIdentityKey(value: { provider: string; name: string }) {
+  return `${normalizeText(value.provider)}|${normalizeText(value.name)}`;
+}
+
+function instrumentKey(row: AccountImportRow): string {
+  return instrumentIdentityKey({
+    assetClass: row.assetClass,
+    currency: row.currency,
+    symbol: row.symbol ?? null,
+    name: row.instrumentName,
+  });
+}
+
+function instrumentIdentityKey(value: {
+  assetClass: string;
+  currency: string;
+  symbol: string | null;
+  name: string;
+}) {
+  const identity = value.symbol
+    ? `symbol:${normalizeSymbol(value.symbol)}`
+    : `name:${normalizeText(value.name)}`;
+  return `${value.assetClass}|${value.currency}|${identity}`;
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeSymbol(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function uniqueByKey<T>(rows: T[], keyFor: (row: T) => string): T[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = keyFor(row);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function requiredMapValue(
+  values: Map<string, string>,
+  key: string,
+  label: string,
+): string {
+  const value = values.get(key);
+  if (!value) throw new Error(`Failed to resolve ${label} for import row`);
+  return value;
 }
 
 function sanitizeFileName(fileName: string): string {

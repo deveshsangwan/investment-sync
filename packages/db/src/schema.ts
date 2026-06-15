@@ -143,6 +143,11 @@ export const accounts = pgTable(
   },
   (table) => ({
     householdIdx: index("accounts_household_idx").on(table.householdId),
+    householdProviderNameIdx: index("accounts_household_provider_name_idx").on(
+      table.householdId,
+      table.provider,
+      table.name,
+    ),
   }),
 );
 
@@ -170,6 +175,12 @@ export const instruments = pgTable(
   (table) => ({
     symbolIdx: index("instruments_symbol_idx").on(table.symbol),
     isinIdx: index("instruments_isin_idx").on(table.isin),
+    identityLookupIdx: index("instruments_identity_lookup_idx").on(
+      table.assetClass,
+      table.currency,
+      table.symbol,
+      table.name,
+    ),
   }),
 );
 
@@ -263,6 +274,9 @@ export const transactions = pgTable(
     householdIdx: index("transactions_household_idx").on(table.householdId),
     accountIdx: index("transactions_account_idx").on(table.accountId),
     tradeDateIdx: index("transactions_trade_date_idx").on(table.tradeDate),
+    householdInstrumentDateIdx: index(
+      "transactions_household_instrument_date_idx",
+    ).on(table.householdId, table.instrumentId, table.tradeDate),
     uniqueTransactionIdx: uniqueIndex("transactions_import_dedupe_idx").on(
       table.householdId,
       table.accountId,
@@ -317,6 +331,13 @@ export const holdingSnapshots = pgTable(
       table.householdId,
     ),
     dateIdx: index("holding_snapshots_date_idx").on(table.snapshotDate),
+    householdDateIdx: index("holding_snapshots_household_date_idx").on(
+      table.householdId,
+      table.snapshotDate,
+    ),
+    householdInstrumentDateIdx: index(
+      "holding_snapshots_household_instrument_date_idx",
+    ).on(table.householdId, table.instrumentId, table.snapshotDate),
     uniqueSnapshotIdx: uniqueIndex("holding_snapshots_import_dedupe_idx").on(
       table.householdId,
       table.accountId,
@@ -381,5 +402,30 @@ export const portfolioValuations = pgTable(
     uniqueValuationIdx: uniqueIndex(
       "portfolio_valuations_household_date_idx",
     ).on(table.householdId, table.valuationDate),
+  }),
+);
+
+export const currencyRates = pgTable(
+  "currency_rates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    base: currencyEnum("base").notNull(),
+    quote: currencyEnum("quote").notNull(),
+    rate: numeric("rate", { precision: 28, scale: 10 }).notNull(),
+    provider: text("provider").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    pairProviderIdx: uniqueIndex("currency_rates_pair_provider_idx").on(
+      table.base,
+      table.quote,
+      table.provider,
+    ),
   }),
 );

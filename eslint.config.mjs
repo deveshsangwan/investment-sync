@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import globals from "globals";
+import nextPlugin from "@next/eslint-plugin-next";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
@@ -17,11 +18,25 @@ export default [
     ignores: [
       "node_modules/**",
       ".next/**",
+      "**/.next/**",
       ".expo/**",
+      "**/.expo/**",
       "dist/**",
+      "**/dist/**",
       "coverage/**",
       "**/generated/**",
+      "**/next-env.d.ts",
     ],
+  },
+  {
+    plugins: {
+      "@next/next": nextPlugin,
+    },
+    settings: {
+      next: {
+        rootDir: "apps/web/",
+      },
+    },
   },
   js.configs.recommended,
   ...tsTypeChecked,
@@ -71,6 +86,14 @@ export default [
       ...react.configs["jsx-runtime"].rules,
       ...reactHooks.configs.recommended.rules,
       "react/prop-types": "off",
+    },
+  },
+  {
+    files: ["apps/web/**/*.{js,cjs,mjs,ts,tsx}"],
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs["core-web-vitals"].rules,
+      "@next/next/no-html-link-for-pages": "off",
     },
   },
   {

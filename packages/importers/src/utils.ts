@@ -34,6 +34,7 @@ export function normalizeHeader(value: unknown): string {
 export function parseNumber(value: unknown): number | undefined {
   const rawValue = toStringValue(value);
   if (!rawValue || rawValue === "-") return undefined;
+  const isParenthesizedNegative = /\([^)]*\)/.test(rawValue);
   const raw = rawValue
     .replace(/rs\.?|inr/gi, "")
     .replace(/[₹,$%\s\u00a0]/g, "")
@@ -41,7 +42,8 @@ export function parseNumber(value: unknown): number | undefined {
     .replace(/,/g, "");
   if (!raw || raw === "-") return undefined;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  if (!Number.isFinite(parsed)) return undefined;
+  return isParenthesizedNegative ? -Math.abs(parsed) : parsed;
 }
 
 export function parseRequiredNumber(value: unknown, fallback = 0): number {
@@ -50,12 +52,65 @@ export function parseRequiredNumber(value: unknown, fallback = 0): number {
 
 export function toIsoDate(value: unknown): string | undefined {
   if (!value) return undefined;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return dateToIsoDate(value);
   const text = toStringValue(value).trim();
   if (!text) return undefined;
+  const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return validDateParts(Number(year), Number(month), Number(day));
+  }
+
+  const indianDateMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (indianDateMatch) {
+    const [, day, month, rawYear] = indianDateMatch;
+    const year =
+      rawYear && rawYear.length === 2
+        ? Number(`20${rawYear}`)
+        : Number(rawYear);
+    return validDateParts(year, Number(month), Number(day));
+  }
+
   const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  if (!Number.isNaN(parsed.getTime())) return dateToIsoDate(parsed);
   return undefined;
+}
+
+function dateToIsoDate(value: Date): string | undefined {
+  if (Number.isNaN(value.getTime())) return undefined;
+  return validDateParts(
+    value.getFullYear(),
+    value.getMonth() + 1,
+    value.getDate(),
+  );
+}
+
+function validDateParts(
+  year: number,
+  month: number,
+  day: number,
+): string | undefined {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return undefined;
+  }
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return undefined;
+  }
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return `${year.toString().padStart(4, "0")}-${month
+    .toString()
+    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
 }
 
 export function findHeaderRow(

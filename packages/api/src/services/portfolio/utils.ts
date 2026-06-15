@@ -1,3 +1,4 @@
+import type { Database } from "@investment-sync/db";
 import { getUsdInrRate } from "../currency-rates";
 
 export type Currency = "INR" | "USD" | "BTC" | "ETH" | "OTHER";
@@ -11,8 +12,11 @@ export function parseDate(
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
-export async function getUsdInrRateIfNeeded(currencies: Currency[]) {
-  return currencies.includes("USD") ? getUsdInrRate() : undefined;
+export async function getUsdInrRateIfNeeded(
+  currencies: Currency[],
+  db?: Database,
+) {
+  return currencies.includes("USD") ? getUsdInrRate(db) : undefined;
 }
 
 export function convertToInr(

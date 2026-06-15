@@ -1,3 +1,5 @@
+import { logger } from "../logger";
+
 const PORTFOLIO_CACHE_TTL_MS = 30_000;
 
 interface CacheEntry<T> {
@@ -17,11 +19,11 @@ export function getHouseholdPortfolioCache<T>(
   const existing = householdPortfolioCache.get(cacheKey);
 
   if (existing && existing.expiresAt > now) {
-    console.log("portfolio cache hit", key);
+    logger.debug("portfolio cache hit", { key });
     return existing.promise as Promise<T>;
   }
 
-  console.log("portfolio cache miss", key);
+  logger.debug("portfolio cache miss", { key });
 
   const promise = load().catch((error) => {
     const latest = householdPortfolioCache.get(cacheKey);
