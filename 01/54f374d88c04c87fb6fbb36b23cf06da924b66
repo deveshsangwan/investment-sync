@@ -1,0 +1,61 @@
+apps/mobile/src/sign-in-screen.tsx
+  s_9219b94b4d9d7a::t_f4c3b3f6a415e0 24-30
+  s_9219b94b4d9d7a::t_ffb89ac378291a 31
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 2,32,35-37,40
+packages/api/src/services/currency-rates.ts
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 46,55,85
+apps/mobile/package.json
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 19
+apps/web/package.json
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 17
+apps/mobile/src/auth-token-cache.ts
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 2,7
+  s_9219b94b4d9d7a::t_ffb89ac378291a 6
+apps/web/src/app/api/imports/upload/route.ts
+  s_9219b94b4d9d7a::t_981e8cd493a6fe 23,25-27,41,43-44,49
+  s_9219b94b4d9d7a::t_867435e20d36a5 54-57
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 7,42,51,53,58,62-63
+  s_9219b94b4d9d7a::t_ffb89ac378291a 47-48
+packages/result/tsconfig.json
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 1-7
+packages/result/package.json
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 1-16
+packages/result/src/index.test.ts
+  s_9219b94b4d9d7a::t_ffb89ac378291a 6,13
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 1-5,7-12,14-17
+AGENTS.md
+  s_9219b94b4d9d7a::t_4c5c35b7246606 1-5
+apps/web/src/app/uploads/uploads-client.tsx
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 5,89-91,93,95-100,102-113,118,120-132
+  s_9219b94b4d9d7a::t_867435e20d36a5 115-117
+  s_9219b94b4d9d7a::t_ffb89ac378291a 24-38,88,101
+packages/api/src/services/import-service.ts
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 171
+packages/result/src/index.ts
+  s_9219b94b4d9d7a::t_24efc014a3631e 6
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 1-4,7,9-12
+  s_9219b94b4d9d7a::t_ffb89ac378291a 5,8
+eslint.config.mjs
+  s_9219b94b4d9d7a::t_dd5832e3a677d1 73-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "0154f374d88c04c87fb6fbb36b23cf06da924b66",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9219b94b4d9d7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019efad7-0f15-7c43-8cc5-78301571271c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
