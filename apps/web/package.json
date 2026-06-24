@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^3.10.0",
     "@investment-sync/api": "workspace:*",
     "@investment-sync/db": "workspace:*",
+    "@investment-sync/result": "workspace:*",
     "@radix-ui/react-slot": "^1.2.4",
     "@tanstack/react-query": "^4.36.1",
     "@trpc/client": "^10.45.2",

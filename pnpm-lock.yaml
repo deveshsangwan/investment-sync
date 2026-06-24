@@ -56,6 +56,9 @@ importers:
       '@investment-sync/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@investment-sync/result':
+        specifier: workspace:*
+        version: link:../../packages/result
       '@react-native-async-storage/async-storage':
         specifier: 2.2.0
         version: 2.2.0(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0)(utf-8-validate@6.0.6))
@@ -132,6 +135,9 @@ importers:
       '@investment-sync/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@investment-sync/result':
+        specifier: workspace:*
+        version: link:../../packages/result
       '@radix-ui/react-slot':
         specifier: ^1.2.4
         version: 1.2.4(@types/react@19.2.15)(react@19.2.6)
@@ -288,6 +294,15 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@25.9.2)(lightningcss@1.32.0)(terser@5.48.0)
+
+  packages/result:
     devDependencies:
       typescript:
         specifier: ^5.7.3

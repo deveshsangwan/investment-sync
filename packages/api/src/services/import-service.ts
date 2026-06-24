@@ -168,6 +168,7 @@ export async function processImport(
 
   let parsed: ReturnType<typeof parseImportFile>;
   let validatedRows: NormalizedImportRow[];
+  // eslint-disable-next-line no-restricted-syntax -- The batch must be marked failed before the original parsing error is rethrown.
   try {
     parsed = parseImportFile(input);
     validatedRows = parsed.rows.map((row) =>

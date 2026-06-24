@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileSpreadsheet, UploadCloud } from "lucide-react";
+import { tryCatch } from "@investment-sync/result";
 import { SetupRequired } from "@/components/dashboard-states";
 import {
   EmptyState,
@@ -19,6 +20,21 @@ import { trpc } from "../providers";
 type UploadStatus = "idle" | "uploading" | "success" | "error";
 const MAX_IMPORT_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_IMPORT_EXTENSIONS = [".csv", ".xlsx"];
+
+async function uploadImport(body: FormData) {
+  const response = await fetch("/api/imports/upload", {
+    method: "POST",
+    body,
+  });
+  const text = await response.text();
+  return { response, text };
+}
+
+function parseUploadResponse(text: string): Promise<Record<string, unknown>> {
+  return Promise.resolve().then(
+    () => JSON.parse(text) as Record<string, unknown>,
+  );
+}
 
 export function UploadsClient({
   isDataConfigured,
@@ -69,53 +85,51 @@ export function UploadsClient({
     const body = new FormData();
     body.append("file", file);
 
-    try {
-      const response = await fetch("/api/imports/upload", {
-        method: "POST",
-        body,
-      });
-      const text = await response.text();
-      let data: Record<string, unknown> = {};
-      if (text) {
-        try {
-          data = JSON.parse(text) as Record<string, unknown>;
-        } catch {
-          data = {};
-        }
-      }
-      const warnings = Array.isArray(data.warnings)
-        ? data.warnings.filter(
-            (warning): warning is string => typeof warning === "string",
-          )
-        : [];
-      const rowCount = typeof data.rowCount === "number" ? data.rowCount : 0;
-      const sourceType =
-        typeof data.sourceType === "string" ? data.sourceType : undefined;
+    const upload = await tryCatch(uploadImport(body));
 
-      if (!response.ok) {
-        setStatus("error");
-        setMessage(
-          typeof data.error === "string" ? data.error : "Upload failed.",
-        );
-        return;
-      }
-
-      const warningSuffix =
-        warnings.length > 0
-          ? ` (${warnings.length} warning${warnings.length > 1 ? "s" : ""})`
-          : "";
-      setStatus("success");
-      setWarningDetails(warnings);
-      setMessage(
-        `Parsed ${rowCount} rows${sourceType ? ` from ${sourceType}` : ""}${warningSuffix}.`,
-      );
-      setFile(null);
-      setFileError(null);
-      void list.refetch();
-    } catch (error) {
+    if (!upload.ok) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Upload failed.");
+      setMessage(
+        upload.error instanceof Error ? upload.error.message : "Upload failed.",
+      );
+      return;
     }
+
+    const { response, text } = upload.data;
+    let data: Record<string, unknown> = {};
+    if (text) {
+      const parsed = await tryCatch(parseUploadResponse(text));
+      if (parsed.ok) data = parsed.data;
+    }
+    const warnings = Array.isArray(data.warnings)
+      ? data.warnings.filter(
+          (warning): warning is string => typeof warning === "string",
+        )
+      : [];
+    const rowCount = typeof data.rowCount === "number" ? data.rowCount : 0;
+    const sourceType =
+      typeof data.sourceType === "string" ? data.sourceType : undefined;
+
+    if (!response.ok) {
+      setStatus("error");
+      setMessage(
+        typeof data.error === "string" ? data.error : "Upload failed.",
+      );
+      return;
+    }
+
+    const warningSuffix =
+      warnings.length > 0
+        ? ` (${warnings.length} warning${warnings.length > 1 ? "s" : ""})`
+        : "";
+    setStatus("success");
+    setWarningDetails(warnings);
+    setMessage(
+      `Parsed ${rowCount} rows${sourceType ? ` from ${sourceType}` : ""}${warningSuffix}.`,
+    );
+    setFile(null);
+    setFileError(null);
+    void list.refetch();
   };
 
   const handleFileChange = (selectedFile: File | null) => {

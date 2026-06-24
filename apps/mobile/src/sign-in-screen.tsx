@@ -1,4 +1,5 @@
 import { useSignIn } from "@clerk/clerk-expo";
+import { tryCatch } from "@investment-sync/result";
 import { useState } from "react";
 import {
   Alert,
@@ -20,17 +21,23 @@ export function SignInScreen() {
   async function submit() {
     if (!isLoaded) return;
     setIsSubmitting(true);
-    try {
-      const result = await signIn.create({ identifier: email, password });
-      await setActive({ session: result.createdSessionId });
-    } catch (error) {
+    const createAndActivateSession = async () => {
+      const signInResult = await signIn.create({
+        identifier: email,
+        password,
+      });
+      await setActive({ session: signInResult.createdSessionId });
+    };
+    const result = await tryCatch(createAndActivateSession());
+    if (!result.ok) {
       Alert.alert(
         "Could not sign in",
-        error instanceof Error ? error.message : "Check your Clerk settings.",
+        result.error instanceof Error
+          ? result.error.message
+          : "Check your Clerk settings.",
       );
-    } finally {
-      setIsSubmitting(false);
     }
+    setIsSubmitting(false);
   }
 
   return (

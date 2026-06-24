@@ -4,6 +4,7 @@ import {
   uploadAndProcessImport,
   validateImportFile,
 } from "@investment-sync/api";
+import { tryCatch } from "@investment-sync/result";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
@@ -19,11 +20,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing file" }, { status: 400 });
   }
 
-  try {
+  async function processUpload(importFile: File) {
     validateImportFile({
-      fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
+      fileName: importFile.name,
+      mimeType: importFile.type,
+      sizeBytes: importFile.size,
     });
     const user = await currentUser();
     const ctx = createApiContext({
@@ -37,18 +38,27 @@ export async function POST(request: Request) {
       },
     });
     const membership = await ensureMembership(ctx);
-    const content = Buffer.from(await file.arrayBuffer());
-    const result = await uploadAndProcessImport(ctx, membership, {
-      fileName: file.name,
-      mimeType: file.type,
+    const content = Buffer.from(await importFile.arrayBuffer());
+    return uploadAndProcessImport(ctx, membership, {
+      fileName: importFile.name,
+      mimeType: importFile.type,
       content,
     });
+  }
 
-    return NextResponse.json(result);
-  } catch (error) {
+  const result = await tryCatch(processUpload(file));
+
+  if (!result.ok) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Import failed" },
+      {
+        error:
+          result.error instanceof Error
+            ? result.error.message
+            : "Import failed",
+      },
       { status: 400 },
     );
   }
+
+  return NextResponse.json(result.data);
 }

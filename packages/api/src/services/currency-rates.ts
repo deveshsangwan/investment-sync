@@ -43,6 +43,7 @@ async function fetchUsdInrRate(
   now: number,
   db?: Database,
 ): Promise<CurrencyRateQuote> {
+  // eslint-disable-next-line no-restricted-syntax -- Retry, stale-cache fallback, and logging need the caught error.
   try {
     const rate = await fetchUsdInrRateWithRetry();
 
@@ -51,6 +52,7 @@ async function fetchUsdInrRate(
       fetchedAt: new Date().toISOString(),
       expiresAt: now + USD_INR_CACHE_TTL_MS,
     };
+    // eslint-disable-next-line no-restricted-syntax -- Persistence failures are logged without failing the fetched quote.
     try {
       await persistUsdInrRate(db, cachedUsdInrRate);
     } catch (persistError) {
@@ -80,6 +82,7 @@ async function fetchUsdInrRate(
 async function fetchUsdInrRateWithRetry(): Promise<number> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    // eslint-disable-next-line no-restricted-syntax -- Retry policy needs the rejection to decide whether to attempt again.
     try {
       return await fetchUsdInrRateOnce();
     } catch (error) {

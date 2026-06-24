@@ -70,6 +70,14 @@ export default [
           caughtErrorsIgnorePattern: "^_",
         },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TryStatement[handler]",
+          message:
+            "Use @investment-sync/result for recoverable failures. Suppress this rule only for an intentional exception boundary and explain why.",
+        },
+      ],
     },
   },
   {
