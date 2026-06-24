@@ -28,6 +28,12 @@ const envSchema = z.object({
   EXPO_PUBLIC_API_URL: optionalUrl,
 });
 
+const dataConfiguredSchema = envSchema.pick({
+  DATABASE_URL: true,
+  SUPABASE_URL: true,
+  SUPABASE_SERVICE_ROLE_KEY: true,
+});
+
 export type AppEnv = z.infer<typeof envSchema>;
 
 export function getAppEnv(env: NodeJS.ProcessEnv = process.env): AppEnv {
@@ -35,7 +41,7 @@ export function getAppEnv(env: NodeJS.ProcessEnv = process.env): AppEnv {
 }
 
 export function isDataConfigured(env: NodeJS.ProcessEnv = process.env) {
-  const parsed = envSchema.safeParse(env);
+  const parsed = dataConfiguredSchema.safeParse(env);
   if (!parsed.success) return false;
   return Boolean(
     parsed.data.DATABASE_URL &&

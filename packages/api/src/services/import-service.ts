@@ -423,7 +423,6 @@ export async function cleanupExpiredImportFiles(ctx: ApiContext) {
     .from(importBatches)
     .where(
       and(
-        eq(importBatches.status, "committed"),
         isNotNull(importBatches.storagePath),
         lte(importBatches.expiresAt, now),
       ),

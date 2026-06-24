@@ -63,11 +63,8 @@ export function toIsoDate(value: unknown): string | undefined {
 
   const indianDateMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (indianDateMatch) {
-    const [, day, month, rawYear] = indianDateMatch;
-    const year =
-      rawYear && rawYear.length === 2
-        ? Number(`20${rawYear}`)
-        : Number(rawYear);
+    const [, day = "", month = "", rawYear = ""] = indianDateMatch;
+    const year = normalizeCalendarYear(rawYear);
     return validDateParts(year, Number(month), Number(day));
   }
 
@@ -113,6 +110,12 @@ function validDateParts(
     .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
 }
 
+function normalizeCalendarYear(rawYear: string): number {
+  if (rawYear.length !== 2) return Number(rawYear);
+  const year = Number(rawYear);
+  return year >= 70 ? 1900 + year : 2000 + year;
+}
+
 export function findHeaderRow(
   rows: unknown[][],
   requiredHeaders: string[],
@@ -144,11 +147,30 @@ export function objectFromRow(
 export function sourceDateFromText(text: string): string | undefined {
   const match = text.match(/(\d{1,2})[-\s]([A-Za-z]{3,})[-\s](\d{2,4})/);
   if (!match) return undefined;
-  const [, day, month, year] = match;
-  const parsed = new Date(
-    `${day} ${month} ${year && year.length === 2 ? `20${year}` : year}`,
+  const [, day = "", month = "", year = ""] = match;
+  const monthNumber = monthNumberFromName(month);
+  if (!monthNumber) return undefined;
+  return validDateParts(
+    normalizeCalendarYear(year),
+    monthNumber,
+    Number(day),
   );
-  return Number.isNaN(parsed.getTime())
-    ? undefined
-    : parsed.toISOString().slice(0, 10);
+}
+
+function monthNumberFromName(month: string): number | undefined {
+  const months: Record<string, number> = {
+    jan: 1,
+    feb: 2,
+    mar: 3,
+    apr: 4,
+    may: 5,
+    jun: 6,
+    jul: 7,
+    aug: 8,
+    sep: 9,
+    oct: 10,
+    nov: 11,
+    dec: 12,
+  };
+  return months[month.slice(0, 3).toLowerCase()];
 }

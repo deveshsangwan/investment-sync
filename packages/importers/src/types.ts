@@ -130,11 +130,26 @@ export const assetClassSchema = z.enum([
 export const currencySchema = z.enum(["INR", "USD", "BTC", "ETH", "OTHER"]);
 
 const metadataSchema = z.record(z.unknown());
+const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const [yearText = "", monthText = "", dayText = ""] = value.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const date = new Date(year, month - 1, day);
+    return (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    );
+  }, "Invalid calendar date");
 
 export const normalizedHoldingRowSchema = z.object({
   kind: z.literal("holding"),
   sourceType: importSourceTypeSchema,
-  sourceDate: z.string().optional(),
+  sourceDate: isoDateSchema.optional(),
   accountName: z.string().min(1),
   provider: z.string().min(1),
   instrumentName: z.string().min(1),
@@ -159,7 +174,7 @@ export const normalizedTransactionRowSchema = z.object({
   symbol: z.string().min(1).optional(),
   assetClass: assetClassSchema,
   currency: currencySchema,
-  tradeDate: z.string().min(1),
+  tradeDate: isoDateSchema,
   type: z.enum([
     "buy",
     "sell",
@@ -178,7 +193,7 @@ export const normalizedTransactionRowSchema = z.object({
 export const normalizedValuationRowSchema = z.object({
   kind: z.literal("valuation"),
   sourceType: importSourceTypeSchema,
-  valuationDate: z.string().min(1),
+  valuationDate: isoDateSchema,
   investedAmount: z.number().finite(),
   currentValue: z.number().finite(),
   pnlAmount: z.number().finite().optional(),

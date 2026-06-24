@@ -49,6 +49,7 @@ export function DashboardClient({
   const overview = trpc.portfolio.overview.useQuery(undefined, {
     enabled: isDataConfigured,
   });
+  const isOverviewReady = overview.isSuccess;
   const summary = overview.data?.summary;
   const holdings = overview.data?.holdings ?? [];
   const performance = overview.data?.performance;
@@ -74,7 +75,9 @@ export function DashboardClient({
       />
 
       {!isDataConfigured ? <SetupRequired /> : null}
-      {isDataConfigured && !hasHoldings ? <EmptyPortfolio /> : null}
+      {isDataConfigured && isOverviewReady && !hasHoldings ? (
+        <EmptyPortfolio />
+      ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

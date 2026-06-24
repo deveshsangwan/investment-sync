@@ -51,7 +51,16 @@ async function fetchUsdInrRate(
       fetchedAt: new Date().toISOString(),
       expiresAt: now + USD_INR_CACHE_TTL_MS,
     };
-    await persistUsdInrRate(db, cachedUsdInrRate);
+    try {
+      await persistUsdInrRate(db, cachedUsdInrRate);
+    } catch (persistError) {
+      logger.warn("USD/INR rate persistence failed", {
+        error:
+          persistError instanceof Error
+            ? persistError.message
+            : String(persistError),
+      });
+    }
 
     return toQuote(cachedUsdInrRate, false);
   } catch (error) {
