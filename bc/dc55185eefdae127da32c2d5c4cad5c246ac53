@@ -1,0 +1,41 @@
+packages/api/src/services/currency-rates.test.ts
+  s_0ebedee88d03cd::t_8da5e3584d0413 1-32
+packages/api/src/config.test.ts
+  s_0ebedee88d03cd::t_8da5e3584d0413 1-15
+packages/api/src/services/currency-rates.ts
+  s_0ebedee88d03cd::t_8da5e3584d0413 54-63
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_0ebedee88d03cd::t_8da5e3584d0413 52,78-80
+packages/importers/src/types.ts
+  s_0ebedee88d03cd::t_8da5e3584d0413 133-136,141-147,152,177,196
+  s_0ebedee88d03cd::t_c37f3979283d73 137-140
+packages/api/src/config.ts
+  s_0ebedee88d03cd::t_8da5e3584d0413 31-36,44
+packages/importers/src/utils.ts
+  s_0ebedee88d03cd::t_0e328d759b958d 151-156,158-175
+  s_0ebedee88d03cd::t_8da5e3584d0413 67,113-118
+  s_0ebedee88d03cd::t_c37f3979283d73 66,150
+packages/importers/src/utils.test.ts
+  s_0ebedee88d03cd::t_8da5e3584d0413 2-8,24,32-35,73-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "bcdc55185eefdae127da32c2d5c4cad5c246ac53",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_0ebedee88d03cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe7-1cd6-76a0-989e-6a0a345aedaf",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
