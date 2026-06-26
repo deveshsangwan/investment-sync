@@ -150,11 +150,7 @@ export function sourceDateFromText(text: string): string | undefined {
   const [, day = "", month = "", year = ""] = match;
   const monthNumber = monthNumberFromName(month);
   if (!monthNumber) return undefined;
-  return validDateParts(
-    normalizeCalendarYear(year),
-    monthNumber,
-    Number(day),
-  );
+  return validDateParts(normalizeCalendarYear(year), monthNumber, Number(day));
 }
 
 function monthNumberFromName(month: string): number | undefined {

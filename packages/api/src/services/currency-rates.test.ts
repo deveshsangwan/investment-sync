@@ -9,9 +9,11 @@ describe("getUsdInrRate", () => {
   it("returns a fresh rate when persistence fails", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ rate: 83.25 }), { status: 200 }),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ rate: 83.25 }), { status: 200 }),
+        ),
     );
     const db = {
       insert: vi.fn().mockReturnValue({
