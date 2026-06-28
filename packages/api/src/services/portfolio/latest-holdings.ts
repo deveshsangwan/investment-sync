@@ -7,12 +7,12 @@ import {
 } from "@investment-sync/db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { cachedPortfolioData } from "./cache";
 import {
-  AGGREGATE_HOLDING_NAME_SQL_PATTERN,
-  AGGREGATE_HOLDING_SOURCE_VALUE,
-} from "./utils";
-import type { CurrentHoldingRow, PortfolioContext } from "./types";
+  aggregateDetectionSql,
+  aggregateSnapshotGroupMatchSql,
+} from "./aggregates";
+import { cachedPortfolioData } from "./cache";
+import type { AssetClass, CurrentHoldingRow, PortfolioContext } from "./types";
 
 const currentHoldingRowSchema = z.object({
   id: z.string(),
@@ -38,17 +38,25 @@ type LatestHoldingMode = "current" | "exited";
 
 export async function latestCurrentHoldings(
   ctx: PortfolioContext,
+  assetClass?: AssetClass,
 ): Promise<CurrentHoldingRow[]> {
-  return cachedPortfolioData(ctx, "portfolio.latestCurrentHoldings", () =>
-    latestCurrentHoldingRows(ctx, "current"),
+  const cacheKey = assetClass
+    ? `portfolio.latestCurrentHoldings.${assetClass}`
+    : "portfolio.latestCurrentHoldings";
+  return cachedPortfolioData(ctx, cacheKey, () =>
+    latestCurrentHoldingRows(ctx, "current", assetClass),
   );
 }
 
 export async function exitedCurrentHoldings(
   ctx: PortfolioContext,
+  assetClass?: AssetClass,
 ): Promise<CurrentHoldingRow[]> {
-  return cachedPortfolioData(ctx, "portfolio.exitedCurrentHoldings", () =>
-    latestCurrentHoldingRows(ctx, "exited"),
+  const cacheKey = assetClass
+    ? `portfolio.exitedCurrentHoldings.${assetClass}`
+    : "portfolio.exitedCurrentHoldings";
+  return cachedPortfolioData(ctx, cacheKey, () =>
+    latestCurrentHoldingRows(ctx, "exited", assetClass),
   );
 }
 
@@ -130,11 +138,16 @@ export async function holdingHistory(
 async function latestCurrentHoldingRows(
   ctx: PortfolioContext,
   mode: LatestHoldingMode,
+  assetClass?: AssetClass,
 ): Promise<CurrentHoldingRow[]> {
-  const aggregateExpression = sql`
-    lower(coalesce(hs.source_payload->>'isAggregate', '')) = ${AGGREGATE_HOLDING_SOURCE_VALUE}
-    or lower(rtrim(i.name)) like ${AGGREGATE_HOLDING_NAME_SQL_PATTERN}
-  `;
+  const aggregateExpression = aggregateDetectionSql(
+    sql.raw("hs.source_payload"),
+    sql.raw("i.name"),
+    sql.raw("coalesce(hs.source_payload->>'sourceSheet', '')"),
+  );
+  const assetClassFilter = assetClass
+    ? sql`and i.asset_class = ${assetClass}`
+    : sql``;
   const sourceCte =
     mode === "current"
       ? sql`latest_group_rows`
@@ -170,6 +183,7 @@ async function latestCurrentHoldingRows(
       inner join accounts a on a.id = hs.account_id
       inner join instruments i on i.id = hs.instrument_id
       where hs.household_id = ${ctx.membership.householdId}
+        ${assetClassFilter}
     ),
     snapshot_groups_with_details as (
       select distinct "assetClass"
@@ -190,13 +204,7 @@ async function latestCurrentHoldingRows(
         or not exists (
           select 1
           from snapshot_groups_with_details details
-          where details."assetClass" = base."assetClass"
-            and details."accountId" = base."accountId"
-            and details."accountName" = base."accountName"
-            and details."provider" = base."provider"
-            and details."currency" = base."currency"
-            and details."sourceSheet" = base."sourceSheet"
-            and details."snapshotDate" = base."snapshotDate"
+          where ${aggregateSnapshotGroupMatchSql(sql.raw("details"), sql.raw("base"))}
         )
     ),
     latest_group_dates as (

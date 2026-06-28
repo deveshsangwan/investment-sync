@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import {
   findHeaderRow,
+  INVESTMENT_PORTFOLIO_SUMMARY_SHEET,
   objectFromRow,
   parseNumber,
   parseRequiredNumber,
@@ -142,7 +143,7 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
       bookSheets: true,
     });
     const expectedSheets = [
-      "Investment Portfolio",
+      INVESTMENT_PORTFOLIO_SUMMARY_SHEET,
       "Stock Investments",
       "Mutual Funds",
       "NPS",
@@ -163,7 +164,7 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   },
   parse(file: ImportFile): ParseResult {
     const workbook = createWorkbookContext(file);
-    const rows = workbookRows(workbook, "Investment Portfolio");
+    const rows = workbookRows(workbook, INVESTMENT_PORTFOLIO_SUMMARY_SHEET);
     const headerRow = findHeaderRow(rows, [
       "Date",
       "Asset Type",
@@ -193,7 +194,7 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
               currentValue: parseRequiredNumber(record["current value"]),
               pnlAmount: parseNumber(record["gain/loss"]),
               currency: "INR" as const,
-              metadata: { sourceSheet: "Investment Portfolio" },
+              metadata: { sourceSheet: INVESTMENT_PORTFOLIO_SUMMARY_SHEET },
             },
           ];
         }

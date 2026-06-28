@@ -18,12 +18,17 @@ import {
 } from "./latest-holdings";
 import { toPerformanceValuation } from "./performance";
 import {
+  buildPortfolioSummary,
+  buildPortfolioSummaryFromSnapshot,
+} from "./summary";
+import {
+  aggregateSnapshotTotalsByDate,
   convertToInr,
-  filterAggregateRowsBySnapshotGroup,
+  enrichHoldingWithInr,
+  enrichHoldingWithInrAndXirr,
   getUsdInrRateIfNeeded,
   holdingCashFlowKey,
   holdingPositionKey,
-  holdingSnapshotKey,
   parseDate,
   roundMoney,
   roundPercent,
@@ -32,7 +37,6 @@ import {
 } from "./utils";
 import type {
   AssetClass,
-  CurrentHoldingRow,
   InstrumentTransactionRow,
   PortfolioContext,
   SnapshotValuationRow,
@@ -42,62 +46,54 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
   const selected = await holdingById(ctx, id);
   if (!selected) return null;
 
-  const history = await holdingHistory(ctx, selected);
-  const latestHoldings = await latestCurrentHoldings(ctx);
+  const [history, latestHoldings, transactionsForHolding] = await Promise.all([
+    holdingHistory(ctx, selected),
+    latestCurrentHoldings(ctx),
+    ctx.db
+      .select({
+        id: transactions.id,
+        tradeDate: transactions.tradeDate,
+        type: transactions.type,
+        quantity: transactions.quantity,
+        price: transactions.price,
+        amount: transactions.amount,
+        currency: transactions.currency,
+        notes: transactions.notes,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.householdId, ctx.membership.householdId),
+          eq(transactions.accountId, selected.accountId),
+          eq(transactions.instrumentId, selected.instrumentId),
+        ),
+      )
+      .orderBy(transactions.tradeDate),
+  ]);
   const latest = latestHoldingForSelection(selected, history) ?? selected;
   const usdInrRate = await getUsdInrRateIfNeeded(
     [selected.currency, ...latestHoldings.map((holding) => holding.currency)],
     ctx.db,
   );
-  const portfolioCurrentValue = sum(
-    latestHoldings.map((holding) =>
-      convertToInr(
-        Number(holding.currentValue),
-        holding.currency,
-        usdInrRate?.rate,
-      ),
-    ),
+  const portfolioSummary = buildPortfolioSummaryFromSnapshot(
+    latestHoldings,
+    usdInrRate?.rate,
+    usdInrRate ? [usdInrRate] : [],
   );
-  const portfolioPnl = sum(
-    latestHoldings.map((holding) =>
-      convertToInr(
-        Number(holding.pnlAmount ?? 0),
-        holding.currency,
-        usdInrRate?.rate,
-      ),
-    ),
-  );
-  const latestCurrentValueInInr = convertToInr(
-    Number(latest.currentValue),
-    latest.currency,
+  const portfolioCurrentValue = portfolioSummary.currentValue;
+  const portfolioPnl = portfolioSummary.pnlAmount;
+  const enrichedLatest = enrichHoldingWithInr(
+    {
+      ...latest,
+      instrumentName: selected.instrumentName,
+      symbol: selected.symbol,
+      assetClass: selected.assetClass,
+    },
     usdInrRate?.rate,
   );
-  const latestPnlInInr = convertToInr(
-    Number(latest.pnlAmount ?? 0),
-    latest.currency,
-    usdInrRate?.rate,
-  );
+  const latestCurrentValueInInr = enrichedLatest.currentValueInInr;
+  const latestPnlInInr = enrichedLatest.pnlAmountInInr ?? 0;
   const isCurrent = latestHoldings.some((holding) => holding.id === latest.id);
-  const transactionsForHolding = await ctx.db
-    .select({
-      id: transactions.id,
-      tradeDate: transactions.tradeDate,
-      type: transactions.type,
-      quantity: transactions.quantity,
-      price: transactions.price,
-      amount: transactions.amount,
-      currency: transactions.currency,
-      notes: transactions.notes,
-    })
-    .from(transactions)
-    .where(
-      and(
-        eq(transactions.householdId, ctx.membership.householdId),
-        eq(transactions.accountId, selected.accountId),
-        eq(transactions.instrumentId, selected.instrumentId),
-      ),
-    )
-    .orderBy(transactions.tradeDate);
 
   const sourceXirr = sourceXirrFromPayload(latest.sourcePayload);
   const holdingValuations = history.map((point) =>
@@ -135,12 +131,8 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
       xirrDataQuality: resolvedXirr.dataQuality,
       isCurrent,
       currentValueInInr: latestCurrentValueInInr,
-      investedAmountInInr: convertToInr(
-        Number(latest.investedAmount),
-        latest.currency,
-        usdInrRate?.rate,
-      ),
-      pnlAmountInInr: latestPnlInInr,
+      investedAmountInInr: enrichedLatest.investedAmountInInr,
+      pnlAmountInInr: enrichedLatest.pnlAmountInInr,
       portfolioWeight:
         portfolioCurrentValue === 0
           ? 0
@@ -152,24 +144,24 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
           ? 0
           : roundPercent((latestPnlInInr / portfolioPnl) * 100),
     },
-    history: history.map((point) => ({
-      ...point,
-      currentValueInInr: convertToInr(
-        Number(point.currentValue),
-        point.currency,
+    history: history.map((point) => {
+      const enriched = enrichHoldingWithInr(
+        {
+          ...point,
+          instrumentName: selected.instrumentName,
+          symbol: selected.symbol,
+          assetClass: selected.assetClass,
+        },
         usdInrRate?.rate,
-      ),
-      investedAmountInInr: convertToInr(
-        Number(point.investedAmount),
-        point.currency,
-        usdInrRate?.rate,
-      ),
-      pnlAmountInInr: convertToInr(
-        Number(point.pnlAmount ?? 0),
-        point.currency,
-        usdInrRate?.rate,
-      ),
-    })),
+      );
+
+      return {
+        ...point,
+        currentValueInInr: enriched.currentValueInInr,
+        investedAmountInInr: enriched.investedAmountInInr,
+        pnlAmountInInr: enriched.pnlAmountInInr ?? 0,
+      };
+    }),
     transactions: transactionsForHolding.map((transaction) => ({
       ...transaction,
       amount: Number(transaction.amount).toString(),
@@ -181,31 +173,30 @@ export async function buildAssetClassDetail(
   ctx: PortfolioContext,
   assetClass: AssetClass,
 ) {
-  const [latestHoldings, exitedHoldings, assetClassSnapshots] =
-    await Promise.all([
-      latestCurrentHoldings(ctx),
-      exitedCurrentHoldings(ctx),
-      assetClassSnapshotRows(ctx, assetClass),
-    ]);
+  const [
+    assetHoldingsRaw,
+    assetExitedRaw,
+    assetClassSnapshots,
+    portfolioSummary,
+  ] = await Promise.all([
+    latestCurrentHoldings(ctx, assetClass),
+    exitedCurrentHoldings(ctx, assetClass),
+    assetClassSnapshotRows(ctx, assetClass),
+    buildPortfolioSummary(ctx),
+  ]);
   const usdInrRate = await getUsdInrRateIfNeeded(
     [
-      ...latestHoldings.map((holding) => holding.currency),
-      ...exitedHoldings.map((holding) => holding.currency),
+      ...assetHoldingsRaw.map((holding) => holding.currency),
+      ...assetExitedRaw.map((holding) => holding.currency),
       ...assetClassSnapshots.map((row) => row.currency),
     ],
     ctx.db,
   );
-  const converted = latestHoldings.map((holding) =>
-    convertHolding(holding, usdInrRate?.rate),
-  );
-  const convertedExited = exitedHoldings.map((holding) =>
-    convertHolding(holding, usdInrRate?.rate),
-  );
-  const assetHoldings = converted
-    .filter((holding) => holding.assetClass === assetClass)
+  const assetHoldings = assetHoldingsRaw
+    .map((holding) => enrichHoldingWithInrAndXirr(holding, usdInrRate?.rate))
     .sort((a, b) => b.currentValueInInr - a.currentValueInInr);
-  const assetExitedHoldings = convertedExited
-    .filter((holding) => holding.assetClass === assetClass)
+  const assetExitedHoldings = assetExitedRaw
+    .map((holding) => enrichHoldingWithInrAndXirr(holding, usdInrRate?.rate))
     .sort((a, b) => b.snapshotDate.localeCompare(a.snapshotDate));
   const totalCurrentValue = sum(
     assetHoldings.map((holding) => holding.currentValueInInr),
@@ -214,19 +205,17 @@ export async function buildAssetClassDetail(
     assetHoldings.map((holding) => holding.investedAmountInInr),
   );
   const totalPnlAmount = sum(
-    assetHoldings.map((holding) => holding.pnlAmountInInr),
+    assetHoldings.map((holding) => holding.pnlAmountInInr ?? 0),
   );
-  const portfolioCurrentValue = sum(
-    converted.map((holding) => holding.currentValueInInr),
+  const portfolioCurrentValue = portfolioSummary.currentValue;
+  const assetClassValuations = valuationsFromSnapshotRows(
+    assetClassSnapshots,
+    usdInrRate?.rate,
   );
-  const [transactionsByHolding, historyByHolding, assetClassValuations] =
-    await Promise.all([
-      transactionsByHoldingPositions(ctx, assetHoldings),
-      historyByHoldingPositions(ctx, assetHoldings),
-      Promise.resolve(
-        valuationsFromSnapshotRows(assetClassSnapshots, usdInrRate?.rate),
-      ),
-    ]);
+  const [transactionsByHolding, historyByHolding] = await Promise.all([
+    transactionsByHoldingPositions(ctx, assetHoldings),
+    historyByHoldingPositions(ctx, assetHoldings),
+  ]);
   const assetClassXirr = resolveAssetClassXirr({
     holdings: assetHoldings.map((holding) => ({
       assetClass: holding.assetClass,
@@ -285,7 +274,7 @@ export async function buildAssetClassDetail(
 }
 
 function resolvePositionXirr(
-  holding: ReturnType<typeof convertHolding>,
+  holding: ReturnType<typeof enrichHoldingWithInrAndXirr>,
   historyByHolding: Map<string, SnapshotValuationRow[]>,
   transactionsByHolding: Map<string, InstrumentTransactionRow[]>,
   usdInrRate?: number,
@@ -315,28 +304,6 @@ function resolvePositionXirr(
   });
 }
 
-function convertHolding(holding: CurrentHoldingRow, usdInrRate?: number) {
-  return {
-    ...holding,
-    currentValueInInr: convertToInr(
-      Number(holding.currentValue),
-      holding.currency,
-      usdInrRate,
-    ),
-    investedAmountInInr: convertToInr(
-      Number(holding.investedAmount),
-      holding.currency,
-      usdInrRate,
-    ),
-    pnlAmountInInr: convertToInr(
-      Number(holding.pnlAmount ?? 0),
-      holding.currency,
-      usdInrRate,
-    ),
-    sourceXirr: sourceXirrFromPayload(holding.sourcePayload),
-  };
-}
-
 function latestHoldingForSelection<
   T extends {
     snapshotDate: string;
@@ -351,40 +318,7 @@ function valuationsFromSnapshotRows(
   rows: SnapshotValuationRow[],
   usdInrRate?: number,
 ): PerformanceValuationInput[] {
-  const eligible = filterAggregateRowsBySnapshotGroup(rows);
-  const latestByPositionDate = new Map<string, SnapshotValuationRow>();
-
-  for (const row of eligible) {
-    latestByPositionDate.set(holdingSnapshotKey(row), row);
-  }
-
-  const totalsByDate = new Map<
-    string,
-    { investedAmount: number; currentValue: number }
-  >();
-
-  for (const row of latestByPositionDate.values()) {
-    const investedAmount = convertToInr(
-      Number(row.investedAmount),
-      row.currency,
-      usdInrRate,
-    );
-    const currentValue = convertToInr(
-      Number(row.currentValue),
-      row.currency,
-      usdInrRate,
-    );
-    const existing = totalsByDate.get(row.snapshotDate) ?? {
-      investedAmount: 0,
-      currentValue: 0,
-    };
-    totalsByDate.set(row.snapshotDate, {
-      investedAmount: existing.investedAmount + investedAmount,
-      currentValue: existing.currentValue + currentValue,
-    });
-  }
-
-  return [...totalsByDate.entries()]
+  return [...aggregateSnapshotTotalsByDate(rows, usdInrRate).entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([snapshotDate, totals]) => ({
       date: parseDate(snapshotDate) ?? new Date(snapshotDate),

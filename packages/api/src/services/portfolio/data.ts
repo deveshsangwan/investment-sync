@@ -8,12 +8,10 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { cachedPortfolioData } from "./cache";
 import {
-  convertToInr,
-  filterAggregateRowsBySnapshotGroup,
+  aggregateSnapshotTotalsByDate,
   getUsdInrRateIfNeeded,
   holdingCashFlowKey,
   holdingPositionKey,
-  holdingSnapshotKey,
   roundMoney,
 } from "./utils";
 import type {
@@ -87,41 +85,11 @@ async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
     .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
     .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
     .orderBy(holdingSnapshots.snapshotDate);
-  const eligibleRows = filterAggregateRowsBySnapshotGroup(rows);
   const usdInrRate = await getUsdInrRateIfNeeded(
-    eligibleRows.map((row) => row.currency),
+    rows.map((row) => row.currency),
     ctx.db,
   );
-  const latestBySnapshot = new Map<string, (typeof eligibleRows)[number]>();
-
-  for (const row of eligibleRows) {
-    latestBySnapshot.set(holdingSnapshotKey(row), row);
-  }
-
-  const totalsByDate = new Map<
-    string,
-    { investedAmount: number; currentValue: number }
-  >();
-  for (const row of latestBySnapshot.values()) {
-    const investedAmount = convertToInr(
-      Number(row.investedAmount),
-      row.currency,
-      usdInrRate?.rate,
-    );
-    const currentValue = convertToInr(
-      Number(row.currentValue),
-      row.currency,
-      usdInrRate?.rate,
-    );
-    const existing = totalsByDate.get(row.snapshotDate) ?? {
-      investedAmount: 0,
-      currentValue: 0,
-    };
-    totalsByDate.set(row.snapshotDate, {
-      investedAmount: existing.investedAmount + investedAmount,
-      currentValue: existing.currentValue + currentValue,
-    });
-  }
+  const totalsByDate = aggregateSnapshotTotalsByDate(rows, usdInrRate?.rate);
 
   return [...totalsByDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))

@@ -1,5 +1,7 @@
 import { parse } from "csv-parse/sync";
 
+export const INVESTMENT_PORTFOLIO_SUMMARY_SHEET = "Investment Portfolio";
+
 export function parseCsv(content: Buffer): string[][] {
   return parse(content.toString("utf8"), {
     bom: true,

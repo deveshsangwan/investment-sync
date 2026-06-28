@@ -5,9 +5,9 @@ import { protectedProcedure, router } from "../trpc";
 import {
   commitImport,
   createImportUpload,
-  dedupePortfolioData,
   processImport,
 } from "../services/import-service";
+import { dedupePortfolioData } from "../services/portfolio/dedupe";
 
 export const importsRouter = router({
   createUpload: protectedProcedure

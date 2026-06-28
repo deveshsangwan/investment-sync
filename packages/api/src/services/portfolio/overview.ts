@@ -3,15 +3,24 @@ import {
   holdingSnapshotTimelineRows,
   portfolioValuationRows,
 } from "./data";
-import { buildPortfolioHoldingsFromSnapshot } from "./holdings";
+import {
+  buildPortfolioHoldingsFromSnapshot,
+  buildPortfolioPerformanceFromSnapshot,
+  buildPortfolioSummaryFromSnapshot,
+  buildPortfolioTimelineFromValuations,
+} from "./from-snapshot";
+import { cachedPortfolioData } from "./cache";
 import { latestCurrentHoldings } from "./latest-holdings";
-import { buildPortfolioPerformanceFromSnapshot } from "./performance";
-import { buildPortfolioSummaryFromSnapshot } from "./summary";
-import { buildPortfolioTimelineFromValuations } from "./timeline";
 import { getUsdInrRateIfNeeded } from "./utils";
 import type { PortfolioContext } from "./types";
 
 export async function buildPortfolioOverview(ctx: PortfolioContext) {
+  return cachedPortfolioData(ctx, "portfolio.overview", () =>
+    buildPortfolioOverviewUncached(ctx),
+  );
+}
+
+async function buildPortfolioOverviewUncached(ctx: PortfolioContext) {
   const [latestHoldings, valuations, cashFlows] = await Promise.all([
     latestCurrentHoldings(ctx),
     portfolioValuationRows(ctx),

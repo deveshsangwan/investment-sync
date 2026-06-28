@@ -1,10 +1,22 @@
 import type { Database } from "@investment-sync/db";
 import { getUsdInrRate } from "../currency-rates";
-import type { Currency } from "./types";
+import { isAggregateHolding } from "./aggregates";
+import type { Currency, CurrentHoldingRow } from "./types";
 
-export const AGGREGATE_HOLDING_NAME_SUFFIX = " Summary";
-export const AGGREGATE_HOLDING_NAME_SQL_PATTERN = `%${AGGREGATE_HOLDING_NAME_SUFFIX.toLowerCase()}`;
-export const AGGREGATE_HOLDING_SOURCE_VALUE = "true";
+export type SnapshotAmountRow = {
+  accountId: string;
+  accountName?: string;
+  provider?: string;
+  instrumentId: string;
+  assetClass?: string;
+  currency: Currency;
+  sourceSheet?: string | null;
+  snapshotDate: string;
+  investedAmount: string | number;
+  currentValue: string | number;
+  instrumentName: string;
+  sourcePayload?: Record<string, unknown>;
+};
 
 export function parseDate(
   value: string | Date | null | undefined,
@@ -22,6 +34,7 @@ export async function getUsdInrRateIfNeeded(
   return currencies.includes("USD") ? getUsdInrRate(db) : undefined;
 }
 
+/** Returns 0 for USD when no rate is available; never passthrough USD as INR. */
 export function convertToInr(
   amount: number,
   currency: Currency,
@@ -29,8 +42,86 @@ export function convertToInr(
 ): number {
   if (!Number.isFinite(amount)) return 0;
   if (currency === "INR") return amount;
-  if (currency === "USD" && usdInrRate) return amount * usdInrRate;
+  if (currency === "USD") return usdInrRate ? amount * usdInrRate : 0;
   return amount;
+}
+
+export function enrichHoldingWithInr(
+  holding: CurrentHoldingRow,
+  usdInrRate?: number,
+) {
+  const pnlAmount =
+    holding.pnlAmount === null ? null : Number(holding.pnlAmount);
+
+  return {
+    ...holding,
+    currentValueInInr: convertToInr(
+      Number(holding.currentValue),
+      holding.currency,
+      usdInrRate,
+    ),
+    investedAmountInInr: convertToInr(
+      Number(holding.investedAmount),
+      holding.currency,
+      usdInrRate,
+    ),
+    pnlAmountInInr:
+      pnlAmount === null
+        ? null
+        : convertToInr(pnlAmount, holding.currency, usdInrRate),
+  };
+}
+
+export function enrichHoldingWithInrAndXirr(
+  holding: CurrentHoldingRow,
+  usdInrRate?: number,
+) {
+  return {
+    ...enrichHoldingWithInr(holding, usdInrRate),
+    sourceXirr: sourceXirrFromPayload(holding.sourcePayload),
+  };
+}
+
+export function aggregateSnapshotTotalsByDate<T extends SnapshotAmountRow>(
+  rows: T[],
+  usdInrRate?: number,
+): Map<string, { investedAmount: number; currentValue: number }> {
+  // ponytail: TS-side aggregate filter for timeline rows; explicit imports.dedupe handles DB cleanup.
+  const eligible = filterAggregateRowsBySnapshotGroup(rows);
+  const latestBySnapshot = new Map<string, T>();
+
+  // Duplicate position keys within eligible rows: last row wins (Map.set overwrite).
+  for (const row of eligible) {
+    latestBySnapshot.set(holdingSnapshotKey(row), row);
+  }
+
+  const totalsByDate = new Map<
+    string,
+    { investedAmount: number; currentValue: number }
+  >();
+
+  for (const row of latestBySnapshot.values()) {
+    const investedAmount = convertToInr(
+      Number(row.investedAmount),
+      row.currency,
+      usdInrRate,
+    );
+    const currentValue = convertToInr(
+      Number(row.currentValue),
+      row.currency,
+      usdInrRate,
+    );
+    const existing = totalsByDate.get(row.snapshotDate) ?? {
+      investedAmount: 0,
+      currentValue: 0,
+    };
+    totalsByDate.set(row.snapshotDate, {
+      investedAmount: existing.investedAmount + investedAmount,
+      currentValue: existing.currentValue + currentValue,
+    });
+  }
+
+  return totalsByDate;
 }
 
 export function sum(values: number[]): number {
@@ -46,27 +137,6 @@ export function roundMoney(value: number): number {
 
 export function roundPercent(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-export function isAggregateHolding(holding: {
-  instrumentName: string;
-  sourcePayload?: Record<string, unknown>;
-}) {
-  return (
-    isAggregatePayloadValue(holding.sourcePayload?.isAggregate) ||
-    holding.instrumentName
-      .trimEnd()
-      .toLowerCase()
-      .endsWith(AGGREGATE_HOLDING_NAME_SUFFIX.toLowerCase())
-  );
-}
-
-export function isAggregatePayloadValue(value: unknown) {
-  return (
-    value === true ||
-    (typeof value === "string" &&
-      value.trim().toLowerCase() === AGGREGATE_HOLDING_SOURCE_VALUE)
-  );
 }
 
 export function sourceXirrFromPayload(payload?: Record<string, unknown>) {
