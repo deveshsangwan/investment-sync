@@ -1,0 +1,33 @@
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_2d5b2ee90f2b30::t_40711377866e03 179
+  s_683a583cbad79c::t_b071b72db16cfb 34,174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "fc8047e96eb8fc1a019babd00f1b3081bd9ac8f6",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_2d5b2ee90f2b30": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "322422a2-3f86-456e-89d2-3386c13f3571",
+        "model": "composer-2.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    },
+    "s_683a583cbad79c": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "11981837-cd0c-4690-a91e-7d060e9b99a0",
+        "model": "composer-2.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
