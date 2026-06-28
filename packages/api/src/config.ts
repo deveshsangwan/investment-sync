@@ -1,13 +1,10 @@
 import { z } from "zod";
-
-export const MAX_IMPORT_FILE_SIZE_BYTES = 50 * 1024 * 1024;
-export const ALLOWED_IMPORT_EXTENSIONS = [".csv", ".xlsx"] as const;
-export const ALLOWED_IMPORT_MIME_TYPES = [
-  "text/csv",
-  "application/csv",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-] as const;
+export {
+  ALLOWED_IMPORT_EXTENSIONS,
+  ALLOWED_IMPORT_MIME_TYPES,
+  MAX_IMPORT_FILE_SIZE_BYTES,
+  validateImportFile,
+} from "@investment-sync/importers";
 
 const optionalString = z.preprocess(
   (value) => (value === "" ? undefined : value),
@@ -52,31 +49,4 @@ export function isDataConfigured(env: NodeJS.ProcessEnv = process.env) {
 
 export function getImportBucketName() {
   return getAppEnv().SUPABASE_IMPORT_BUCKET;
-}
-
-export function validateImportFile(input: {
-  fileName: string;
-  mimeType?: string;
-  sizeBytes: number;
-}) {
-  if (input.sizeBytes > MAX_IMPORT_FILE_SIZE_BYTES) {
-    throw new Error("Import files must be 50 MB or smaller");
-  }
-
-  const lowerName = input.fileName.toLowerCase();
-  const hasAllowedExtension = ALLOWED_IMPORT_EXTENSIONS.some((extension) =>
-    lowerName.endsWith(extension),
-  );
-  if (!hasAllowedExtension) {
-    throw new Error("Import files must be CSV or XLSX files");
-  }
-
-  if (
-    input.mimeType &&
-    !ALLOWED_IMPORT_MIME_TYPES.includes(
-      input.mimeType as (typeof ALLOWED_IMPORT_MIME_TYPES)[number],
-    )
-  ) {
-    throw new Error("Import file type is not supported");
-  }
 }

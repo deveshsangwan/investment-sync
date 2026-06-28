@@ -1,7 +1,10 @@
 import type { Database } from "@investment-sync/db";
 import { getUsdInrRate } from "../currency-rates";
+import type { Currency } from "./types";
 
-export type Currency = "INR" | "USD" | "BTC" | "ETH" | "OTHER";
+export const AGGREGATE_HOLDING_NAME_SUFFIX = " Summary";
+export const AGGREGATE_HOLDING_NAME_SQL_PATTERN = `%${AGGREGATE_HOLDING_NAME_SUFFIX.toLowerCase()}`;
+export const AGGREGATE_HOLDING_SOURCE_VALUE = "true";
 
 export function parseDate(
   value: string | Date | null | undefined,
@@ -50,8 +53,19 @@ export function isAggregateHolding(holding: {
   sourcePayload?: Record<string, unknown>;
 }) {
   return (
-    holding.sourcePayload?.isAggregate === true ||
-    holding.instrumentName.endsWith(" Summary")
+    isAggregatePayloadValue(holding.sourcePayload?.isAggregate) ||
+    holding.instrumentName
+      .trimEnd()
+      .toLowerCase()
+      .endsWith(AGGREGATE_HOLDING_NAME_SUFFIX.toLowerCase())
+  );
+}
+
+export function isAggregatePayloadValue(value: unknown) {
+  return (
+    value === true ||
+    (typeof value === "string" &&
+      value.trim().toLowerCase() === AGGREGATE_HOLDING_SOURCE_VALUE)
   );
 }
 

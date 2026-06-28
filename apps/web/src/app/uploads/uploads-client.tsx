@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getImportFileValidationError } from "@investment-sync/importers";
 import { FileSpreadsheet, UploadCloud } from "lucide-react";
 import { SetupRequired } from "@/components/dashboard-states";
 import {
@@ -17,8 +18,6 @@ import { formatDate } from "@/lib/format";
 import { trpc } from "../providers";
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
-const MAX_IMPORT_FILE_SIZE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_IMPORT_EXTENSIONS = [".csv", ".xlsx"];
 
 export function UploadsClient({
   isDataConfigured,
@@ -54,7 +53,11 @@ export function UploadsClient({
 
   const handleUpload = async () => {
     if (!file) return;
-    const validationError = validateSelectedFile(file);
+    const validationError = getImportFileValidationError({
+      fileName: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+    });
     if (validationError) {
       setStatus("error");
       setFileError(validationError);
@@ -127,7 +130,11 @@ export function UploadsClient({
       return;
     }
 
-    const validationError = validateSelectedFile(selectedFile);
+    const validationError = getImportFileValidationError({
+      fileName: selectedFile.name,
+      mimeType: selectedFile.type,
+      sizeBytes: selectedFile.size,
+    });
     setFileError(validationError);
     if (validationError) {
       setStatus("error");
@@ -251,21 +258,4 @@ export function UploadsClient({
       </SectionCard>
     </PageShell>
   );
-}
-
-function validateSelectedFile(file: File): string | null {
-  if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
-    return "Import files must be 50 MB or smaller.";
-  }
-
-  const lowerName = file.name.toLowerCase();
-  if (
-    !ALLOWED_IMPORT_EXTENSIONS.some((extension) =>
-      lowerName.endsWith(extension),
-    )
-  ) {
-    return "Import files must be CSV or XLSX files.";
-  }
-
-  return null;
 }

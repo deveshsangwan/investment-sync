@@ -1,5 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import {
   accounts,
   holdingSnapshots,
@@ -16,16 +27,28 @@ import {
   type ImportFile,
   type NormalizedHoldingRow,
   type NormalizedImportRow,
-  type NormalizedTransactionRow,
-  type NormalizedValuationRow,
 } from "@investment-sync/importers";
 import { getImportBucketName, validateImportFile } from "../config";
 import type { ApiContext } from "../context";
 import type { MembershipContext } from "./membership";
 import { clearHouseholdPortfolioCache } from "./portfolio-cache";
+import {
+  accountIdentityKey,
+  instrumentIdentity,
+  instrumentIdentityKey,
+  type InstrumentIdentity,
+} from "./portfolio/identity";
+import {
+  AGGREGATE_HOLDING_NAME_SQL_PATTERN,
+  AGGREGATE_HOLDING_SOURCE_VALUE,
+} from "./portfolio/utils";
 
 const IMPORT_TTL_DAYS = 30;
 const CLEANUP_BATCH_SIZE = 100;
+type ImportDatabase = Pick<
+  Database,
+  "execute" | "insert" | "select" | "update"
+>;
 
 async function ensureImportBucket(ctx: ApiContext) {
   const bucket = getImportBucketName();
@@ -233,10 +256,8 @@ export async function commitImport(
   membership: MembershipContext,
   importBatchId: string,
 ) {
-  clearHouseholdPortfolioCache(membership.householdId);
-
   const committed = await ctx.db.transaction(async (tx) => {
-    const db = tx as Database;
+    const db: ImportDatabase = tx;
     const batchRows = await db
       .select({ id: importRows.id, payload: importRows.normalizedPayload })
       .from(importRows)
@@ -252,9 +273,15 @@ export async function commitImport(
       id: row.id,
       payload: normalizedImportRowSchema.parse(row.payload),
     }));
-    const accountRows = parsedRows
-      .map((row) => row.payload)
-      .filter(isAccountImportRow);
+    const accountRows: AccountImportRow[] = [];
+    for (const row of parsedRows) {
+      if (
+        row.payload.kind === "holding" ||
+        row.payload.kind === "transaction"
+      ) {
+        accountRows.push(row.payload);
+      }
+    }
     const accountIds = await ensureAccounts(
       db,
       membership.householdId,
@@ -262,29 +289,34 @@ export async function commitImport(
     );
     const instrumentIds = await ensureInstruments(db, accountRows);
 
-    const holdingValues = parsedRows
-      .filter((row): row is ImportRowWithPayload<NormalizedHoldingRow> =>
-        isHoldingRow(row.payload),
-      )
-      .map(({ payload }) => ({
-        householdId: membership.householdId,
-        accountId: requiredMapValue(accountIds, accountKey(payload), "account"),
-        instrumentId: requiredMapValue(
-          instrumentIds,
-          instrumentKey(payload),
-          "instrument",
-        ),
-        importBatchId,
-        snapshotDate:
-          payload.sourceDate ?? new Date().toISOString().slice(0, 10),
-        quantity: payload.quantity?.toString(),
-        investedAmount: payload.investedAmount.toString(),
-        currentValue: payload.currentValue.toString(),
-        pnlAmount: payload.pnlAmount?.toString(),
-        pnlPercent: payload.pnlPercent?.toString(),
-        currency: payload.currency,
-        sourcePayload: payload.metadata,
-      }));
+    const holdingValues = parsedRows.flatMap(({ payload }) => {
+      if (payload.kind !== "holding") return [];
+      return [
+        {
+          householdId: membership.householdId,
+          accountId: requiredMapValue(
+            accountIds,
+            accountKey(payload),
+            "account",
+          ),
+          instrumentId: requiredMapValue(
+            instrumentIds,
+            instrumentKey(payload),
+            "instrument",
+          ),
+          importBatchId,
+          snapshotDate:
+            payload.sourceDate ?? new Date().toISOString().slice(0, 10),
+          quantity: payload.quantity?.toString(),
+          investedAmount: payload.investedAmount.toString(),
+          currentValue: payload.currentValue.toString(),
+          pnlAmount: payload.pnlAmount?.toString(),
+          pnlPercent: payload.pnlPercent?.toString(),
+          currency: payload.currency,
+          sourcePayload: payload.metadata,
+        },
+      ];
+    });
 
     if (holdingValues.length > 0) {
       await db
@@ -310,27 +342,32 @@ export async function commitImport(
         });
     }
 
-    const transactionValues = parsedRows
-      .filter((row): row is ImportRowWithPayload<NormalizedTransactionRow> =>
-        isTransactionRow(row.payload),
-      )
-      .map(({ payload }) => ({
-        householdId: membership.householdId,
-        accountId: requiredMapValue(accountIds, accountKey(payload), "account"),
-        instrumentId: requiredMapValue(
-          instrumentIds,
-          instrumentKey(payload),
-          "instrument",
-        ),
-        importBatchId,
-        type: payload.type,
-        tradeDate: payload.tradeDate,
-        quantity: payload.quantity?.toString(),
-        price: payload.price?.toString(),
-        amount: payload.amount.toString(),
-        currency: payload.currency,
-        metadata: payload.metadata,
-      }));
+    const transactionValues = parsedRows.flatMap(({ payload }) => {
+      if (payload.kind !== "transaction") return [];
+      return [
+        {
+          householdId: membership.householdId,
+          accountId: requiredMapValue(
+            accountIds,
+            accountKey(payload),
+            "account",
+          ),
+          instrumentId: requiredMapValue(
+            instrumentIds,
+            instrumentKey(payload),
+            "instrument",
+          ),
+          importBatchId,
+          type: payload.type,
+          tradeDate: payload.tradeDate,
+          quantity: payload.quantity?.toString(),
+          price: payload.price?.toString(),
+          amount: payload.amount.toString(),
+          currency: payload.currency,
+          metadata: payload.metadata,
+        },
+      ];
+    });
 
     if (transactionValues.length > 0) {
       await db
@@ -355,21 +392,22 @@ export async function commitImport(
         });
     }
 
-    const valuationValues = parsedRows
-      .filter((row): row is ImportRowWithPayload<NormalizedValuationRow> =>
-        isValuationRow(row.payload),
-      )
-      .map(({ payload }) => ({
-        householdId: membership.householdId,
-        valuationDate: payload.valuationDate,
-        investedAmount: payload.investedAmount.toString(),
-        currentValue: payload.currentValue.toString(),
-        pnlAmount: (
-          payload.pnlAmount ?? payload.currentValue - payload.investedAmount
-        ).toString(),
-        currency: payload.currency,
-        metadata: payload.metadata,
-      }));
+    const valuationValues = parsedRows.flatMap(({ payload }) => {
+      if (payload.kind !== "valuation") return [];
+      return [
+        {
+          householdId: membership.householdId,
+          valuationDate: payload.valuationDate,
+          investedAmount: payload.investedAmount.toString(),
+          currentValue: payload.currentValue.toString(),
+          pnlAmount: (
+            payload.pnlAmount ?? payload.currentValue - payload.investedAmount
+          ).toString(),
+          currency: payload.currency,
+          metadata: payload.metadata,
+        },
+      ];
+    });
 
     if (valuationValues.length > 0) {
       await db
@@ -469,9 +507,9 @@ export async function dedupePortfolioData(
     where ${holdingSnapshots.instrumentId} = ${instruments.id}
       and ${holdingSnapshots.householdId} = ${membership.householdId}
       and (
-        ${holdingSnapshots.sourcePayload}->>'isAggregate' = 'true'
+        lower(coalesce(${holdingSnapshots.sourcePayload}->>'isAggregate', '')) = ${AGGREGATE_HOLDING_SOURCE_VALUE}
         or ${holdingSnapshots.sourcePayload}->>'sourceSheet' = 'Investment Portfolio'
-        or ${instruments.name} ilike '% Summary'
+        or lower(rtrim(${instruments.name})) like ${AGGREGATE_HOLDING_NAME_SQL_PATTERN}
       )
     returning ${holdingSnapshots.id}
   `);
@@ -589,42 +627,14 @@ export async function dedupePortfolioData(
   };
 }
 
-function isHoldingRow(value: unknown): value is NormalizedHoldingRow {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    (value as NormalizedHoldingRow).kind === "holding",
-  );
-}
-
-function isTransactionRow(value: unknown): value is NormalizedTransactionRow {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    (value as NormalizedTransactionRow).kind === "transaction",
-  );
-}
-
-function isValuationRow(value: unknown): value is NormalizedValuationRow {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    (value as NormalizedValuationRow).kind === "valuation",
-  );
-}
-
 type AccountImportRow = NormalizedHoldingRow | NormalizedTransactionRow;
-type ImportRowWithPayload<T extends NormalizedImportRow> = {
-  id: string;
-  payload: T;
-};
-
-function isAccountImportRow(row: NormalizedImportRow): row is AccountImportRow {
-  return row.kind === "holding" || row.kind === "transaction";
-}
+type NormalizedTransactionRow = Extract<
+  NormalizedImportRow,
+  { kind: "transaction" }
+>;
 
 async function ensureAccounts(
-  db: Database,
+  db: ImportDatabase,
   householdId: string,
   rows: AccountImportRow[],
 ): Promise<Map<string, string>> {
@@ -680,9 +690,22 @@ async function ensureAccounts(
 }
 
 async function ensureInstruments(
-  db: Database,
+  db: ImportDatabase,
   rows: AccountImportRow[],
 ): Promise<Map<string, string>> {
+  const identities = uniqueByKey(
+    rows.map((row) =>
+      instrumentIdentity({
+        assetClass: row.assetClass,
+        currency: row.currency,
+        symbol: row.symbol ?? null,
+        name: row.instrumentName,
+      }),
+    ),
+    (identity) => identity.key,
+  );
+  if (identities.length === 0) return new Map();
+
   const existing = await db
     .select({
       id: instruments.id,
@@ -692,6 +715,7 @@ async function ensureInstruments(
       currency: instruments.currency,
     })
     .from(instruments)
+    .where(instrumentIdentityWhere(identities))
     .orderBy(asc(instruments.createdAt), asc(instruments.id));
   const existingByKey = new Map(
     existing.map((instrument) => [
@@ -719,7 +743,7 @@ async function ensureInstruments(
       .onConflictDoNothing();
   }
 
-  const allInstruments = await db
+  const batchInstruments = await db
     .select({
       id: instruments.id,
       name: instruments.name,
@@ -728,9 +752,10 @@ async function ensureInstruments(
       currency: instruments.currency,
     })
     .from(instruments)
+    .where(instrumentIdentityWhere(identities))
     .orderBy(asc(instruments.createdAt), asc(instruments.id));
   const ids = new Map(
-    allInstruments.map((instrument) => [
+    batchInstruments.map((instrument) => [
       instrumentIdentityKey(instrument),
       instrument.id,
     ]),
@@ -749,10 +774,6 @@ function accountKey(row: AccountImportRow): string {
   });
 }
 
-function accountIdentityKey(value: { provider: string; name: string }) {
-  return `${normalizeText(value.provider)}|${normalizeText(value.name)}`;
-}
-
 function instrumentKey(row: AccountImportRow): string {
   return instrumentIdentityKey({
     assetClass: row.assetClass,
@@ -762,24 +783,25 @@ function instrumentKey(row: AccountImportRow): string {
   });
 }
 
-function instrumentIdentityKey(value: {
-  assetClass: string;
-  currency: string;
-  symbol: string | null;
-  name: string;
-}) {
-  const identity = value.symbol
-    ? `symbol:${normalizeSymbol(value.symbol)}`
-    : `name:${normalizeText(value.name)}`;
-  return `${value.assetClass}|${value.currency}|${identity}`;
-}
+function instrumentIdentityWhere(identities: InstrumentIdentity[]): SQL {
+  const conditions = identities
+    .map((identity) => {
+      const identityCondition = identity.symbol
+        ? eq(sql<string>`upper(${instruments.symbol})`, identity.symbol)
+        : and(
+            isNull(instruments.symbol),
+            eq(sql<string>`lower(${instruments.name})`, identity.name),
+          );
 
-function normalizeText(value: string): string {
-  return value.trim().toLowerCase();
-}
+      return and(
+        eq(instruments.assetClass, identity.assetClass),
+        eq(instruments.currency, identity.currency),
+        identityCondition,
+      );
+    })
+    .filter((condition): condition is SQL => Boolean(condition));
 
-function normalizeSymbol(value: string): string {
-  return value.trim().toUpperCase();
+  return or(...conditions) ?? sql`false`;
 }
 
 function uniqueByKey<T>(rows: T[], keyFor: (row: T) => string): T[] {

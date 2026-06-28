@@ -48,19 +48,90 @@ describeDb("import service integration", () => {
     expect(batch?.status).toBe("committed");
 
     const caller = appRouter.createCaller(ctx);
-    const [holdings, summary, overview] = await Promise.all([
-      caller.portfolio.holdings(),
-      caller.portfolio.summary(),
-      caller.portfolio.overview(),
-    ]);
+    const [holdings, summary, performance, timeline, overview] =
+      await Promise.all([
+        caller.portfolio.holdings(),
+        caller.portfolio.summary(),
+        caller.portfolio.performance(),
+        caller.portfolio.timeline(),
+        caller.portfolio.overview(),
+      ]);
 
     expect(holdings).toHaveLength(1);
     expect(summary.currentValue).toBe(125);
     expect(overview.holdings).toEqual(holdings);
     expect(overview.summary).toEqual(summary);
+    expect(overview.performance).toEqual(performance);
+    expect(overview.timeline).toEqual(timeline);
   });
 
-  async function createFixture() {
+  it("keeps dashboard and asset-class holdings aligned for aggregate edges", async () => {
+    if (!db) throw new Error("TEST_DATABASE_URL is required");
+    const fixture = await createFixture([
+      holdingRow({
+        instrumentName: "Foo",
+        symbol: "FOO",
+        currentValue: 100,
+      }),
+      holdingRow({
+        instrumentName: "Foo Summary",
+        symbol: "FOO_SUMMARY",
+        currentValue: 999,
+      }),
+      holdingRow({
+        instrumentName: "Something Summary Extra",
+        symbol: "SUM_EXTRA",
+        currentValue: 200,
+      }),
+      holdingRow({
+        instrumentName: "Boolean Aggregate",
+        symbol: "BOOL_AGG",
+        currentValue: 300,
+        metadata: { isAggregate: true },
+      }),
+      holdingRow({
+        instrumentName: "String Aggregate",
+        symbol: "STRING_AGG",
+        currentValue: 400,
+        metadata: { isAggregate: "true" },
+      }),
+    ]);
+    const ctx = createApiContext({
+      auth: { userId: fixture.clerkUserId, email: fixture.email },
+      db,
+      supabase: {} as ApiContext["supabase"],
+    });
+
+    const result = await commitImport(ctx, fixture.membership, fixture.batchId);
+    expect(result.committed).toBe(5);
+
+    const caller = appRouter.createCaller(ctx);
+    const [holdings, assetClassDetail] = await Promise.all([
+      caller.portfolio.holdings(),
+      caller.portfolio.assetClassDetail({ assetClass: "indian_stock" }),
+    ]);
+
+    expect(holdings.map((holding) => holding.instrumentName)).toEqual([
+      "Something Summary Extra",
+      "Foo",
+    ]);
+    expect(
+      assetClassDetail.holdings.map((holding) => holding.instrumentName),
+    ).toEqual(holdings.map((holding) => holding.instrumentName));
+    expect(
+      holdings.some((holding) => holding.instrumentName === "Foo Summary"),
+    ).toBe(false);
+    expect(
+      holdings.some(
+        (holding) => holding.instrumentName === "Boolean Aggregate",
+      ),
+    ).toBe(false);
+    expect(
+      holdings.some((holding) => holding.instrumentName === "String Aggregate"),
+    ).toBe(false);
+  });
+
+  async function createFixture(rows = [holdingRow()]) {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const appUserId = randomUUID();
     const householdId = randomUUID();
@@ -92,25 +163,13 @@ describeDb("import service integration", () => {
       expiresAt: new Date(Date.now() + 86_400_000),
       status: "parsed",
     });
-    await db.insert(importRows).values({
-      importBatchId: batchId,
-      rowNumber: 1,
-      normalizedPayload: {
-        kind: "holding",
-        sourceType: "tickertape_stock_csv",
-        sourceDate: "2026-06-16",
-        accountName: "Indian Stocks",
-        provider: "Tickertape",
-        instrumentName: "ABC",
-        symbol: "ABC",
-        assetClass: "indian_stock",
-        currency: "INR",
-        quantity: 1,
-        investedAmount: 100,
-        currentValue: 125,
-        metadata: {},
-      },
-    });
+    await db.insert(importRows).values(
+      rows.map((normalizedPayload, index) => ({
+        importBatchId: batchId,
+        rowNumber: index + 1,
+        normalizedPayload,
+      })),
+    );
 
     return {
       batchId,
@@ -125,3 +184,28 @@ describeDb("import service integration", () => {
     };
   }
 });
+
+function holdingRow(
+  overrides: Partial<{
+    instrumentName: string;
+    symbol: string;
+    currentValue: number;
+    metadata: Record<string, unknown>;
+  }> = {},
+) {
+  return {
+    kind: "holding",
+    sourceType: "tickertape_stock_csv",
+    sourceDate: "2026-06-16",
+    accountName: "Indian Stocks",
+    provider: "Tickertape",
+    instrumentName: overrides.instrumentName ?? "ABC",
+    symbol: overrides.symbol ?? "ABC",
+    assetClass: "indian_stock",
+    currency: "INR",
+    quantity: 1,
+    investedAmount: 100,
+    currentValue: overrides.currentValue ?? 125,
+    metadata: overrides.metadata ?? {},
+  };
+}
