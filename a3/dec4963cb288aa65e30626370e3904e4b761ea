@@ -1,0 +1,136 @@
+packages/api/src/services/portfolio/performance.ts
+  s_683a583cbad79c::t_dbbda3d649cf8a 3,5,8
+  s_2d5b2ee90f2b30::t_c78031f377d764 1
+  s_2d5b2ee90f2b30::t_298f12fd793dc6 6
+packages/api/src/services/portfolio/latest-holdings.ts
+  s_683a583cbad79c::t_b12359a3371061 186
+  s_683a583cbad79c::t_943d7268c849f7 41,43-47,53,55-59
+  s_683a583cbad79c::t_49b8de997c9c0f 11-13
+  s_683a583cbad79c::t_e10dd1192cd434 15
+  s_683a583cbad79c::t_96c6e6cb61dcff 141,148-150
+  s_683a583cbad79c::t_2bdda256013d8b 207
+  s_2d5b2ee90f2b30::t_87903b20186019 143-147
+  s_683a583cbad79c::t_9a02182670c440 14
+packages/api/src/routers/imports.ts
+  s_683a583cbad79c::t_efd0e7bd37fc6b 10
+packages/api/src/services/portfolio/dedupe.ts
+  s_2d5b2ee90f2b30::t_35fb46704be90e 20-59,67-68
+  s_2d5b2ee90f2b30::t_1349b2b0404c68 1-10,12-19,69-182
+  s_7e361fdd86bf08::t_131cc9f27798b8 11,60-66
+packages/api/src/services/portfolio/holdings.ts
+  s_2d5b2ee90f2b30::t_09e2d6eeef8535 4
+  s_683a583cbad79c::t_a264ed05b90e91 1,3,6
+packages/importers/src/xlsx.ts
+  s_2d5b2ee90f2b30::t_b0504bef6ec590 167
+  s_2d5b2ee90f2b30::t_5522de92709f88 146
+  s_2d5b2ee90f2b30::t_fffe65d24fd9f8 13
+  s_2d5b2ee90f2b30::t_cfc6cb983457c7 197
+packages/api/src/services/portfolio/timeline.ts
+  s_2d5b2ee90f2b30::t_72055581db5643 3
+  s_683a583cbad79c::t_0227495e743a68 2,5
+packages/api/src/services/portfolio/from-snapshot.ts
+  s_2d5b2ee90f2b30::t_43d2e6114e5682 1-2,4-124
+  s_2d5b2ee90f2b30::t_3142c8070c33d1 3
+packages/api/src/services/portfolio/summary.ts
+  s_2d5b2ee90f2b30::t_cd35bf536978b2 4
+  s_683a583cbad79c::t_d2823eb35ecb87 1,3,6
+packages/importers/src/utils.ts
+  s_2d5b2ee90f2b30::t_b615447beadd3a 3-4
+packages/api/src/services/portfolio/overview.ts
+  s_2d5b2ee90f2b30::t_78c7dda55b0b46 6-11
+  s_2d5b2ee90f2b30::t_3f704159f49793 12,18-23
+packages/api/src/services/portfolio/utils.ts
+  s_2d5b2ee90f2b30::t_80c272b767cd21 37,45
+  s_2d5b2ee90f2b30::t_5c7895d856e6c0 68-81
+  s_2d5b2ee90f2b30::t_4b8218ecffbeb2 49-67,82-88,90-92,94-125
+  s_53892c856a84fd::t_4bd63df4c55694 89
+  s_2d5b2ee90f2b30::t_7f37ea3819fb94 93
+  s_2d5b2ee90f2b30::t_054f58d27d9ed4 4,6-19
+  s_2d5b2ee90f2b30::t_4cbf74bd604ca6 3
+  s_2d5b2ee90f2b30::t_f73fff39ed2fd1 126
+packages/api/src/services/portfolio/detail.ts
+  s_683a583cbad79c::t_b071b72db16cfb 176-186
+  s_683a583cbad79c::t_06f62474794c08 189-190,195-196,198-199
+  s_2d5b2ee90f2b30::t_9325582a769c82 94-95
+  s_683a583cbad79c::t_349bda52f5b392 49-72,78-79,81
+  s_2d5b2ee90f2b30::t_b5830ac3db251e 211-213,215-218
+  s_2d5b2ee90f2b30::t_5e026e107d5ff2 85-91
+  s_683a583cbad79c::t_48287be6a6d3ef 83-84
+  s_2d5b2ee90f2b30::t_fd0f69385e7580 134-135
+  s_2d5b2ee90f2b30::t_da1b060e8ba605 25,27
+  s_2d5b2ee90f2b30::t_3e064114935901 147-154,156-164
+  s_2d5b2ee90f2b30::t_d94a78d124e0dc 321
+  s_683a583cbad79c::t_5f1a734938ba12 21-23
+  s_2d5b2ee90f2b30::t_fa12b6382b2393 28
+  s_683a583cbad79c::t_c395554b9c872d 210
+  s_2d5b2ee90f2b30::t_c6aa78644d6d4a 208
+  s_2d5b2ee90f2b30::t_308c4145bdb2cd 277
+  s_53892c856a84fd::t_ac609f67276d5d 24
+packages/api/src/services/portfolio/utils.test.ts
+  s_2d5b2ee90f2b30::t_9739b75ae507ef 6,9-36,83
+  s_2d5b2ee90f2b30::t_4b519ebd752346 86
+  s_2d5b2ee90f2b30::t_5592fc6815088b 85,87-109,112-113,126-128,134,142-143
+  s_2d5b2ee90f2b30::t_c53da91de87bbf 110-111
+  s_2d5b2ee90f2b30::t_35f23586a97c99 4-5,7-8
+  s_2d5b2ee90f2b30::t_f3be0200043f05 2-3
+  s_2d5b2ee90f2b30::t_9cc2d22d974814 55,57,59,72
+  s_2d5b2ee90f2b30::t_1c7791e4774014 54,56,62-71,73-82
+  s_2d5b2ee90f2b30::t_81122cae682318 58,60-61
+  s_2d5b2ee90f2b30::t_e1a28b4f0cb6e7 84
+packages/api/src/services/portfolio/data.ts
+  s_2d5b2ee90f2b30::t_f8e50783619678 11
+  s_2d5b2ee90f2b30::t_8cd0202734f086 89,92
+packages/api/src/services/portfolio/aggregates.ts
+  s_683a583cbad79c::t_c53cdff98738e9 54-69
+  s_2d5b2ee90f2b30::t_233240982eabad 1,3-4,7,9-38,42-43,45,52-53
+  s_2d5b2ee90f2b30::t_0852cc5cd82e0a 2
+  s_7e361fdd86bf08::t_131cc9f27798b8 46-51
+  s_2d5b2ee90f2b30::t_016a2ef8ca8636 5-6,8
+  s_2d5b2ee90f2b30::t_74f6e3d8632a41 39-41
+  s_53892c856a84fd::t_4bd63df4c55694 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "a3dec4963cb288aa65e30626370e3904e4b761ea",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_2d5b2ee90f2b30": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "322422a2-3f86-456e-89d2-3386c13f3571",
+        "model": "composer-2.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    },
+    "s_53892c856a84fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0f70-5b23-79e2-b630-e7e03fbda2e7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    },
+    "s_683a583cbad79c": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "11981837-cd0c-4690-a91e-7d060e9b99a0",
+        "model": "composer-2.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    },
+    "s_7e361fdd86bf08": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0f88-2b3c-7ed3-b895-c986fb2b8342",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
