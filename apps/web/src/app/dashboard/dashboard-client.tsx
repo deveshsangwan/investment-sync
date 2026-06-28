@@ -31,13 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  formatCurrency,
-  formatInr,
-  formatPercent,
-  labelize,
-  qualityLabel,
-} from "@/lib/format";
+import { formatInr, formatPercent, labelize, qualityLabel } from "@/lib/format";
 import { trpc } from "../providers";
 
 export function DashboardClient({
@@ -177,18 +171,12 @@ export function DashboardClient({
                           {holding.accountName}
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(
-                            Number(holding.currentValue),
-                            holding.currency,
-                          )}
+                          {formatInr(holding.currentValueInInr)}
                         </TableCell>
                         <TableCell
                           className={`text-right font-semibold ${rowTone}`}
                         >
-                          {formatCurrency(
-                            Number(holding.pnlAmount ?? 0),
-                            holding.currency,
-                          )}
+                          {formatInr(holding.pnlAmountInInr ?? 0)}
                         </TableCell>
                       </TableRow>
                     );
