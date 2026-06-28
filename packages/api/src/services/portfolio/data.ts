@@ -7,9 +7,19 @@ import {
 } from "@investment-sync/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { cachedPortfolioData } from "./cache";
+import {
+  convertToInr,
+  filterAggregateRowsBySnapshotGroup,
+  getUsdInrRateIfNeeded,
+  holdingCashFlowKey,
+  holdingPositionKey,
+  holdingSnapshotKey,
+  roundMoney,
+} from "./utils";
 import type {
   AssetClass,
   CashFlowRow,
+  CurrentHoldingRow,
   InstrumentTransactionRow,
   PortfolioContext,
   PortfolioValuationRow,
@@ -52,21 +62,75 @@ export async function cashFlowRows(
 
 export async function holdingSnapshotTimelineRows(ctx: PortfolioContext) {
   return cachedPortfolioData(ctx, "portfolio.holdingSnapshotTimeline", () =>
-    ctx.db
-      .select({
-        snapshotDate: holdingSnapshots.snapshotDate,
-        currentValue: sql<string>`sum(${holdingSnapshots.currentValue})`.as(
-          "current_value",
-        ),
-        investedAmount: sql<string>`sum(${holdingSnapshots.investedAmount})`.as(
-          "invested_amount",
-        ),
-      })
-      .from(holdingSnapshots)
-      .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
-      .groupBy(holdingSnapshots.snapshotDate)
-      .orderBy(holdingSnapshots.snapshotDate),
+    holdingSnapshotTimelineRowsUncached(ctx),
   );
+}
+
+async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
+  const rows = await ctx.db
+    .select({
+      accountId: holdingSnapshots.accountId,
+      instrumentId: holdingSnapshots.instrumentId,
+      snapshotDate: holdingSnapshots.snapshotDate,
+      investedAmount: holdingSnapshots.investedAmount,
+      currentValue: holdingSnapshots.currentValue,
+      currency: holdingSnapshots.currency,
+      sourcePayload: holdingSnapshots.sourcePayload,
+      sourceSheet: sql<string>`coalesce(${holdingSnapshots.sourcePayload}->>'sourceSheet', '')`,
+      accountName: accounts.name,
+      provider: accounts.provider,
+      instrumentName: instruments.name,
+      assetClass: instruments.assetClass,
+    })
+    .from(holdingSnapshots)
+    .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
+    .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
+    .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
+    .orderBy(holdingSnapshots.snapshotDate);
+  const eligibleRows = filterAggregateRowsBySnapshotGroup(rows);
+  const usdInrRate = await getUsdInrRateIfNeeded(
+    eligibleRows.map((row) => row.currency),
+    ctx.db,
+  );
+  const latestBySnapshot = new Map<string, (typeof eligibleRows)[number]>();
+
+  for (const row of eligibleRows) {
+    latestBySnapshot.set(holdingSnapshotKey(row), row);
+  }
+
+  const totalsByDate = new Map<
+    string,
+    { investedAmount: number; currentValue: number }
+  >();
+  for (const row of latestBySnapshot.values()) {
+    const investedAmount = convertToInr(
+      Number(row.investedAmount),
+      row.currency,
+      usdInrRate?.rate,
+    );
+    const currentValue = convertToInr(
+      Number(row.currentValue),
+      row.currency,
+      usdInrRate?.rate,
+    );
+    const existing = totalsByDate.get(row.snapshotDate) ?? {
+      investedAmount: 0,
+      currentValue: 0,
+    };
+    totalsByDate.set(row.snapshotDate, {
+      investedAmount: existing.investedAmount + investedAmount,
+      currentValue: existing.currentValue + currentValue,
+    });
+  }
+
+  return [...totalsByDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([snapshotDate, totals]) => ({
+      snapshotDate,
+      investedAmount: roundMoney(totals.investedAmount),
+      currentValue: roundMoney(totals.currentValue),
+      currency: "INR" as const,
+    }));
 }
 
 export async function assetClassSnapshotRows(
@@ -80,14 +144,17 @@ export async function assetClassSnapshotRows(
       ctx.db
         .select({
           instrumentId: holdingSnapshots.instrumentId,
+          accountId: holdingSnapshots.accountId,
           snapshotDate: holdingSnapshots.snapshotDate,
           investedAmount: holdingSnapshots.investedAmount,
           currentValue: holdingSnapshots.currentValue,
           currency: holdingSnapshots.currency,
           sourcePayload: holdingSnapshots.sourcePayload,
+          sourceSheet: sql<string>`coalesce(${holdingSnapshots.sourcePayload}->>'sourceSheet', '')`,
           accountName: accounts.name,
           provider: accounts.provider,
           instrumentName: instruments.name,
+          assetClass: instruments.assetClass,
         })
         .from(holdingSnapshots)
         .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
@@ -105,23 +172,31 @@ export async function assetClassSnapshotRows(
   );
 }
 
-export async function historyByInstrumentIds(
+export async function historyByHoldingPositions(
   ctx: PortfolioContext,
-  instrumentIds: string[],
+  holdings: CurrentHoldingRow[],
 ): Promise<Map<string, SnapshotValuationRow[]>> {
+  const instrumentIds = [
+    ...new Set(holdings.map((holding) => holding.instrumentId)),
+  ];
+  const accountIds = [...new Set(holdings.map((holding) => holding.accountId))];
+  const requestedKeys = new Set(holdings.map(holdingPositionKey));
   if (instrumentIds.length === 0) return new Map();
 
   const rows = await ctx.db
     .select({
       instrumentId: holdingSnapshots.instrumentId,
+      accountId: holdingSnapshots.accountId,
       snapshotDate: holdingSnapshots.snapshotDate,
       investedAmount: holdingSnapshots.investedAmount,
       currentValue: holdingSnapshots.currentValue,
       currency: holdingSnapshots.currency,
       sourcePayload: holdingSnapshots.sourcePayload,
+      sourceSheet: sql<string>`coalesce(${holdingSnapshots.sourcePayload}->>'sourceSheet', '')`,
       accountName: accounts.name,
       provider: accounts.provider,
       instrumentName: instruments.name,
+      assetClass: instruments.assetClass,
     })
     .from(holdingSnapshots)
     .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
@@ -129,6 +204,7 @@ export async function historyByInstrumentIds(
     .where(
       and(
         eq(holdingSnapshots.householdId, ctx.membership.householdId),
+        inArray(holdingSnapshots.accountId, accountIds),
         inArray(holdingSnapshots.instrumentId, instrumentIds),
       ),
     )
@@ -136,22 +212,27 @@ export async function historyByInstrumentIds(
 
   const grouped = new Map<string, SnapshotValuationRow[]>();
   for (const row of rows) {
-    grouped.set(row.instrumentId, [
-      ...(grouped.get(row.instrumentId) ?? []),
-      row,
-    ]);
+    const key = holdingPositionKey(row);
+    if (!requestedKeys.has(key)) continue;
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
   }
   return grouped;
 }
 
-export async function transactionsByInstrumentIds(
+export async function transactionsByHoldingPositions(
   ctx: PortfolioContext,
-  instrumentIds: string[],
+  holdings: CurrentHoldingRow[],
 ): Promise<Map<string, InstrumentTransactionRow[]>> {
+  const instrumentIds = [
+    ...new Set(holdings.map((holding) => holding.instrumentId)),
+  ];
+  const accountIds = [...new Set(holdings.map((holding) => holding.accountId))];
+  const requestedKeys = new Set(holdings.map(holdingCashFlowKey));
   if (instrumentIds.length === 0) return new Map();
 
   const rows = await ctx.db
     .select({
+      accountId: transactions.accountId,
       instrumentId: transactions.instrumentId,
       tradeDate: transactions.tradeDate,
       amount: transactions.amount,
@@ -162,6 +243,7 @@ export async function transactionsByInstrumentIds(
     .where(
       and(
         eq(transactions.householdId, ctx.membership.householdId),
+        inArray(transactions.accountId, accountIds),
         inArray(transactions.instrumentId, instrumentIds),
       ),
     )
@@ -170,10 +252,9 @@ export async function transactionsByInstrumentIds(
   const grouped = new Map<string, InstrumentTransactionRow[]>();
   for (const row of rows) {
     if (!row.instrumentId) continue;
-    grouped.set(row.instrumentId, [
-      ...(grouped.get(row.instrumentId) ?? []),
-      row,
-    ]);
+    const key = holdingCashFlowKey(row);
+    if (!requestedKeys.has(key)) continue;
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
   }
   return grouped;
 }

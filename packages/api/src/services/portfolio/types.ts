@@ -10,6 +10,7 @@ export type Currency = (typeof currencyEnum.enumValues)[number];
 
 export type CurrentHoldingRow = {
   id: string;
+  accountId: string;
   instrumentId: string;
   snapshotDate: string;
   quantity: string | null;
@@ -19,6 +20,7 @@ export type CurrentHoldingRow = {
   pnlPercent: string | null;
   currency: Currency;
   sourcePayload: Record<string, unknown>;
+  sourceSheet: string;
   accountName: string;
   provider: string;
   instrumentName: string;
@@ -27,15 +29,18 @@ export type CurrentHoldingRow = {
 };
 
 export type SnapshotValuationRow = {
+  accountId: string;
   instrumentId: string;
   snapshotDate: string;
   investedAmount: string;
   currentValue: string;
   currency: Currency;
   sourcePayload?: Record<string, unknown>;
+  sourceSheet: string;
   accountName: string;
   provider: string;
   instrumentName: string;
+  assetClass?: AssetClass;
 };
 
 export type PortfolioValuationRow = {
@@ -61,5 +66,6 @@ export type CashFlowRow = {
 };
 
 export type InstrumentTransactionRow = CashFlowRow & {
+  accountId: string;
   instrumentId: string | null;
 };

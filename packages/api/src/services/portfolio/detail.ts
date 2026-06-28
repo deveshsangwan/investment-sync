@@ -7,8 +7,8 @@ import { transactions } from "@investment-sync/db";
 import { and, eq } from "drizzle-orm";
 import {
   assetClassSnapshotRows,
-  historyByInstrumentIds,
-  transactionsByInstrumentIds,
+  historyByHoldingPositions,
+  transactionsByHoldingPositions,
 } from "./data";
 import {
   exitedCurrentHoldings,
@@ -19,8 +19,11 @@ import {
 import { toPerformanceValuation } from "./performance";
 import {
   convertToInr,
+  filterAggregateRowsBySnapshotGroup,
   getUsdInrRateIfNeeded,
-  isAggregateHolding,
+  holdingCashFlowKey,
+  holdingPositionKey,
+  holdingSnapshotKey,
   parseDate,
   roundMoney,
   roundPercent,
@@ -39,7 +42,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
   const selected = await holdingById(ctx, id);
   if (!selected) return null;
 
-  const history = await holdingHistory(ctx, selected.instrumentId);
+  const history = await holdingHistory(ctx, selected);
   const latestHoldings = await latestCurrentHoldings(ctx);
   const latest = latestHoldingForSelection(selected, history) ?? selected;
   const usdInrRate = await getUsdInrRateIfNeeded(
@@ -90,6 +93,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
     .where(
       and(
         eq(transactions.householdId, ctx.membership.householdId),
+        eq(transactions.accountId, selected.accountId),
         eq(transactions.instrumentId, selected.instrumentId),
       ),
     )
@@ -166,7 +170,10 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
         usdInrRate?.rate,
       ),
     })),
-    transactions: transactionsForHolding,
+    transactions: transactionsForHolding.map((transaction) => ({
+      ...transaction,
+      amount: Number(transaction.amount).toString(),
+    })),
   };
 }
 
@@ -212,13 +219,10 @@ export async function buildAssetClassDetail(
   const portfolioCurrentValue = sum(
     converted.map((holding) => holding.currentValueInInr),
   );
-  const instrumentIds = [
-    ...new Set(assetHoldings.map((holding) => holding.instrumentId)),
-  ];
-  const [transactionsByInstrument, historyByInstrument, assetClassValuations] =
+  const [transactionsByHolding, historyByHolding, assetClassValuations] =
     await Promise.all([
-      transactionsByInstrumentIds(ctx, instrumentIds),
-      historyByInstrumentIds(ctx, instrumentIds),
+      transactionsByHoldingPositions(ctx, assetHoldings),
+      historyByHoldingPositions(ctx, assetHoldings),
       Promise.resolve(
         valuationsFromSnapshotRows(assetClassSnapshots, usdInrRate?.rate),
       ),
@@ -236,32 +240,12 @@ export async function buildAssetClassDetail(
   return {
     assetClass,
     holdings: assetHoldings.map((holding) => {
-      const instrumentHistory = historyByInstrument.get(
-        holding.instrumentId,
-      ) ?? [holding];
-      const instrumentTransactions =
-        transactionsByInstrument.get(holding.instrumentId) ?? [];
-      const resolved = resolveHoldingXirr({
-        cashFlows: instrumentTransactions.map(
-          (transaction: InstrumentTransactionRow) => ({
-            date:
-              parseDate(transaction.tradeDate) ??
-              new Date(transaction.tradeDate),
-            amount: convertToInr(
-              Number(transaction.amount),
-              transaction.currency,
-              usdInrRate?.rate,
-            ),
-            type: transaction.type,
-          }),
-        ),
-        terminalValue: holding.currentValueInInr,
-        asOfDate: parseDate(holding.snapshotDate) ?? new Date(),
-        sourceXirr: holding.sourceXirr,
-        valuations: instrumentHistory.map((point) =>
-          toPerformanceValuation(point, usdInrRate?.rate),
-        ),
-      });
+      const resolved = resolvePositionXirr(
+        holding,
+        historyByHolding,
+        transactionsByHolding,
+        usdInrRate?.rate,
+      );
 
       return {
         ...holding,
@@ -300,6 +284,37 @@ export async function buildAssetClassDetail(
   };
 }
 
+function resolvePositionXirr(
+  holding: ReturnType<typeof convertHolding>,
+  historyByHolding: Map<string, SnapshotValuationRow[]>,
+  transactionsByHolding: Map<string, InstrumentTransactionRow[]>,
+  usdInrRate?: number,
+) {
+  const positionHistory = historyByHolding.get(holdingPositionKey(holding)) ?? [
+    holding,
+  ];
+  const positionTransactions =
+    transactionsByHolding.get(holdingCashFlowKey(holding)) ?? [];
+
+  return resolveHoldingXirr({
+    cashFlows: positionTransactions.map((transaction) => ({
+      date: parseDate(transaction.tradeDate) ?? new Date(transaction.tradeDate),
+      amount: convertToInr(
+        Number(transaction.amount),
+        transaction.currency,
+        usdInrRate,
+      ),
+      type: transaction.type,
+    })),
+    terminalValue: holding.currentValueInInr,
+    asOfDate: parseDate(holding.snapshotDate) ?? new Date(),
+    sourceXirr: holding.sourceXirr,
+    valuations: positionHistory.map((point) =>
+      toPerformanceValuation(point, usdInrRate),
+    ),
+  });
+}
+
 function convertHolding(holding: CurrentHoldingRow, usdInrRate?: number) {
   return {
     ...holding,
@@ -336,12 +351,11 @@ function valuationsFromSnapshotRows(
   rows: SnapshotValuationRow[],
   usdInrRate?: number,
 ): PerformanceValuationInput[] {
-  const eligible = rows.filter((row) => !isAggregateHolding(row));
-  const latestByInstrumentDate = new Map<string, SnapshotValuationRow>();
+  const eligible = filterAggregateRowsBySnapshotGroup(rows);
+  const latestByPositionDate = new Map<string, SnapshotValuationRow>();
 
   for (const row of eligible) {
-    const key = `${row.instrumentId}|${row.snapshotDate}`;
-    latestByInstrumentDate.set(key, row);
+    latestByPositionDate.set(holdingSnapshotKey(row), row);
   }
 
   const totalsByDate = new Map<
@@ -349,7 +363,7 @@ function valuationsFromSnapshotRows(
     { investedAmount: number; currentValue: number }
   >();
 
-  for (const row of latestByInstrumentDate.values()) {
+  for (const row of latestByPositionDate.values()) {
     const investedAmount = convertToInr(
       Number(row.investedAmount),
       row.currency,

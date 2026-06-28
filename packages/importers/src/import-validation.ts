@@ -26,7 +26,8 @@ export function getImportFileValidationError(input: {
     return "Import files must be CSV or XLSX files";
   }
 
-  if (input.mimeType && !allowedMimeTypes.has(input.mimeType)) {
+  const normalizedMimeType = input.mimeType?.trim().toLowerCase();
+  if (normalizedMimeType && !allowedMimeTypes.has(normalizedMimeType)) {
     return "Import file type is not supported";
   }
 

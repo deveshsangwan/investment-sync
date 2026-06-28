@@ -75,3 +75,86 @@ export function sourceXirrFromPayload(payload?: Record<string, unknown>) {
     ? value
     : undefined;
 }
+
+export type HoldingPositionIdentity = {
+  accountId: string;
+  accountName?: string;
+  provider?: string;
+  instrumentId: string;
+  currency: Currency;
+  sourceSheet?: string | null;
+};
+
+export function holdingPositionKey(value: HoldingPositionIdentity) {
+  return [
+    value.accountId,
+    normalizeKeyPart(value.provider),
+    normalizeKeyPart(value.accountName),
+    value.instrumentId,
+    value.currency,
+    value.sourceSheet ?? "",
+  ].join("|");
+}
+
+export function holdingSnapshotKey(
+  value: HoldingPositionIdentity & { snapshotDate: string },
+) {
+  return `${holdingPositionKey(value)}|${value.snapshotDate}`;
+}
+
+export function holdingCashFlowKey(value: {
+  accountId: string;
+  instrumentId: string | null;
+}) {
+  return `${value.accountId}|${value.instrumentId ?? ""}`;
+}
+
+export function filterAggregateRowsBySnapshotGroup<
+  T extends {
+    accountId: string;
+    accountName?: string;
+    provider?: string;
+    assetClass?: string;
+    currency: Currency;
+    sourceSheet?: string | null;
+    snapshotDate: string;
+    instrumentName: string;
+    sourcePayload?: Record<string, unknown>;
+  },
+>(rows: T[]): T[] {
+  const detailedGroups = new Set(
+    rows
+      .filter((row) => !isAggregateHolding(row))
+      .map(aggregateSnapshotGroupKey),
+  );
+
+  return rows.filter(
+    (row) =>
+      !isAggregateHolding(row) ||
+      !detailedGroups.has(aggregateSnapshotGroupKey(row)),
+  );
+}
+
+function normalizeKeyPart(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function aggregateSnapshotGroupKey(value: {
+  accountId: string;
+  accountName?: string;
+  provider?: string;
+  assetClass?: string;
+  currency: Currency;
+  sourceSheet?: string | null;
+  snapshotDate: string;
+}) {
+  return [
+    value.accountId,
+    normalizeKeyPart(value.provider),
+    normalizeKeyPart(value.accountName),
+    value.assetClass ?? "",
+    value.currency,
+    value.sourceSheet ?? "",
+    value.snapshotDate,
+  ].join("|");
+}

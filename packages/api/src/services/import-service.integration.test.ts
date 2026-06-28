@@ -131,7 +131,70 @@ describeDb("import service integration", () => {
     ).toBe(false);
   });
 
-  async function createFixture(rows = [holdingRow()]) {
+  it("keeps duplicate instruments in different accounts separate", async () => {
+    if (!db) throw new Error("TEST_DATABASE_URL is required");
+    const fixture = await createFixture([
+      holdingRow({
+        accountName: "Broker A",
+        currentValue: 125,
+        investedAmount: 100,
+      }),
+      holdingRow({
+        accountName: "Broker B",
+        currentValue: 210,
+        investedAmount: 200,
+      }),
+      transactionRow({
+        accountName: "Broker A",
+        amount: -100,
+      }),
+      transactionRow({
+        accountName: "Broker B",
+        amount: -200,
+      }),
+    ]);
+    const ctx = createApiContext({
+      auth: { userId: fixture.clerkUserId, email: fixture.email },
+      db,
+      supabase: {} as ApiContext["supabase"],
+    });
+
+    const result = await commitImport(ctx, fixture.membership, fixture.batchId);
+    expect(result.committed).toBe(4);
+
+    const caller = appRouter.createCaller(ctx);
+    const [holdings, assetClassDetail] = await Promise.all([
+      caller.portfolio.holdings(),
+      caller.portfolio.assetClassDetail({ assetClass: "indian_stock" }),
+    ]);
+
+    expect(holdings).toHaveLength(2);
+    expect(holdings.map((holding) => holding.accountName).sort()).toEqual([
+      "Broker A",
+      "Broker B",
+    ]);
+    expect(assetClassDetail.holdings).toHaveLength(2);
+    expect(assetClassDetail.summary.currentValue).toBe(335);
+
+    const brokerAHolding = holdings.find(
+      (holding) => holding.accountName === "Broker A",
+    );
+    expect(brokerAHolding).toBeDefined();
+    if (!brokerAHolding) return;
+
+    const detail = await caller.portfolio.holdingDetail({
+      id: brokerAHolding.id,
+    });
+    expect(detail?.holding.accountName).toBe("Broker A");
+    expect(detail?.history).toHaveLength(1);
+    expect(
+      detail?.transactions.map((transaction) => transaction.amount),
+    ).toEqual(["-100"]);
+  });
+
+  async function createFixture(
+    rows: Record<string, unknown>[] = [holdingRow()],
+  ) {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const appUserId = randomUUID();
     const householdId = randomUUID();
@@ -187,8 +250,11 @@ describeDb("import service integration", () => {
 
 function holdingRow(
   overrides: Partial<{
+    accountName: string;
+    provider: string;
     instrumentName: string;
     symbol: string;
+    investedAmount: number;
     currentValue: number;
     metadata: Record<string, unknown>;
   }> = {},
@@ -197,15 +263,41 @@ function holdingRow(
     kind: "holding",
     sourceType: "tickertape_stock_csv",
     sourceDate: "2026-06-16",
-    accountName: "Indian Stocks",
-    provider: "Tickertape",
+    accountName: overrides.accountName ?? "Indian Stocks",
+    provider: overrides.provider ?? "Tickertape",
     instrumentName: overrides.instrumentName ?? "ABC",
     symbol: overrides.symbol ?? "ABC",
     assetClass: "indian_stock",
     currency: "INR",
     quantity: 1,
-    investedAmount: 100,
+    investedAmount: overrides.investedAmount ?? 100,
     currentValue: overrides.currentValue ?? 125,
     metadata: overrides.metadata ?? {},
+  };
+}
+
+function transactionRow(
+  overrides: Partial<{
+    accountName: string;
+    provider: string;
+    instrumentName: string;
+    symbol: string;
+    tradeDate: string;
+    amount: number;
+  }> = {},
+) {
+  return {
+    kind: "transaction",
+    sourceType: "tickertape_stock_csv",
+    accountName: overrides.accountName ?? "Indian Stocks",
+    provider: overrides.provider ?? "Tickertape",
+    instrumentName: overrides.instrumentName ?? "ABC",
+    symbol: overrides.symbol ?? "ABC",
+    assetClass: "indian_stock",
+    currency: "INR",
+    tradeDate: overrides.tradeDate ?? "2026-06-16",
+    type: "buy",
+    amount: overrides.amount ?? -100,
+    metadata: {},
   };
 }

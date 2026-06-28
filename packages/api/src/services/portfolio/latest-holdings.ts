@@ -16,6 +16,7 @@ import type { CurrentHoldingRow, PortfolioContext } from "./types";
 
 const currentHoldingRowSchema = z.object({
   id: z.string(),
+  accountId: z.string(),
   instrumentId: z.string(),
   snapshotDate: z.string(),
   quantity: z.string().nullable(),
@@ -25,6 +26,7 @@ const currentHoldingRowSchema = z.object({
   pnlPercent: z.string().nullable(),
   currency: z.enum(currencyEnum.enumValues),
   sourcePayload: z.record(z.unknown()),
+  sourceSheet: z.string(),
   accountName: z.string(),
   provider: z.string(),
   instrumentName: z.string(),
@@ -59,6 +61,7 @@ export async function holdingById(
   const [selected] = await ctx.db
     .select({
       id: holdingSnapshots.id,
+      accountId: holdingSnapshots.accountId,
       instrumentId: holdingSnapshots.instrumentId,
       snapshotDate: holdingSnapshots.snapshotDate,
       quantity: holdingSnapshots.quantity,
@@ -68,6 +71,7 @@ export async function holdingById(
       pnlPercent: holdingSnapshots.pnlPercent,
       currency: holdingSnapshots.currency,
       sourcePayload: holdingSnapshots.sourcePayload,
+      sourceSheet: sql<string>`coalesce(${holdingSnapshots.sourcePayload}->>'sourceSheet', '')`,
       accountName: accounts.name,
       provider: accounts.provider,
       instrumentName: instruments.name,
@@ -89,11 +93,16 @@ export async function holdingById(
 
 export async function holdingHistory(
   ctx: PortfolioContext,
-  instrumentId: string,
+  selected: Pick<
+    CurrentHoldingRow,
+    "accountId" | "instrumentId" | "currency" | "sourceSheet"
+  >,
 ) {
   return ctx.db
     .select({
       id: holdingSnapshots.id,
+      accountId: holdingSnapshots.accountId,
+      instrumentId: holdingSnapshots.instrumentId,
       snapshotDate: holdingSnapshots.snapshotDate,
       quantity: holdingSnapshots.quantity,
       investedAmount: holdingSnapshots.investedAmount,
@@ -102,13 +111,18 @@ export async function holdingHistory(
       pnlPercent: holdingSnapshots.pnlPercent,
       currency: holdingSnapshots.currency,
       sourcePayload: holdingSnapshots.sourcePayload,
+      sourceSheet: sql<string>`coalesce(${holdingSnapshots.sourcePayload}->>'sourceSheet', '')`,
       accountName: accounts.name,
       provider: accounts.provider,
     })
     .from(holdingSnapshots)
     .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
     .where(
-      sql`${holdingSnapshots.householdId} = ${ctx.membership.householdId} and ${holdingSnapshots.instrumentId} = ${instrumentId}`,
+      sql`${holdingSnapshots.householdId} = ${ctx.membership.householdId}
+        and ${holdingSnapshots.accountId} = ${selected.accountId}
+        and ${holdingSnapshots.instrumentId} = ${selected.instrumentId}
+        and ${holdingSnapshots.currency} = ${selected.currency}
+        and coalesce(${holdingSnapshots.sourcePayload}->>'sourceSheet', '') = ${selected.sourceSheet}`,
     )
     .orderBy(holdingSnapshots.snapshotDate);
 }
@@ -134,6 +148,7 @@ async function latestCurrentHoldingRows(
     with base as (
       select
         hs.id::text as "id",
+        hs.account_id::text as "accountId",
         hs.instrument_id::text as "instrumentId",
         hs.snapshot_date::text as "snapshotDate",
         hs.quantity::text as "quantity",
@@ -143,12 +158,12 @@ async function latestCurrentHoldingRows(
         hs.pnl_percent::text as "pnlPercent",
         hs.currency as "currency",
         hs.source_payload as "sourcePayload",
+        coalesce(hs.source_payload->>'sourceSheet', '') as "sourceSheet",
         a.name as "accountName",
         a.provider as "provider",
         i.name as "instrumentName",
         i.symbol as "symbol",
         i.asset_class as "assetClass",
-        coalesce(hs.source_payload->>'sourceSheet', '') as "sourceSheet",
         (${aggregateExpression}) as "isAggregate",
         coalesce(upper(i.symbol), upper(i.name)) as "instrumentKey"
       from holding_snapshots hs
@@ -156,8 +171,14 @@ async function latestCurrentHoldingRows(
       inner join instruments i on i.id = hs.instrument_id
       where hs.household_id = ${ctx.membership.householdId}
     ),
-    asset_classes_with_details as (
+    snapshot_groups_with_details as (
       select distinct "assetClass"
+        , "accountId"
+        , "accountName"
+        , "provider"
+        , "currency"
+        , "sourceSheet"
+        , "snapshotDate"
       from base
       where "isAggregate" = false
     ),
@@ -168,12 +189,19 @@ async function latestCurrentHoldingRows(
         "isAggregate" = false
         or not exists (
           select 1
-          from asset_classes_with_details details
+          from snapshot_groups_with_details details
           where details."assetClass" = base."assetClass"
+            and details."accountId" = base."accountId"
+            and details."accountName" = base."accountName"
+            and details."provider" = base."provider"
+            and details."currency" = base."currency"
+            and details."sourceSheet" = base."sourceSheet"
+            and details."snapshotDate" = base."snapshotDate"
         )
     ),
     latest_group_dates as (
       select
+        "accountId",
         "accountName",
         "provider",
         "assetClass",
@@ -182,6 +210,7 @@ async function latestCurrentHoldingRows(
         max("snapshotDate") as "snapshotDate"
       from eligible
       group by
+        "accountId",
         "accountName",
         "provider",
         "assetClass",
@@ -192,7 +221,8 @@ async function latestCurrentHoldingRows(
       select eligible.*
       from eligible
       inner join latest_group_dates latest
-        on latest."accountName" = eligible."accountName"
+        on latest."accountId" = eligible."accountId"
+        and latest."accountName" = eligible."accountName"
         and latest."provider" = eligible."provider"
         and latest."assetClass" = eligible."assetClass"
         and latest."currency" = eligible."currency"
@@ -203,7 +233,8 @@ async function latestCurrentHoldingRows(
       select eligible.*, latest."snapshotDate" as "latestGroupSnapshotDate"
       from eligible
       inner join latest_group_dates latest
-        on latest."accountName" = eligible."accountName"
+        on latest."accountId" = eligible."accountId"
+        and latest."accountName" = eligible."accountName"
         and latest."provider" = eligible."provider"
         and latest."assetClass" = eligible."assetClass"
         and latest."currency" = eligible."currency"
@@ -213,13 +244,22 @@ async function latestCurrentHoldingRows(
       select
         *,
         row_number() over (
-          partition by "assetClass", "instrumentKey", "currency"
-          order by "snapshotDate" desc, "instrumentName" asc
+          partition by
+            "accountId",
+            "accountName",
+            "provider",
+            "sourceSheet",
+            "assetClass",
+            "instrumentId",
+            "instrumentKey",
+            "currency"
+          order by "snapshotDate" desc, "instrumentName" asc, "id" desc
         ) as "holdingRank"
       from ${sourceCte}
     )
     select
       "id",
+      "accountId",
       "instrumentId",
       "snapshotDate",
       "quantity",
@@ -229,6 +269,7 @@ async function latestCurrentHoldingRows(
       "pnlPercent",
       "currency",
       "sourcePayload",
+      "sourceSheet",
       "accountName",
       "provider",
       "instrumentName",
