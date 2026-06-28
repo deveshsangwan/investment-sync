@@ -1,0 +1,65 @@
+packages/api/src/services/portfolio/data.ts
+  s_6fadbe74e1c23e::t_e28852eeba1ecc 10-18,22,65-93,95-133,147,153,157,175,177,179-183,189,195,199,207,215-217,222,224,226-230,235,246,255-257
+packages/api/src/services/portfolio/utils.ts
+  s_6fadbe74e1c23e::t_4b7a8927f5eaa4 112-137,140-159
+  s_6fadbe74e1c23e::t_bc85a81e94648c 78-111,138-139,160
+packages/api/src/services/import-service.integration.test.ts
+  s_6fadbe74e1c23e::t_b56bb6ce9004d9 134-189,193-194,253-254,257,266-267,273,278-301
+  s_6fadbe74e1c23e::t_13aaae6c8bb86e 190,195-197
+  h_9c147e6399b95b 191-192
+  s_6fadbe74e1c23e::t_a506260b1ea3ca 302-303
+packages/api/src/services/portfolio/detail.ts
+  s_6fadbe74e1c23e::t_54ba11878094b3 287-300,302-317
+  s_c34ef291df5e34::t_20556835e0e063 173-174,176
+  s_6fadbe74e1c23e::t_77027834a1524d 10-11,22,24-26
+  s_6fadbe74e1c23e::t_13aaae6c8bb86e 301
+  s_6fadbe74e1c23e::t_26beb77198230e 354-355,358,366
+  s_6fadbe74e1c23e::t_6f68117d7dd60f 243-248
+  s_6fadbe74e1c23e::t_8902bec80f2b37 45,96
+  s_6fadbe74e1c23e::t_e01f0f904ed72b 222,224-225
+  s_c34ef291df5e34::t_b7a527f47010ee 175
+packages/importers/src/import-validation.ts
+  s_6fadbe74e1c23e::t_4f3efab9c70e74 29-30
+packages/importers/src/import-validation.test.ts
+  s_6fadbe74e1c23e::t_09dc483b1836e0 1-24
+packages/api/src/services/portfolio/types.ts
+  s_6fadbe74e1c23e::t_099c5eb93b9f54 13,23,32,39,43,69
+apps/web/src/app/uploads/uploads-client.tsx
+  s_6fadbe74e1c23e::t_5b5662fd91ca43 40-41
+packages/api/src/services/portfolio/latest-holdings.ts
+  s_6fadbe74e1c23e::t_85228012813f78 19,29,64,74,104-105,114,151,161,174,176-181,192,194-199,204,213,224-225,236-237,247-256,262,272
+  s_6fadbe74e1c23e::t_9a0420b57e1b3d 96-99,121-125
+packages/api/src/services/portfolio/utils.test.ts
+  s_6fadbe74e1c23e::t_13aaae6c8bb86e 17
+  s_6fadbe74e1c23e::t_254a9fedc043dc 1,3-16,18-46
+  s_c34ef291df5e34::t_cd141a8820b52a 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "9d4fea74445bf3d0f131c453d52fff0126d735b7",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_6fadbe74e1c23e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0e43-719b-7313-90a8-3b0ce0116f1c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    },
+    "s_c34ef291df5e34": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "28de1251-8bf9-41fb-852f-318bc5a7a349",
+        "model": "composer-2.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
