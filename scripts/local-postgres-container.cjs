@@ -50,7 +50,11 @@ function isRunning() {
     const row = rows.find(
       (entry) => entry.configuration?.id === CONTAINER_NAME,
     );
-    return row?.status === "running";
+    const status = row?.status;
+    if (typeof status === "string") {
+      return status === "running";
+    }
+    return status?.state === "running";
   } catch {
     return false;
   }

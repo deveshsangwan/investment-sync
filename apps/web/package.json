@@ -41,7 +41,8 @@
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.7.3",
+    "typescript": "npm:@typescript/typescript6@^6.0.1",
+    "typescript-7": "npm:typescript@7.0.1-rc",
     "vitest": "^2.1.8"
   }
 }

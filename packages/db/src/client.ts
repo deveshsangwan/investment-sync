@@ -22,12 +22,14 @@ export function createDatabase(
     throw new Error("DATABASE_URL is required");
   }
 
+  const cachedDatabase = globalDatabaseCache.__investmentSyncDb;
+
   if (
     databaseUrl === process.env.DATABASE_URL &&
-    globalDatabaseCache.__investmentSyncDb?.databaseUrl === databaseUrl &&
-    globalDatabaseCache.__investmentSyncDb.db
+    cachedDatabase?.databaseUrl === databaseUrl &&
+    cachedDatabase.db
   ) {
-    return globalDatabaseCache.__investmentSyncDb.db;
+    return cachedDatabase.db;
   }
 
   const client = postgres(databaseUrl, {
