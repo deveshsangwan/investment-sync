@@ -84,7 +84,11 @@ async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
     .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
     .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
     .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
-    .orderBy(holdingSnapshots.snapshotDate);
+    .orderBy(
+      holdingSnapshots.snapshotDate,
+      holdingSnapshots.createdAt,
+      holdingSnapshots.id,
+    );
   const usdInrRate = await getUsdInrRateIfNeeded(
     rows.map((row) => row.currency),
     ctx.db,
@@ -136,7 +140,11 @@ export async function assetClassSnapshotRows(
             eq(instruments.assetClass, assetClass),
           ),
         )
-        .orderBy(holdingSnapshots.snapshotDate),
+        .orderBy(
+          holdingSnapshots.snapshotDate,
+          holdingSnapshots.createdAt,
+          holdingSnapshots.id,
+        ),
   );
 }
 

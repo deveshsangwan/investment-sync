@@ -8,6 +8,7 @@ import {
   convertToInr,
   enrichHoldingWithInr,
   parseDate,
+  roundMoney,
   sourceXirrFromPayload,
 } from "./utils";
 import type {
@@ -113,12 +114,51 @@ export function buildPortfolioPerformanceFromSnapshot(
 
 export function buildPortfolioTimelineFromValuations(
   valuations: PortfolioValuationRow[],
+  usdInrRate?: number,
 ) {
-  return valuations.map((valuation) => ({
-    snapshotDate: valuation.valuationDate,
-    currentValue: valuation.currentValue,
-    investedAmount: valuation.investedAmount,
-    pnlAmount: valuation.pnlAmount,
-    currency: valuation.currency,
-  }));
+  const totalsByDate = new Map<
+    string,
+    { investedAmount: number; currentValue: number; pnlAmount: number }
+  >();
+
+  for (const valuation of valuations) {
+    const existing = totalsByDate.get(valuation.valuationDate) ?? {
+      investedAmount: 0,
+      currentValue: 0,
+      pnlAmount: 0,
+    };
+    totalsByDate.set(valuation.valuationDate, {
+      investedAmount:
+        existing.investedAmount +
+        convertToInr(
+          Number(valuation.investedAmount),
+          valuation.currency,
+          usdInrRate,
+        ),
+      currentValue:
+        existing.currentValue +
+        convertToInr(
+          Number(valuation.currentValue),
+          valuation.currency,
+          usdInrRate,
+        ),
+      pnlAmount:
+        existing.pnlAmount +
+        convertToInr(
+          Number(valuation.pnlAmount),
+          valuation.currency,
+          usdInrRate,
+        ),
+    });
+  }
+
+  return [...totalsByDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([snapshotDate, totals]) => ({
+      snapshotDate,
+      currentValue: roundMoney(totals.currentValue),
+      investedAmount: roundMoney(totals.investedAmount),
+      pnlAmount: roundMoney(totals.pnlAmount),
+      currency: "INR" as const,
+    }));
 }

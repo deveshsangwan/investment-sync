@@ -37,7 +37,7 @@ async function buildPortfolioOverviewUncached(ctx: PortfolioContext) {
   );
   const timeline =
     valuations.length > 0
-      ? buildPortfolioTimelineFromValuations(valuations)
+      ? buildPortfolioTimelineFromValuations(valuations, usdInrRate?.rate)
       : await holdingSnapshotTimelineRows(ctx);
 
   return {

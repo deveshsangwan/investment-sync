@@ -37,6 +37,8 @@ export function UploadsClient({
     onSuccess: () => {
       void utils.imports.list.invalidate();
       void utils.portfolio.overview.invalidate();
+      void utils.portfolio.summary.invalidate();
+      void utils.portfolio.holdings.invalidate();
     },
   });
 

@@ -66,6 +66,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
           eq(transactions.householdId, ctx.membership.householdId),
           eq(transactions.accountId, selected.accountId),
           eq(transactions.instrumentId, selected.instrumentId),
+          eq(transactions.currency, selected.currency),
         ),
       )
       .orderBy(transactions.tradeDate),

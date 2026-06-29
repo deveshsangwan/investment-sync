@@ -14,9 +14,8 @@ export async function dedupePortfolioData(
   ctx: ApiContext,
   membership: MembershipContext,
 ) {
-  clearHouseholdPortfolioCache(membership.householdId);
-
-  const deletedAggregateHoldingSnapshots = await ctx.db.execute(sql`
+  const result = await ctx.db.transaction(async (tx) => {
+    const deletedAggregateHoldingSnapshots = await tx.execute(sql`
     with base as (
       select
         hs.id,
@@ -68,7 +67,7 @@ export async function dedupePortfolioData(
     returning hs.id
   `);
 
-  const deletedHoldingSnapshots = await ctx.db.execute(sql`
+    const deletedHoldingSnapshots = await tx.execute(sql`
     with ranked as (
       select
         id,
@@ -91,7 +90,7 @@ export async function dedupePortfolioData(
     returning ${holdingSnapshots.id}
   `);
 
-  const deletedSemanticHoldingSnapshots = await ctx.db.execute(sql`
+    const deletedSemanticHoldingSnapshots = await tx.execute(sql`
     with ranked as (
       select
         ${holdingSnapshots.id} as id,
@@ -118,13 +117,15 @@ export async function dedupePortfolioData(
     returning ${holdingSnapshots.id}
   `);
 
-  const deletedCrossSourceStockSnapshots = await ctx.db.execute(sql`
+    const deletedCrossSourceStockSnapshots = await tx.execute(sql`
     with ranked as (
       select
         ${holdingSnapshots.id} as id,
         row_number() over (
           partition by
             ${holdingSnapshots.householdId},
+            ${holdingSnapshots.accountId},
+            ${holdingSnapshots.snapshotDate},
             ${instruments.assetClass},
             coalesce(upper(${instruments.symbol}), lower(${instruments.name})),
             ${holdingSnapshots.currency},
@@ -152,12 +153,12 @@ export async function dedupePortfolioData(
     returning ${holdingSnapshots.id}
   `);
 
-  const deletedTransactions = await ctx.db.execute(sql`
+    const deletedTransactions = await tx.execute(sql`
     with ranked as (
       select
         id,
         row_number() over (
-          partition by household_id, account_id, instrument_id, trade_date, type, amount, currency
+          partition by household_id, account_id, instrument_id, trade_date, type, quantity, price, amount, currency
           order by created_at desc, id desc
         ) as duplicate_rank
       from ${transactions}
@@ -170,13 +171,16 @@ export async function dedupePortfolioData(
     returning ${transactions.id}
   `);
 
+    return {
+      deletedAggregateHoldingSnapshots: deletedAggregateHoldingSnapshots.length,
+      deletedHoldingSnapshots: deletedHoldingSnapshots.length,
+      deletedSemanticHoldingSnapshots: deletedSemanticHoldingSnapshots.length,
+      deletedCrossSourceStockSnapshots: deletedCrossSourceStockSnapshots.length,
+      deletedTransactions: deletedTransactions.length,
+    };
+  });
+
   clearHouseholdPortfolioCache(membership.householdId);
 
-  return {
-    deletedAggregateHoldingSnapshots: deletedAggregateHoldingSnapshots.length,
-    deletedHoldingSnapshots: deletedHoldingSnapshots.length,
-    deletedSemanticHoldingSnapshots: deletedSemanticHoldingSnapshots.length,
-    deletedCrossSourceStockSnapshots: deletedCrossSourceStockSnapshots.length,
-    deletedTransactions: deletedTransactions.length,
-  };
+  return result;
 }
