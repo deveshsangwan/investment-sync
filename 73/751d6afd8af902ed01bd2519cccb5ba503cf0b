@@ -1,0 +1,24 @@
+apps/web/package.json
+  s_7e361fdd86bf08::t_9795970db647e9 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "73751d6afd8af902ed01bd2519cccb5ba503cf0b",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_7e361fdd86bf08": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0f88-2b3c-7ed3-b895-c986fb2b8342",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
