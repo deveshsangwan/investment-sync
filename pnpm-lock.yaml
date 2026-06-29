@@ -123,9 +123,6 @@ importers:
       '@clerk/nextjs':
         specifier: ^6.9.9
         version: 6.39.5(next@15.5.18(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@hookform/resolvers':
-        specifier: ^3.10.0
-        version: 3.10.0(react-hook-form@7.77.0(react@19.2.6))
       '@investment-sync/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -144,9 +141,6 @@ importers:
       '@trpc/client':
         specifier: ^10.45.2
         version: 10.45.4(@trpc/server@10.45.4)
-      '@trpc/next':
-        specifier: ^10.45.2
-        version: 10.45.4(@tanstack/react-query@4.44.0(react-dom@19.2.6(react@19.2.6))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.15)(bufferutil@4.1.0)(react@19.2.6))(react@19.2.6))(@trpc/client@10.45.4(@trpc/server@10.45.4))(@trpc/react-query@10.45.4(@tanstack/react-query@4.44.0(react-dom@19.2.6(react@19.2.6))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.15)(bufferutil@4.1.0)(react@19.2.6))(react@19.2.6))(@trpc/client@10.45.4(@trpc/server@10.45.4))(@trpc/server@10.45.4)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@trpc/server@10.45.4)(next@15.5.18(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@trpc/react-query':
         specifier: ^10.45.2
         version: 10.45.4(@tanstack/react-query@4.44.0(react-dom@19.2.6(react@19.2.6))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.15)(bufferutil@4.1.0)(react@19.2.6))(react@19.2.6))(@trpc/client@10.45.4(@trpc/server@10.45.4))(@trpc/server@10.45.4)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -183,9 +177,6 @@ importers:
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
-      zod:
-        specifier: ^3.24.1
-        version: 3.25.76
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.3.0
@@ -292,22 +283,6 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@25.9.2)(lightningcss@1.32.0)(terser@5.48.0)
-
-  packages/ui:
-    dependencies:
-      react:
-        specifier: ^19.0.0
-        version: 19.2.6
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.4
-        version: 19.2.15
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
@@ -1749,11 +1724,6 @@ packages:
   '@formkit/auto-animate@0.8.4':
     resolution: {integrity: sha512-DHHC01EJ1p70Q0z/ZFRBIY8NDnmfKccQoyoM84Tgb6omLMat6jivCdf272Y8k3nf4Lzdin/Y4R9q8uFtU0GbnA==}
 
-  '@hookform/resolvers@3.10.0':
-    resolution: {integrity: sha512-79Dv+3mDF7i+2ajj7SkypSKHhl1cbln1OGavqrsF7p6mbUv11xpqpacPsGDCTRvCSjEEIez2ef1NveSVL3b0Ag==}
-    peerDependencies:
-      react-hook-form: ^7.0.0
-
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
     engines: {node: '>=18.18.0'}
@@ -2895,17 +2865,6 @@ packages:
     resolution: {integrity: sha512-ItpH5FMIJFt862kbAgC8hf5NJnDLo0FwEvMEX6zSLCenzWD0UH6H/fvAX1suFo1e0wcAmMhiEU1Tl6xKk/Pd1g==}
     peerDependencies:
       '@trpc/server': 10.45.4
-
-  '@trpc/next@10.45.4':
-    resolution: {integrity: sha512-lsuFpZFIf4iFo71fWLS0F5s33fZrvvbblbXffFJBQw20wTQP5fZuZ6hXRbCgiUD+dLsZP1wDMKhky3mqZ5dKgA==}
-    peerDependencies:
-      '@tanstack/react-query': ^4.18.0
-      '@trpc/client': 10.45.4
-      '@trpc/react-query': 10.45.4
-      '@trpc/server': 10.45.4
-      next: '*'
-      react: '>=16.8.0'
-      react-dom: '>=16.8.0'
 
   '@trpc/react-query@10.45.4':
     resolution: {integrity: sha512-/JfbkFMztsYbpl94P9TWritMjbHqWxeHz4uwjHM3W2zUcIKT88FiFXVmD/jLitPLrKhi4yAONoaRks5SUm12fQ==}
@@ -5592,12 +5551,6 @@ packages:
     peerDependencies:
       react: '>=17.0.0'
 
-  react-hook-form@7.77.0:
-    resolution: {integrity: sha512-Sslh9YDYc0GDlWT/lxasnIduNo4v3yyvqRGvmGKUre5AFjDs/HV9/OafHGD8d+sB2yoL4UIL9L8X9i0WlZZebg==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      react: ^16.8.0 || ^17 || ^18 || ^19
-
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
@@ -8255,10 +8208,6 @@ snapshots:
 
   '@formkit/auto-animate@0.8.4': {}
 
-  '@hookform/resolvers@3.10.0(react-hook-form@7.77.0(react@19.2.6))':
-    dependencies:
-      react-hook-form: 7.77.0(react@19.2.6)
-
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -9427,16 +9376,6 @@ snapshots:
   '@trpc/client@10.45.4(@trpc/server@10.45.4)':
     dependencies:
       '@trpc/server': 10.45.4
-
-  '@trpc/next@10.45.4(@tanstack/react-query@4.44.0(react-dom@19.2.6(react@19.2.6))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.15)(bufferutil@4.1.0)(react@19.2.6))(react@19.2.6))(@trpc/client@10.45.4(@trpc/server@10.45.4))(@trpc/react-query@10.45.4(@tanstack/react-query@4.44.0(react-dom@19.2.6(react@19.2.6))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.15)(bufferutil@4.1.0)(react@19.2.6))(react@19.2.6))(@trpc/client@10.45.4(@trpc/server@10.45.4))(@trpc/server@10.45.4)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@trpc/server@10.45.4)(next@15.5.18(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@tanstack/react-query': 4.44.0(react-dom@19.2.6(react@19.2.6))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.15)(bufferutil@4.1.0)(react@19.2.6))(react@19.2.6)
-      '@trpc/client': 10.45.4(@trpc/server@10.45.4)
-      '@trpc/react-query': 10.45.4(@tanstack/react-query@4.44.0(react-dom@19.2.6(react@19.2.6))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.15)(bufferutil@4.1.0)(react@19.2.6))(react@19.2.6))(@trpc/client@10.45.4(@trpc/server@10.45.4))(@trpc/server@10.45.4)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@trpc/server': 10.45.4
-      next: 15.5.18(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
 
   '@trpc/react-query@10.45.4(@tanstack/react-query@4.44.0(react-dom@19.1.0(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0)(utf-8-validate@6.0.6))(react@19.1.0))(@trpc/client@10.45.4(@trpc/server@10.45.4))(@trpc/server@10.45.4)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
@@ -12511,10 +12450,6 @@ snapshots:
   react-freeze@1.0.4(react@19.1.0):
     dependencies:
       react: 19.1.0
-
-  react-hook-form@7.77.0(react@19.2.6):
-    dependencies:
-      react: 19.2.6
 
   react-is@16.13.1: {}
 
