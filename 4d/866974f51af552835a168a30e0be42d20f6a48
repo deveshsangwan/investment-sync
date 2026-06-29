@@ -1,0 +1,24 @@
+.prettierignore
+  s_53892c856a84fd::t_4bd63df4c55694 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "4d866974f51af552835a168a30e0be42d20f6a48",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_53892c856a84fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0f70-5b23-79e2-b630-e7e03fbda2e7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
