@@ -1,0 +1,43 @@
+packages/api/src/services/portfolio/timeline.ts
+  s_7e361fdd86bf08::t_72de54b562ae70 3,12-16
+packages/api/src/services/portfolio/data.ts
+  s_7e361fdd86bf08::t_4aff51b1c383dc 87-91,143-147
+apps/web/src/app/uploads/uploads-client.tsx
+  s_7e361fdd86bf08::t_f676446af9e2b8 40-41
+package.json
+  s_7e361fdd86bf08::t_d0745f8f5e2367 27
+packages/api/src/services/portfolio/dedupe.ts
+  s_7e361fdd86bf08::t_a8dfc993d92c2c 17-18,70,93,120,127-128,156,161,174-182,185
+packages/api/src/services/portfolio/from-snapshot.test.ts
+  s_7e361fdd86bf08::t_c4f7164eda38c8 1-36
+packages/api/src/services/portfolio/overview.ts
+  s_7e361fdd86bf08::t_5481ed56f6fad9 40
+packages/api/src/services/portfolio/detail.ts
+  s_7e361fdd86bf08::t_7adaef2eaf7d2f 69
+packages/api/src/services/portfolio/from-snapshot.ts
+  s_7e361fdd86bf08::t_09a1b88e91bfc0 133-137,140-144,147-151
+  s_7e361fdd86bf08::t_fdec776c5a36ae 11,117,119-132,138-139,145-146,152-163
+pnpm-lock.yaml
+  s_7e361fdd86bf08::t_00dd6a84c2d4a8 15-16,1962-1963,8419
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "855222781b5a800d84ee42c33fa8df8e41d351a1",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_7e361fdd86bf08": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0f88-2b3c-7ed3-b895-c986fb2b8342",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
