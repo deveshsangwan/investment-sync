@@ -10,6 +10,7 @@ import {
 
 export * from "./types";
 export * from "./utils";
+export * from "./import-validation";
 
 export const importers: PortfolioImporter[] = [
   tickertapeStockImporter,

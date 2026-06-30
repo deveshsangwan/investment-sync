@@ -29,6 +29,13 @@
       "when": 1780331400000,
       "tag": "0003_remove_cross_source_stock_duplicates",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780417800000,
+      "tag": "0004_identity_performance_currency_rates",
+      "breakpoints": true
     }
   ]
 }

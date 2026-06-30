@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import {
   findHeaderRow,
+  INVESTMENT_PORTFOLIO_SUMMARY_SHEET,
   objectFromRow,
   parseNumber,
   parseRequiredNumber,
@@ -17,15 +18,34 @@ import {
   toIsoDate,
 } from "./utils";
 
-function workbookRows(file: ImportFile, sheetName: string): unknown[][] {
-  const workbook = XLSX.read(file.content, { type: "buffer", cellDates: true });
-  const sheet = workbook.Sheets[sheetName];
+interface WorkbookContext {
+  workbook: XLSX.WorkBook;
+  rowsBySheet: Map<string, unknown[][]>;
+}
+
+function createWorkbookContext(file: ImportFile): WorkbookContext {
+  return {
+    workbook: XLSX.read(file.content, { type: "buffer", cellDates: true }),
+    rowsBySheet: new Map(),
+  };
+}
+
+function workbookRows(
+  context: WorkbookContext,
+  sheetName: string,
+): unknown[][] {
+  const cached = context.rowsBySheet.get(sheetName);
+  if (cached) return cached;
+
+  const sheet = context.workbook.Sheets[sheetName];
   if (!sheet) return [];
-  return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     raw: true,
     defval: "",
   });
+  context.rowsBySheet.set(sheetName, rows);
+  return rows;
 }
 
 export const vestedDrivewealthImporter: PortfolioImporter = {
@@ -55,7 +75,8 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
     };
   },
   parse(file: ImportFile): ParseResult {
-    const rows = workbookRows(file, "Unrealized P&L - Summary ");
+    const workbook = createWorkbookContext(file);
+    const rows = workbookRows(workbook, "Unrealized P&L - Summary ");
     const headerRow = findHeaderRow(rows, [
       "Security",
       "Quantity",
@@ -122,7 +143,7 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
       bookSheets: true,
     });
     const expectedSheets = [
-      "Investment Portfolio",
+      INVESTMENT_PORTFOLIO_SUMMARY_SHEET,
       "Stock Investments",
       "Mutual Funds",
       "NPS",
@@ -142,7 +163,8 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
     };
   },
   parse(file: ImportFile): ParseResult {
-    const rows = workbookRows(file, "Investment Portfolio");
+    const workbook = createWorkbookContext(file);
+    const rows = workbookRows(workbook, INVESTMENT_PORTFOLIO_SUMMARY_SHEET);
     const headerRow = findHeaderRow(rows, [
       "Date",
       "Asset Type",
@@ -172,19 +194,19 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
               currentValue: parseRequiredNumber(record["current value"]),
               pnlAmount: parseNumber(record["gain/loss"]),
               currency: "INR" as const,
-              metadata: { sourceSheet: "Investment Portfolio" },
+              metadata: { sourceSheet: INVESTMENT_PORTFOLIO_SUMMARY_SHEET },
             },
           ];
         }
         return [];
       });
     const detailedRows = dedupeHoldingRows([
-      ...parseStockInvestments(file, initialDate),
-      ...parseMutualFunds(file, initialDate),
-      ...parseNps(file, initialDate),
-      ...parseUlips(file, initialDate),
-      ...parseCrypto(file, initialDate),
-      ...parseUsStocks(file, initialDate),
+      ...parseStockInvestments(workbook, initialDate),
+      ...parseMutualFunds(workbook, initialDate),
+      ...parseNps(workbook, initialDate),
+      ...parseUlips(workbook, initialDate),
+      ...parseCrypto(workbook, initialDate),
+      ...parseUsStocks(workbook, initialDate),
     ]);
     const parsedRows = [...valuationRows, ...detailedRows.rows];
     const warnings = [
@@ -204,10 +226,10 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
 };
 
 function parseStockInvestments(
-  file: ImportFile,
+  workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
-  const rows = workbookRows(file, "Stock Investments");
+  const rows = workbookRows(workbook, "Stock Investments");
   const headerRow = findHeaderRow(rows, ["Security", "Quantity"]);
   if (headerRow < 0) return [];
 
@@ -258,10 +280,10 @@ function parseStockInvestments(
 }
 
 function parseMutualFunds(
-  file: ImportFile,
+  workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
-  const rows = workbookRows(file, "Mutual Funds");
+  const rows = workbookRows(workbook, "Mutual Funds");
   const headerRow = findHeaderRow(rows, ["Fund Name", "Current Value"]);
   if (headerRow < 0) return [];
 
@@ -312,10 +334,10 @@ function parseMutualFunds(
 }
 
 function parseNps(
-  file: ImportFile,
+  workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
-  const rows = workbookRows(file, "NPS");
+  const rows = workbookRows(workbook, "NPS");
   let sourceDate = initialDate;
   const parsed: NormalizedHoldingRow[] = [];
 
@@ -365,11 +387,11 @@ function parseNps(
 }
 
 function parseUlips(
-  file: ImportFile,
+  workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   return parseSimpleSectionHoldings({
-    rows: workbookRows(file, "ULIPS"),
+    rows: workbookRows(workbook, "ULIPS"),
     initialDate,
     accountName: "ULIPs",
     assetClass: "ulip",
@@ -383,11 +405,11 @@ function parseUlips(
 }
 
 function parseCrypto(
-  file: ImportFile,
+  workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   return parseSimpleSectionHoldings({
-    rows: workbookRows(file, "Crypto"),
+    rows: workbookRows(workbook, "Crypto"),
     initialDate,
     accountName: "Crypto",
     assetClass: "crypto",
@@ -402,11 +424,11 @@ function parseCrypto(
 }
 
 function parseUsStocks(
-  file: ImportFile,
+  workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   return parseSimpleSectionHoldings({
-    rows: workbookRows(file, "US stocks"),
+    rows: workbookRows(workbook, "US stocks"),
     initialDate,
     accountName: "US Stocks",
     assetClass: "us_stock",

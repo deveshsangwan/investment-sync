@@ -13,7 +13,6 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 - `packages/db`: Drizzle schema and database client.
 - `packages/importers`: Tickertape, Vested/DriveWealth, and spreadsheet import contracts.
 - `packages/analytics`: portfolio summary, allocation, and XIRR helpers.
-- `packages/ui`: small shared UI primitives.
 
 ## Local Setup
 

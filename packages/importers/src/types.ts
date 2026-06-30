@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { isValidCalendarDateParts } from "./utils";
+
 export type ImportSourceType =
   | "investment_portfolio_xlsx"
   | "tickertape_stock_csv"
@@ -103,3 +106,100 @@ export interface PortfolioImporter {
   detect(file: ImportFile): DetectionResult;
   parse(file: ImportFile): ParseResult;
 }
+
+export const importSourceTypeSchema = z.enum([
+  "investment_portfolio_xlsx",
+  "tickertape_stock_csv",
+  "tickertape_mutual_fund_csv",
+  "vested_drivewealth_xlsx",
+  "manual_snapshot",
+  "cas_pdf",
+  "unknown",
+]);
+
+export const assetClassSchema = z.enum([
+  "indian_stock",
+  "mutual_fund",
+  "us_stock",
+  "nps",
+  "ulip",
+  "crypto",
+  "cash",
+  "other",
+]);
+
+export const currencySchema = z.enum(["INR", "USD", "BTC", "ETH", "OTHER"]);
+
+const metadataSchema = z.record(z.unknown());
+const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const [yearText = "", monthText = "", dayText = ""] = value.split("-");
+    return isValidCalendarDateParts(
+      Number(yearText),
+      Number(monthText),
+      Number(dayText),
+    );
+  }, "Invalid calendar date");
+
+export const normalizedHoldingRowSchema = z.object({
+  kind: z.literal("holding"),
+  sourceType: importSourceTypeSchema,
+  sourceDate: isoDateSchema.optional(),
+  accountName: z.string().min(1),
+  provider: z.string().min(1),
+  instrumentName: z.string().min(1),
+  symbol: z.string().min(1).optional(),
+  isin: z.string().min(1).optional(),
+  assetClass: assetClassSchema,
+  currency: currencySchema,
+  quantity: z.number().finite().optional(),
+  investedAmount: z.number().finite(),
+  currentValue: z.number().finite(),
+  pnlAmount: z.number().finite().optional(),
+  pnlPercent: z.number().finite().optional(),
+  metadata: metadataSchema,
+}) satisfies z.ZodType<NormalizedHoldingRow>;
+
+export const normalizedTransactionRowSchema = z.object({
+  kind: z.literal("transaction"),
+  sourceType: importSourceTypeSchema,
+  accountName: z.string().min(1),
+  provider: z.string().min(1),
+  instrumentName: z.string().min(1),
+  symbol: z.string().min(1).optional(),
+  assetClass: assetClassSchema,
+  currency: currencySchema,
+  tradeDate: isoDateSchema,
+  type: z.enum([
+    "buy",
+    "sell",
+    "dividend",
+    "fee",
+    "transfer",
+    "contribution",
+    "redemption",
+  ]),
+  quantity: z.number().finite().optional(),
+  price: z.number().finite().optional(),
+  amount: z.number().finite(),
+  metadata: metadataSchema,
+}) satisfies z.ZodType<NormalizedTransactionRow>;
+
+export const normalizedValuationRowSchema = z.object({
+  kind: z.literal("valuation"),
+  sourceType: importSourceTypeSchema,
+  valuationDate: isoDateSchema,
+  investedAmount: z.number().finite(),
+  currentValue: z.number().finite(),
+  pnlAmount: z.number().finite().optional(),
+  currency: currencySchema,
+  metadata: metadataSchema,
+}) satisfies z.ZodType<NormalizedValuationRow>;
+
+export const normalizedImportRowSchema = z.discriminatedUnion("kind", [
+  normalizedHoldingRowSchema,
+  normalizedTransactionRowSchema,
+  normalizedValuationRowSchema,
+]) satisfies z.ZodType<NormalizedImportRow>;

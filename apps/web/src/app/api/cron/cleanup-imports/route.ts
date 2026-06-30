@@ -1,11 +1,12 @@
 import {
   cleanupExpiredImportFiles,
   createApiContext,
+  getAppEnv,
 } from "@investment-sync/api";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-  const expectedSecret = process.env.CRON_SECRET;
+  const expectedSecret = getAppEnv().CRON_SECRET;
   const providedSecret = request.headers
     .get("authorization")
     ?.replace("Bearer ", "");
