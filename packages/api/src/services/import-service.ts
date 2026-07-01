@@ -5,7 +5,6 @@ import {
   eq,
   inArray,
   isNotNull,
-  isNull,
   lte,
   or,
   sql,
@@ -525,8 +524,8 @@ async function ensureAccounts(
       .values(
         missing.map((row) => ({
           householdId,
-          name: row.accountName,
-          provider: row.provider,
+          name: row.accountName.trim(),
+          provider: row.provider.trim(),
           accountType: row.assetClass,
           currency: row.currency,
         })),
@@ -597,9 +596,9 @@ async function ensureInstruments(
       .insert(instruments)
       .values(
         missing.map((row) => ({
-          name: row.instrumentName,
-          symbol: row.symbol,
-          isin: "isin" in row ? row.isin : undefined,
+          name: row.instrumentName.trim(),
+          symbol: cleanOptionalText(row.symbol),
+          isin: "isin" in row ? cleanOptionalText(row.isin) : undefined,
           assetClass: row.assetClass,
           currency: row.currency,
         })),
@@ -651,10 +650,10 @@ function instrumentIdentityWhere(identities: InstrumentIdentity[]): SQL {
   const conditions = identities
     .map((identity) => {
       const identityCondition = identity.symbol
-        ? eq(sql<string>`upper(${instruments.symbol})`, identity.symbol)
+        ? eq(sql<string>`upper(trim(${instruments.symbol}))`, identity.symbol)
         : and(
-            isNull(instruments.symbol),
-            eq(sql<string>`lower(${instruments.name})`, identity.name),
+            sql`nullif(trim(${instruments.symbol}), '') is null`,
+            eq(sql<string>`lower(trim(${instruments.name}))`, identity.name),
           );
 
       return and(
@@ -666,6 +665,11 @@ function instrumentIdentityWhere(identities: InstrumentIdentity[]): SQL {
     .filter((condition): condition is SQL => Boolean(condition));
 
   return or(...conditions) ?? sql`false`;
+}
+
+function cleanOptionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function uniqueByKey<T>(rows: T[], keyFor: (row: T) => string): T[] {

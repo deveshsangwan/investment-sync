@@ -86,7 +86,7 @@ export function aggregateSnapshotTotalsByDate<T extends SnapshotAmountRow>(
   rows: T[],
   usdInrRate?: number,
 ): Map<string, { investedAmount: number; currentValue: number }> {
-  // ponytail: TS-side aggregate filter for timeline rows; explicit imports.dedupe handles DB cleanup.
+  // ponytail: TS-side aggregate filter for timeline rows; migrations handle DB cleanup.
   const eligible = filterAggregateRowsBySnapshotGroup(rows);
   const latestBySnapshot = new Map<string, T>();
 

@@ -16,7 +16,6 @@ import {
   holdingHistory,
   latestCurrentHoldings,
 } from "./latest-holdings";
-import { toPerformanceValuation } from "./performance";
 import {
   buildPortfolioSummary,
   buildPortfolioSummaryFromSnapshot,
@@ -37,6 +36,7 @@ import {
 } from "./utils";
 import type {
   AssetClass,
+  Currency,
   InstrumentTransactionRow,
   PortfolioContext,
   SnapshotValuationRow,
@@ -326,4 +326,28 @@ function valuationsFromSnapshotRows(
       investedAmount: totals.investedAmount,
       currentValue: totals.currentValue,
     }));
+}
+
+function toPerformanceValuation(
+  point: {
+    snapshotDate: string;
+    investedAmount: string | number;
+    currentValue: string | number;
+    currency: Currency;
+  },
+  usdInrRate?: number,
+): PerformanceValuationInput {
+  return {
+    date: parseDate(point.snapshotDate) ?? new Date(point.snapshotDate),
+    investedAmount: convertToInr(
+      Number(point.investedAmount),
+      point.currency,
+      usdInrRate,
+    ),
+    currentValue: convertToInr(
+      Number(point.currentValue),
+      point.currency,
+      usdInrRate,
+    ),
+  };
 }

@@ -7,9 +7,7 @@ import {
 } from "../services/portfolio/detail";
 import { buildPortfolioHoldings } from "../services/portfolio/holdings";
 import { buildPortfolioOverview } from "../services/portfolio/overview";
-import { buildPortfolioPerformance } from "../services/portfolio/performance";
 import { buildPortfolioSummary } from "../services/portfolio/summary";
-import { buildPortfolioTimeline } from "../services/portfolio/timeline";
 
 export const portfolioRouter = router({
   holdings: protectedProcedure.query(async ({ ctx }) =>
@@ -17,12 +15,6 @@ export const portfolioRouter = router({
   ),
   summary: protectedProcedure.query(async ({ ctx }) =>
     buildPortfolioSummary(ctx),
-  ),
-  timeline: protectedProcedure.query(async ({ ctx }) =>
-    buildPortfolioTimeline(ctx),
-  ),
-  performance: protectedProcedure.query(async ({ ctx }) =>
-    buildPortfolioPerformance(ctx),
   ),
   overview: protectedProcedure.query(async ({ ctx }) =>
     buildPortfolioOverview(ctx),

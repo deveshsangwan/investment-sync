@@ -178,7 +178,7 @@ async function latestCurrentHoldingRows(
         i.symbol as "symbol",
         i.asset_class as "assetClass",
         (${aggregateExpression}) as "isAggregate",
-        coalesce(upper(i.symbol), upper(i.name)) as "instrumentKey"
+        coalesce(nullif(upper(trim(i.symbol)), ''), upper(trim(i.name))) as "instrumentKey"
       from holding_snapshots hs
       inner join accounts a on a.id = hs.account_id
       inner join instruments i on i.id = hs.instrument_id
@@ -253,12 +253,7 @@ async function latestCurrentHoldingRows(
         *,
         row_number() over (
           partition by
-            "accountId",
-            "accountName",
-            "provider",
-            "sourceSheet",
             "assetClass",
-            "instrumentId",
             "instrumentKey",
             "currency"
           order by "snapshotDate" desc, "instrumentName" asc, "id" desc

@@ -27,7 +27,7 @@ export function accountIdentityKey(value: AccountIdentityInput) {
 export function instrumentIdentity(
   value: InstrumentIdentityInput,
 ): InstrumentIdentity {
-  const symbol = value.symbol ? normalizeSymbol(value.symbol) : null;
+  const symbol = value.symbol ? normalizeSymbol(value.symbol) || null : null;
   const name = normalizeText(value.name);
   const identity = symbol ? `symbol:${symbol}` : `name:${name}`;
 
