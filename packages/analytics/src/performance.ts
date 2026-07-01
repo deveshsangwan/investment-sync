@@ -42,6 +42,10 @@ export interface PortfolioPerformanceSummary {
   sourceXirrCoveragePercent: number;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DAYS_PER_YEAR = 365;
+const MIN_ESTIMATED_XIRR_DAYS = DAYS_PER_YEAR;
+
 export function summarizePerformance(input: {
   cashFlows: PerformanceCashFlowInput[];
   holdings: PerformanceHoldingInput[];
@@ -235,6 +239,10 @@ export function xirrFromValuationDeltas(
   if (!first || !last || first.investedAmount <= 0 || last.currentValue <= 0) {
     return undefined;
   }
+  const elapsedDays = (last.date.getTime() - first.date.getTime()) / DAY_MS;
+  if (elapsedDays < MIN_ESTIMATED_XIRR_DAYS) {
+    return undefined;
+  }
 
   const flows: CashFlow[] = [
     { date: first.date, amount: -first.investedAmount },
@@ -251,7 +259,8 @@ export function xirrFromValuationDeltas(
     }
   }
   flows.push({ date: last.date, amount: last.currentValue });
-  return xirr(flows);
+  const rate = xirr(flows);
+  return rate !== undefined && Number.isFinite(rate) ? rate : undefined;
 }
 
 function cagrFromValuations(
@@ -267,7 +276,7 @@ function cagrFromValuations(
     return undefined;
   }
   const years =
-    (last.date.getTime() - first.date.getTime()) / (365 * 24 * 60 * 60 * 1000);
+    (last.date.getTime() - first.date.getTime()) / (DAYS_PER_YEAR * DAY_MS);
   if (years <= 0) return undefined;
   return roundPercent(
     (Math.pow(last.currentValue / first.currentValue, 1 / years) - 1) * 100,
