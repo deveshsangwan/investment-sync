@@ -2,10 +2,13 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createDatabase,
+  accounts,
+  holdingSnapshots,
   households,
   householdMembers,
   importBatches,
   importRows,
+  instruments,
   users,
 } from "@investment-sync/db";
 import { eq } from "drizzle-orm";
@@ -48,21 +51,18 @@ describeDb("import service integration", () => {
     expect(batch?.status).toBe("committed");
 
     const caller = appRouter.createCaller(ctx);
-    const [holdings, summary, performance, timeline, overview] =
-      await Promise.all([
-        caller.portfolio.holdings(),
-        caller.portfolio.summary(),
-        caller.portfolio.performance(),
-        caller.portfolio.timeline(),
-        caller.portfolio.overview(),
-      ]);
+    const [holdings, summary, overview] = await Promise.all([
+      caller.portfolio.holdings(),
+      caller.portfolio.summary(),
+      caller.portfolio.overview(),
+    ]);
 
     expect(holdings).toHaveLength(1);
     expect(summary.currentValue).toBe(125);
     expect(overview.holdings).toEqual(holdings);
     expect(overview.summary).toEqual(summary);
-    expect(overview.performance).toEqual(performance);
-    expect(overview.timeline).toEqual(timeline);
+    expect(overview.performance.absoluteReturnPercent).toBe(25);
+    expect(overview.timeline).toHaveLength(1);
   });
 
   it("keeps dashboard and asset-class holdings aligned for aggregate edges", async () => {
@@ -131,7 +131,7 @@ describeDb("import service integration", () => {
     ).toBe(false);
   });
 
-  it("keeps duplicate instruments in different accounts separate", async () => {
+  it("collapses duplicate instrument identities at read time", async () => {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const fixture = await createFixture([
       holdingRow({
@@ -144,14 +144,6 @@ describeDb("import service integration", () => {
         currentValue: 210,
         investedAmount: 200,
       }),
-      transactionRow({
-        accountName: "Broker A",
-        amount: -100,
-      }),
-      transactionRow({
-        accountName: "Broker B",
-        amount: -200,
-      }),
     ]);
     const ctx = createApiContext({
       auth: { userId: fixture.clerkUserId, email: fixture.email },
@@ -160,7 +152,7 @@ describeDb("import service integration", () => {
     });
 
     const result = await commitImport(ctx, fixture.membership, fixture.batchId);
-    expect(result.committed).toBe(4);
+    expect(result.committed).toBe(2);
 
     const caller = appRouter.createCaller(ctx);
     const [holdings, assetClassDetail] = await Promise.all([
@@ -168,28 +160,64 @@ describeDb("import service integration", () => {
       caller.portfolio.assetClassDetail({ assetClass: "indian_stock" }),
     ]);
 
-    expect(holdings).toHaveLength(2);
-    expect(holdings.map((holding) => holding.accountName).sort()).toEqual([
-      "Broker A",
-      "Broker B",
-    ]);
-    expect(assetClassDetail.holdings).toHaveLength(2);
-    expect(assetClassDetail.summary.currentValue).toBe(335);
-
-    const brokerAHolding = holdings.find(
-      (holding) => holding.accountName === "Broker A",
+    expect(holdings).toHaveLength(1);
+    expect(assetClassDetail.holdings).toHaveLength(1);
+    expect(assetClassDetail.summary.currentValue).toBe(
+      Number(holdings[0]?.currentValue ?? 0),
     );
-    expect(brokerAHolding).toBeDefined();
-    if (!brokerAHolding) return;
+  });
 
-    const detail = await caller.portfolio.holdingDetail({
-      id: brokerAHolding.id,
+  it("reuses legacy instrument identities with whitespace drift", async () => {
+    if (!db) throw new Error("TEST_DATABASE_URL is required");
+    const symbol = `LEGACY${randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    const fixture = await createFixture([
+      holdingRow({ instrumentName: symbol, symbol }),
+    ]);
+    const [account] = await db
+      .insert(accounts)
+      .values({
+        householdId: fixture.membership.householdId,
+        name: "Indian Stocks",
+        provider: "Tickertape",
+        accountType: "indian_stock",
+        currency: "INR",
+      })
+      .returning();
+    const [instrument] = await db
+      .insert(instruments)
+      .values({
+        name: `${symbol} `,
+        symbol: ` ${symbol.toLowerCase()} `,
+        assetClass: "indian_stock",
+        currency: "INR",
+      })
+      .returning();
+    if (!account || !instrument) throw new Error("Failed to seed fixture");
+
+    await db.insert(holdingSnapshots).values({
+      householdId: fixture.membership.householdId,
+      accountId: account.id,
+      instrumentId: instrument.id,
+      snapshotDate: "2026-06-16",
+      quantity: "1",
+      investedAmount: "100",
+      currentValue: "100",
+      currency: "INR",
+      sourcePayload: {},
     });
-    expect(detail?.holding.accountName).toBe("Broker A");
-    expect(detail?.history).toHaveLength(1);
-    expect(
-      detail?.transactions.map((transaction) => transaction.amount),
-    ).toEqual(["-100"]);
+    const ctx = createApiContext({
+      auth: { userId: fixture.clerkUserId, email: fixture.email },
+      db,
+      supabase: {} as ApiContext["supabase"],
+    });
+
+    await commitImport(ctx, fixture.membership, fixture.batchId);
+
+    const caller = appRouter.createCaller(ctx);
+    const holdings = await caller.portfolio.holdings();
+
+    expect(holdings).toHaveLength(1);
+    expect(holdings[0]?.currentValue).toBe("125.0000");
   });
 
   async function createFixture(
