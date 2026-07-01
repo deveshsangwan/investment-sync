@@ -303,29 +303,3 @@ function holdingRow(
     metadata: overrides.metadata ?? {},
   };
 }
-
-function transactionRow(
-  overrides: Partial<{
-    accountName: string;
-    provider: string;
-    instrumentName: string;
-    symbol: string;
-    tradeDate: string;
-    amount: number;
-  }> = {},
-) {
-  return {
-    kind: "transaction",
-    sourceType: "tickertape_stock_csv",
-    accountName: overrides.accountName ?? "Indian Stocks",
-    provider: overrides.provider ?? "Tickertape",
-    instrumentName: overrides.instrumentName ?? "ABC",
-    symbol: overrides.symbol ?? "ABC",
-    assetClass: "indian_stock",
-    currency: "INR",
-    tradeDate: overrides.tradeDate ?? "2026-06-16",
-    type: "buy",
-    amount: overrides.amount ?? -100,
-    metadata: {},
-  };
-}
