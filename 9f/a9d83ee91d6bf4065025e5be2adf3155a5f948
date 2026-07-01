@@ -1,0 +1,43 @@
+packages/api/src/services/import-service.ts
+  s_116d0de0e39a16::t_6e66a698a238bd 527-528,599-601,653,655-656,670-672
+  s_116d0de0e39a16::t_27da5ae18fd045 673-674
+packages/api/src/services/import-service.integration.test.ts
+  s_116d0de0e39a16::t_a291a5be9f1ca8 64
+  s_116d0de0e39a16::t_ca722321ea79af 172-175,189-190
+  s_116d0de0e39a16::t_b0dab2e7a6a778 54-58,65
+  s_116d0de0e39a16::t_31621557831fb3 155
+  s_116d0de0e39a16::t_ff1b65decd1cf9 5-6,11,168,170-171,176-188,191-206,208-220
+  s_116d0de0e39a16::t_c1d1466ba0cc04 134,163-166
+packages/api/src/services/portfolio/identity.ts
+  s_116d0de0e39a16::t_1906277f48360e 30
+packages/api/src/services/portfolio/utils.ts
+  s_116d0de0e39a16::t_f35be61f5b39db 89
+packages/api/src/services/portfolio/detail.ts
+  s_116d0de0e39a16::t_752ec6d0205379 39,330-352
+  s_116d0de0e39a16::t_3e7da1c7eaaa96 353
+packages/api/src/routers/imports.ts
+  s_116d0de0e39a16::t_43b67c72245032 1-2,5
+packages/api/src/services/portfolio/latest-holdings.ts
+  s_116d0de0e39a16::t_a28bffb30910dc 181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "9fa9d83ee91d6bf4065025e5be2adf3155a5f948",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_116d0de0e39a16": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1ebb-9c52-77d2-99ae-b4de6f054438",
+        "model": "gpt-5.5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
