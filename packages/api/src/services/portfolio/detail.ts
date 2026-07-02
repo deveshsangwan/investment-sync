@@ -26,8 +26,6 @@ import {
   enrichHoldingWithInr,
   enrichHoldingWithInrAndXirr,
   getUsdInrRateIfNeeded,
-  holdingCashFlowKey,
-  holdingPositionKey,
   parseDate,
   roundMoney,
   roundPercent,
@@ -280,11 +278,11 @@ function resolvePositionXirr(
   transactionsByHolding: Map<string, InstrumentTransactionRow[]>,
   usdInrRate?: number,
 ) {
-  const positionHistory = historyByHolding.get(holdingPositionKey(holding)) ?? [
+  const positionHistory = historyByHolding.get(holding.instrumentId) ?? [
     holding,
   ];
   const positionTransactions =
-    transactionsByHolding.get(holdingCashFlowKey(holding)) ?? [];
+    transactionsByHolding.get(holding.instrumentId) ?? [];
 
   return resolveHoldingXirr({
     cashFlows: positionTransactions.map((transaction) => ({

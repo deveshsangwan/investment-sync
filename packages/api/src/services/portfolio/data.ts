@@ -10,8 +10,6 @@ import { cachedPortfolioData } from "./cache";
 import {
   aggregateSnapshotTotalsByDate,
   getUsdInrRateIfNeeded,
-  holdingCashFlowKey,
-  holdingPositionKey,
   roundMoney,
 } from "./utils";
 import type {
@@ -155,8 +153,6 @@ export async function historyByHoldingPositions(
   const instrumentIds = [
     ...new Set(holdings.map((holding) => holding.instrumentId)),
   ];
-  const accountIds = [...new Set(holdings.map((holding) => holding.accountId))];
-  const requestedKeys = new Set(holdings.map(holdingPositionKey));
   if (instrumentIds.length === 0) return new Map();
 
   const rows = await ctx.db
@@ -180,7 +176,6 @@ export async function historyByHoldingPositions(
     .where(
       and(
         eq(holdingSnapshots.householdId, ctx.membership.householdId),
-        inArray(holdingSnapshots.accountId, accountIds),
         inArray(holdingSnapshots.instrumentId, instrumentIds),
       ),
     )
@@ -188,9 +183,10 @@ export async function historyByHoldingPositions(
 
   const grouped = new Map<string, SnapshotValuationRow[]>();
   for (const row of rows) {
-    const key = holdingPositionKey(row);
-    if (!requestedKeys.has(key)) continue;
-    grouped.set(key, [...(grouped.get(key) ?? []), row]);
+    grouped.set(row.instrumentId, [
+      ...(grouped.get(row.instrumentId) ?? []),
+      row,
+    ]);
   }
   return grouped;
 }
@@ -202,8 +198,6 @@ export async function transactionsByHoldingPositions(
   const instrumentIds = [
     ...new Set(holdings.map((holding) => holding.instrumentId)),
   ];
-  const accountIds = [...new Set(holdings.map((holding) => holding.accountId))];
-  const requestedKeys = new Set(holdings.map(holdingCashFlowKey));
   if (instrumentIds.length === 0) return new Map();
 
   const rows = await ctx.db
@@ -219,7 +213,6 @@ export async function transactionsByHoldingPositions(
     .where(
       and(
         eq(transactions.householdId, ctx.membership.householdId),
-        inArray(transactions.accountId, accountIds),
         inArray(transactions.instrumentId, instrumentIds),
       ),
     )
@@ -228,9 +221,10 @@ export async function transactionsByHoldingPositions(
   const grouped = new Map<string, InstrumentTransactionRow[]>();
   for (const row of rows) {
     if (!row.instrumentId) continue;
-    const key = holdingCashFlowKey(row);
-    if (!requestedKeys.has(key)) continue;
-    grouped.set(key, [...(grouped.get(key) ?? []), row]);
+    grouped.set(row.instrumentId, [
+      ...(grouped.get(row.instrumentId) ?? []),
+      row,
+    ]);
   }
   return grouped;
 }

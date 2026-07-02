@@ -56,6 +56,35 @@ describe("summarizePerformance", () => {
     expect(summary.xirr).toBe(15);
     expect(summary.sourceXirrCoveragePercent).toBe(100);
   });
+
+  it("does not estimate portfolio XIRR from short snapshot-only history", () => {
+    const summary = summarizePerformance({
+      asOfDate: new Date("2026-06-06"),
+      holdings: [
+        {
+          assetClass: "us_stock",
+          investedAmount: 476,
+          currentValue: 596,
+        },
+      ],
+      cashFlows: [],
+      valuations: [
+        {
+          date: new Date("2026-05-30"),
+          investedAmount: 476,
+          currentValue: 476,
+        },
+        {
+          date: new Date("2026-06-06"),
+          investedAmount: 476,
+          currentValue: 596,
+        },
+      ],
+    });
+
+    expect(summary.dataQuality).toBe("insufficient_data");
+    expect(summary.xirr).toBeUndefined();
+  });
 });
 
 describe("xirrFromValuationDeltas", () => {
@@ -72,7 +101,7 @@ describe("xirrFromValuationDeltas", () => {
         currentValue: 701.38,
       },
       {
-        date: new Date("2026-05-31"),
+        date: new Date("2026-06-06"),
         investedAmount: 716.81,
         currentValue: 1100.78,
       },
@@ -80,6 +109,23 @@ describe("xirrFromValuationDeltas", () => {
 
     expect(rate).toBeDefined();
     expect((rate ?? 0) * 100).toBeCloseTo(42, 0);
+  });
+
+  it("does not annualize short snapshot windows into unstable XIRR", () => {
+    const rate = xirrFromValuationDeltas([
+      {
+        date: new Date("2026-05-30"),
+        investedAmount: 476,
+        currentValue: 476,
+      },
+      {
+        date: new Date("2026-06-06"),
+        investedAmount: 476,
+        currentValue: 596,
+      },
+    ]);
+
+    expect(rate).toBeUndefined();
   });
 });
 
@@ -134,7 +180,7 @@ describe("resolveHoldingXirr", () => {
 
   it("estimates XIRR from valuations when source XIRR is missing", () => {
     const resolved = resolveHoldingXirr({
-      asOfDate: new Date("2026-05-31"),
+      asOfDate: new Date("2026-06-06"),
       terminalValue: 1100.78,
       valuations: [
         {
@@ -148,7 +194,7 @@ describe("resolveHoldingXirr", () => {
           currentValue: 701.38,
         },
         {
-          date: new Date("2026-05-31"),
+          date: new Date("2026-06-06"),
           investedAmount: 716.81,
           currentValue: 1100.78,
         },
@@ -158,6 +204,28 @@ describe("resolveHoldingXirr", () => {
 
     expect(resolved.dataQuality).toBe("estimated");
     expect(resolved.xirr).toBeCloseTo(42, 0);
+  });
+
+  it("marks short snapshot-only holding history as insufficient", () => {
+    const resolved = resolveHoldingXirr({
+      asOfDate: new Date("2026-06-06"),
+      terminalValue: 596,
+      valuations: [
+        {
+          date: new Date("2026-05-30"),
+          investedAmount: 476,
+          currentValue: 476,
+        },
+        {
+          date: new Date("2026-06-06"),
+          investedAmount: 476,
+          currentValue: 596,
+        },
+      ],
+      cashFlows: [],
+    });
+
+    expect(resolved).toEqual({ dataQuality: "insufficient_data" });
   });
 });
 
@@ -221,5 +289,31 @@ describe("resolveAssetClassXirr", () => {
 
     expect(resolved.dataQuality).toBe("estimated");
     expect(resolved.xirr).toBeDefined();
+  });
+
+  it("does not estimate asset-class XIRR from short snapshot-only history", () => {
+    const resolved = resolveAssetClassXirr({
+      holdings: [
+        {
+          assetClass: "us_stock",
+          investedAmount: 476,
+          currentValue: 596,
+        },
+      ],
+      valuations: [
+        {
+          date: new Date("2026-05-30"),
+          investedAmount: 476,
+          currentValue: 476,
+        },
+        {
+          date: new Date("2026-06-06"),
+          investedAmount: 476,
+          currentValue: 596,
+        },
+      ],
+    });
+
+    expect(resolved).toEqual({ dataQuality: "insufficient_data" });
   });
 });
