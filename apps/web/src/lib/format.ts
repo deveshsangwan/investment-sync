@@ -10,6 +10,14 @@ const usdCurrency = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
+const percentage = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 2,
+});
+
+const quantity = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 6,
+});
+
 export function formatInr(value: number) {
   return inrCurrency.format(value);
 }
@@ -26,7 +34,12 @@ export function formatCurrency(value: number, currency?: string | null) {
 export function formatPercent(value: number | undefined | null) {
   return value === undefined || value === null || !Number.isFinite(value)
     ? "N/A"
-    : `${value}%`;
+    : `${percentage.format(value)}%`;
+}
+
+export function formatQuantity(value: string | number | null | undefined) {
+  const parsed = numberOrUndefined(value);
+  return parsed === undefined ? "N/A" : quantity.format(parsed);
 }
 
 export function qualityLabel(value: string | undefined) {
@@ -54,6 +67,23 @@ export function formatDate(value: string | Date) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+export function formatAsOfDate(value: string | Date) {
+  return `As of ${formatDate(value)}`;
+}
+
+export function sourceLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    investment_portfolio_xlsx: "Portfolio workbook",
+    tickertape_stock_csv: "Tickertape stocks",
+    tickertape_mutual_fund_csv: "Tickertape mutual funds",
+    vested_drivewealth_xlsx: "Vested / DriveWealth",
+    manual_snapshot: "Manual snapshot",
+    cas_pdf: "CAS statement",
+    unknown: "Detected file",
+  };
+  return value ? (labels[value] ?? labelize(value)) : "Detected file";
 }
 
 export function trendWidth(value: number, values: number[]) {
