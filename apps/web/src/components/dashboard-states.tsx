@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 export function SetupRequired() {
   return (
     <Alert className="mb-4 border-amber-500/30 bg-amber-500/10">
-      <AlertTitle>Connect Supabase before loading portfolio data</AlertTitle>
+      <AlertTitle>Portfolio data is not connected</AlertTitle>
       <AlertDescription>
-        Add DATABASE_URL, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to
-        apps/web/.env.local, then restart the dev server.
+        Ask a workspace administrator to finish the data connection, then try
+        again.
       </AlertDescription>
     </Alert>
   );
@@ -47,7 +47,7 @@ export function MissingHolding() {
         description="It may have been replaced by a newer import or removed."
         action={
           <Button variant="secondary" asChild>
-            <Link href="/dashboard">Back to dashboard</Link>
+            <Link href="/holdings">Back to holdings</Link>
           </Button>
         }
       />

@@ -1,66 +1,157 @@
 "use client";
 
 import { SignedIn, UserButton } from "@clerk/nextjs";
-import { BarChart3, Settings, UploadCloud, WalletCards } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CloudUpload,
+  Landmark,
+  LayoutDashboard,
+  WalletCards,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/uploads", label: "Uploads", icon: UploadCloud },
-  { href: "/settings", label: "Settings", icon: Settings },
+  {
+    href: "/dashboard",
+    label: "Overview",
+    icon: LayoutDashboard,
+    isActive: (pathname: string) =>
+      pathname.startsWith("/dashboard") &&
+      !pathname.startsWith("/dashboard/holdings"),
+  },
+  {
+    href: "/holdings",
+    label: "Holdings",
+    icon: BriefcaseBusiness,
+    isActive: (pathname: string) =>
+      pathname.startsWith("/holdings") ||
+      pathname.startsWith("/dashboard/holdings"),
+  },
+  {
+    href: "/uploads",
+    label: "Imports",
+    icon: CloudUpload,
+    isActive: (pathname: string) => pathname.startsWith("/uploads"),
+  },
+  {
+    href: "/settings",
+    label: "Accounts",
+    icon: Landmark,
+    isActive: (pathname: string) => pathname.startsWith("/settings"),
+  },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <SignedIn>
-        <header className="sticky top-0 z-40 border-b bg-background/82 backdrop-blur-xl">
-          <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <span className="grid size-9 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm">
-                <WalletCards className="size-4" />
+        <a className="skip-link" href="#main-content">
+          Skip to portfolio
+        </a>
+        <header className="sticky top-0 z-40 border-b border-border/70 bg-background/76 backdrop-blur-2xl">
+          <div className="mx-auto flex min-h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+            <Link
+              href="/dashboard"
+              aria-label="Investment Sync overview"
+              className="flex shrink-0 items-center gap-2.5"
+            >
+              <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-[0_10px_28px_hsl(var(--primary)/0.2)]">
+                <WalletCards className="size-[1.05rem]" aria-hidden="true" />
               </span>
-              <span className="hidden text-sm font-bold tracking-normal sm:inline">
+              <span className="hidden text-sm font-semibold tracking-[-0.02em] sm:inline">
                 Investment Sync
               </span>
             </Link>
 
-            <nav className="flex items-center gap-1 rounded-lg border bg-card/70 p-1 shadow-sm">
-              {navItems.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                      isActive &&
-                        "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                    <span className="hidden sm:inline">{item.label}</span>
-                  </Link>
-                );
-              })}
+            <nav
+              aria-label="Primary navigation"
+              className="mx-auto hidden items-center gap-1 md:flex"
+            >
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  active={item.isActive(pathname)}
+                />
+              ))}
             </nav>
 
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+              <Button asChild size="sm" className="hidden lg:inline-flex">
+                <Link href="/uploads">
+                  <CloudUpload className="size-4" aria-hidden="true" />
+                  Import data
+                </Link>
+              </Button>
               <ThemeToggle />
-              <UserButton afterSignOutUrl="/" />
+              <UserButton
+                afterSignOutUrl="/"
+                appearance={{
+                  elements: {
+                    avatarBox: "size-9 rounded-xl",
+                  },
+                }}
+              />
             </div>
           </div>
         </header>
+
+        <nav
+          aria-label="Mobile navigation"
+          className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-4 rounded-2xl border border-border/80 bg-background/92 p-1.5 shadow-[0_18px_60px_hsl(var(--foreground)/0.18)] backdrop-blur-2xl md:hidden"
+        >
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = item.isActive(pathname);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[0.68rem] font-medium text-muted-foreground transition-colors duration-200",
+                  active && "bg-accent text-accent-foreground",
+                )}
+              >
+                <Icon className="size-4" aria-hidden="true" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
       </SignedIn>
       {children}
     </div>
+  );
+}
+
+function NavLink({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "relative rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground",
+        active &&
+          "text-foreground after:absolute after:inset-x-3 after:-bottom-[0.82rem] after:h-0.5 after:rounded-full after:bg-primary",
+      )}
+    >
+      {label}
+    </Link>
   );
 }

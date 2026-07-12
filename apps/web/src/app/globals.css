@@ -4,6 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
@@ -23,6 +25,15 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --color-positive: hsl(var(--positive));
+  --color-negative: hsl(var(--negative));
+  --color-warning: hsl(var(--warning));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --color-chart-6: hsl(var(--chart-6));
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -30,49 +41,67 @@
 
 :root {
   color-scheme: light;
-  --background: 210 24% 97%;
-  --foreground: 222 34% 10%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 34% 10%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 34% 10%;
-  --primary: 173 78% 28%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 180 17% 93%;
-  --secondary-foreground: 180 47% 17%;
-  --muted: 215 25% 94%;
-  --muted-foreground: 215 14% 42%;
-  --accent: 176 29% 90%;
-  --accent-foreground: 180 47% 17%;
-  --destructive: 4 74% 40%;
+  --background: 42 28% 97%;
+  --foreground: 164 24% 10%;
+  --card: 45 32% 99%;
+  --card-foreground: 164 24% 10%;
+  --popover: 45 32% 99%;
+  --popover-foreground: 164 24% 10%;
+  --primary: 160 45% 34%;
+  --primary-foreground: 45 30% 98%;
+  --secondary: 150 17% 92%;
+  --secondary-foreground: 160 31% 18%;
+  --muted: 42 18% 93%;
+  --muted-foreground: 160 8% 39%;
+  --accent: 154 24% 89%;
+  --accent-foreground: 160 31% 18%;
+  --destructive: 4 62% 43%;
   --destructive-foreground: 0 0% 100%;
-  --border: 214 25% 88%;
-  --input: 214 25% 88%;
-  --ring: 173 78% 28%;
-  --radius: 0.5rem;
+  --border: 150 12% 84%;
+  --input: 150 12% 82%;
+  --ring: 160 45% 34%;
+  --positive: 158 53% 31%;
+  --negative: 4 62% 43%;
+  --warning: 35 74% 38%;
+  --chart-1: 160 46% 38%;
+  --chart-2: 178 40% 43%;
+  --chart-3: 139 32% 45%;
+  --chart-4: 91 30% 48%;
+  --chart-5: 43 58% 52%;
+  --chart-6: 18 48% 50%;
+  --radius: 0.875rem;
 }
 
 .dark {
   color-scheme: dark;
-  --background: 220 26% 8%;
-  --foreground: 210 25% 96%;
-  --card: 220 23% 11%;
-  --card-foreground: 210 25% 96%;
-  --popover: 220 23% 11%;
-  --popover-foreground: 210 25% 96%;
-  --primary: 170 78% 42%;
-  --primary-foreground: 180 70% 8%;
-  --secondary: 217 20% 18%;
-  --secondary-foreground: 210 25% 96%;
-  --muted: 217 20% 17%;
-  --muted-foreground: 215 16% 68%;
-  --accent: 180 22% 17%;
-  --accent-foreground: 172 72% 78%;
-  --destructive: 2 76% 62%;
+  --background: 164 23% 7%;
+  --foreground: 45 20% 94%;
+  --card: 164 18% 10%;
+  --card-foreground: 45 20% 94%;
+  --popover: 164 18% 10%;
+  --popover-foreground: 45 20% 94%;
+  --primary: 158 48% 51%;
+  --primary-foreground: 164 30% 7%;
+  --secondary: 163 14% 16%;
+  --secondary-foreground: 45 18% 93%;
+  --muted: 163 13% 15%;
+  --muted-foreground: 155 8% 65%;
+  --accent: 158 19% 17%;
+  --accent-foreground: 153 45% 79%;
+  --destructive: 3 70% 63%;
   --destructive-foreground: 0 0% 100%;
-  --border: 216 18% 20%;
-  --input: 216 18% 22%;
-  --ring: 170 78% 42%;
+  --border: 160 12% 20%;
+  --input: 160 12% 24%;
+  --ring: 158 48% 51%;
+  --positive: 153 50% 60%;
+  --negative: 3 70% 69%;
+  --warning: 39 70% 62%;
+  --chart-1: 158 52% 53%;
+  --chart-2: 178 44% 53%;
+  --chart-3: 139 38% 55%;
+  --chart-4: 91 38% 57%;
+  --chart-5: 43 66% 59%;
+  --chart-6: 18 57% 59%;
 }
 
 * {
@@ -82,21 +111,28 @@
 
 html {
   min-height: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background:
     radial-gradient(
-      circle at top left,
-      hsl(var(--primary) / 0.1),
-      transparent 34rem
+      circle at 12% -10%,
+      hsl(var(--primary) / 0.13),
+      transparent 32rem
     ),
-    linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.45));
+    radial-gradient(
+      circle at 92% 0%,
+      hsl(var(--chart-5) / 0.055),
+      transparent 28rem
+    ),
+    hsl(var(--background));
   color: hsl(var(--foreground));
   font-family:
-    Inter,
+    var(--font-geist-sans),
+    "Geist Fallback",
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -112,8 +148,36 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
 }
 
 ::selection {
@@ -121,17 +185,76 @@ select {
 }
 
 .positive {
-  color: rgb(4 120 87);
-}
-
-.dark .positive {
-  color: rgb(110 231 183);
+  color: hsl(var(--positive));
 }
 
 .negative {
-  color: rgb(190 18 60);
+  color: hsl(var(--negative));
 }
 
-.dark .negative {
-  color: rgb(253 164 175);
+.number {
+  font-family:
+    var(--font-geist-mono), "Geist Mono Fallback", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.035em;
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--muted));
+}
+
+.skeleton-shimmer::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.65),
+    transparent
+  );
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.dark .skeleton-shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.08),
+    transparent
+  );
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer::after {
+    display: none;
+  }
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 60;
+  transform: translateY(-200%);
+  border-radius: 0.75rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  padding: 0.65rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  transition: transform 180ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }

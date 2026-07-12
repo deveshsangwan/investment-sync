@@ -1,9 +1,28 @@
 import { SignUp } from "@clerk/nextjs";
+import type { Metadata } from "next";
+import { AuthPageShell, authAppearance } from "@/components/auth-page-shell";
+
+export const metadata: Metadata = {
+  title: "Create account",
+  description: "Create a private Investment Sync household portfolio.",
+};
 
 export default function SignUpPage() {
   return (
-    <main className="mx-auto grid min-h-screen max-w-7xl place-items-center px-4 py-10 sm:px-6 lg:px-8">
-      <SignUp />
-    </main>
+    <AuthPageShell
+      eyebrow="Create your household view"
+      title="Bring every account into context."
+      description="Start with a supported export, review detected records, and keep Indian and US investments in one portfolio."
+      securityDescription="Clerk manages account creation and session security."
+    >
+      <SignUp
+        path="/sign-up"
+        routing="path"
+        signInUrl="/sign-in"
+        forceRedirectUrl="/dashboard"
+        signInForceRedirectUrl="/dashboard"
+        appearance={authAppearance}
+      />
+    </AuthPageShell>
   );
 }

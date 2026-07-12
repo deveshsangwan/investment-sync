@@ -5,13 +5,19 @@ import {
   buildAssetClassDetail,
   buildHoldingDetail,
 } from "../services/portfolio/detail";
-import { buildPortfolioHoldings } from "../services/portfolio/holdings";
+import {
+  buildPortfolioHoldings,
+  buildPortfolioPositions,
+} from "../services/portfolio/holdings";
 import { buildPortfolioOverview } from "../services/portfolio/overview";
 import { buildPortfolioSummary } from "../services/portfolio/summary";
 
 export const portfolioRouter = router({
   holdings: protectedProcedure.query(async ({ ctx }) =>
     buildPortfolioHoldings(ctx),
+  ),
+  positions: protectedProcedure.query(async ({ ctx }) =>
+    buildPortfolioPositions(ctx),
   ),
   summary: protectedProcedure.query(async ({ ctx }) =>
     buildPortfolioSummary(ctx),
