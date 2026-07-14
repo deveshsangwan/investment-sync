@@ -1,0 +1,40 @@
+apps/web/src/app/holdings/holdings-client.tsx
+  s_3905fb80018317::t_5e3aad66934b82 235
+apps/web/src/components/app-shell.tsx
+  s_3905fb80018317::t_2e535c8fbe99a5 57,64,74,108,119-121,150,152
+apps/web/src/components/portfolio-ui.tsx
+  s_3905fb80018317::t_2e535c8fbe99a5 20,45,49,53,57,63
+apps/web/src/components/ui/table.tsx
+  s_3905fb80018317::t_2e535c8fbe99a5 24,46,61
+  s_3905fb80018317::t_265b8ee788ddd5 73
+apps/web/src/components/ui/badge.tsx
+  s_3905fb80018317::t_2e535c8fbe99a5 6,11
+  s_3905fb80018317::t_265b8ee788ddd5 12
+apps/web/src/app/page.tsx
+  s_3905fb80018317::t_2e535c8fbe99a5 51,57,69,75,87,93,98,141,168,233
+apps/web/src/components/ui/card.tsx
+  s_3905fb80018317::t_2e535c8fbe99a5 8
+apps/web/src/components/ui/button.tsx
+  s_3905fb80018317::t_2e535c8fbe99a5 12,16,19-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d41612c52459cfba715bc423adcd5a36bd6c87c3",
+  "prompts": {},
+  "humans": {
+    "h_9c147e6399b95b": {
+      "author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_3905fb80018317": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f61ba-f9ed-7403-be1f-cf79ab6f67a4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
