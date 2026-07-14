@@ -54,14 +54,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <a className="skip-link" href="#main-content">
           Skip to portfolio
         </a>
-        <header className="sticky top-0 z-40 border-b border-border/70 bg-background/76 backdrop-blur-2xl">
+        <header className="sticky top-0 z-40 border-b border-border/65 bg-background/88 shadow-[0_1px_0_hsl(var(--foreground)/0.02)] backdrop-blur-xl">
           <div className="mx-auto flex min-h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
             <Link
               href="/dashboard"
               aria-label="Investment Sync overview"
               className="flex shrink-0 items-center gap-2.5"
             >
-              <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-[0_10px_28px_hsl(var(--primary)/0.2)]">
+              <span className="grid size-9 place-items-center rounded-xl border border-primary/80 bg-primary text-primary-foreground shadow-[inset_0_1px_0_hsl(var(--primary-foreground)/0.16),0_8px_20px_hsl(var(--primary)/0.16)]">
                 <WalletCards className="size-[1.05rem]" aria-hidden="true" />
               </span>
               <span className="hidden text-sm font-semibold tracking-[-0.02em] sm:inline">
@@ -71,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <nav
               aria-label="Primary navigation"
-              className="mx-auto hidden items-center gap-1 md:flex"
+              className="mx-auto hidden items-center gap-0.5 rounded-xl border border-border/60 bg-card/55 p-1 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025)] md:flex"
             >
               {navItems.map((item) => (
                 <NavLink
@@ -105,7 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav
           aria-label="Mobile navigation"
-          className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-4 rounded-2xl border border-border/80 bg-background/92 p-1.5 shadow-[0_18px_60px_hsl(var(--foreground)/0.18)] backdrop-blur-2xl md:hidden"
+          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 grid grid-cols-4 rounded-2xl border border-border/75 bg-background/94 p-1.5 shadow-[0_12px_36px_hsl(var(--foreground)/0.14)] backdrop-blur-xl md:hidden"
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -116,8 +116,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[0.68rem] font-medium text-muted-foreground transition-colors duration-200",
-                  active && "bg-accent text-accent-foreground",
+                  "flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[0.68rem] font-medium text-muted-foreground transition-[background-color,color,transform] duration-150 active:scale-[0.98]",
+                  active &&
+                    "bg-accent text-accent-foreground shadow-[inset_0_1px_0_hsl(var(--foreground)/0.03)]",
                 )}
               >
                 <Icon className="size-4" aria-hidden="true" />
@@ -146,9 +147,9 @@ function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground",
+        "rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-[background-color,color,box-shadow] duration-150 hover:bg-muted/55 hover:text-foreground",
         active &&
-          "text-foreground after:absolute after:inset-x-3 after:-bottom-[0.82rem] after:h-0.5 after:rounded-full after:bg-primary",
+          "bg-accent text-accent-foreground shadow-[0_1px_2px_hsl(var(--foreground)/0.06)]",
       )}
     >
       {label}

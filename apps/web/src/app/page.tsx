@@ -48,13 +48,13 @@ export default async function HomePage() {
       <a className="skip-link" href="#public-content">
         Skip to content
       </a>
-      <header className="mx-auto flex h-[4.5rem] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <header className="relative z-10 mx-auto flex h-[4.5rem] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
           aria-label="Investment Sync home"
           className="flex items-center gap-2.5 font-semibold tracking-[-0.02em]"
         >
-          <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-[0_10px_28px_hsl(var(--primary)/0.2)]">
+          <span className="grid size-9 place-items-center rounded-xl border border-primary/80 bg-primary text-primary-foreground shadow-[inset_0_1px_0_hsl(var(--primary-foreground)/0.16),0_8px_20px_hsl(var(--primary)/0.16)]">
             <WalletCards className="size-[1.05rem]" aria-hidden="true" />
           </span>
           <span>Investment Sync</span>
@@ -66,13 +66,13 @@ export default async function HomePage() {
         >
           <Link
             href="#sources"
-            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground sm:inline-flex"
           >
             Sources
           </Link>
           <Link
             href="#privacy"
-            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
+            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground md:inline-flex"
           >
             Privacy
           </Link>
@@ -84,18 +84,18 @@ export default async function HomePage() {
 
       <section
         id="public-content"
-        className="mx-auto grid min-h-[calc(100dvh-4.5rem)] w-full max-w-7xl items-center gap-12 px-4 py-12 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16 lg:px-8 lg:py-16"
+        className="mx-auto grid min-h-[calc(100dvh-4.5rem)] w-full max-w-7xl items-center gap-12 px-4 py-12 sm:px-6 lg:grid-cols-[1.04fr_0.96fr] lg:gap-14 lg:px-8 lg:py-16"
       >
         <div className="min-w-0 lg:pb-8">
           <p className="mb-5 text-xs font-semibold tracking-[0.16em] text-primary">
             Private household portfolio
           </p>
-          <h1 className="max-w-3xl text-5xl font-semibold leading-[0.98] tracking-[-0.06em] text-foreground sm:text-6xl lg:text-7xl">
+          <h1 className="max-w-2xl text-5xl font-semibold leading-[0.98] tracking-[-0.06em] text-foreground sm:text-6xl lg:text-[4rem] xl:text-[4.25rem]">
             One household. Every investment.
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
             Bring Indian and US investments into one private household view,
-            with returns, allocation, and import history kept in context.
+            with returns, allocation, and imports in context.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -138,7 +138,7 @@ export default async function HomePage() {
             return (
               <article
                 key={source.name}
-                className={`group flex min-h-56 flex-col justify-between rounded-2xl border bg-card/72 p-6 shadow-[0_18px_60px_hsl(var(--foreground)/0.05)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_22px_70px_hsl(var(--foreground)/0.08)] sm:p-7 ${source.className}`}
+                className={`group flex min-h-56 flex-col justify-between rounded-2xl border border-border/75 bg-card/88 p-6 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025),0_14px_42px_hsl(var(--foreground)/0.045)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025),0_18px_48px_hsl(var(--foreground)/0.065)] sm:p-7 ${source.className}`}
               >
                 <div className="grid size-11 place-items-center rounded-xl bg-secondary text-primary">
                   <Icon className="size-5" aria-hidden="true" />
@@ -165,7 +165,7 @@ export default async function HomePage() {
         aria-labelledby="privacy-title"
         className="mx-auto w-full max-w-7xl scroll-mt-20 px-4 py-20 sm:px-6 sm:py-24 lg:px-8"
       >
-        <div className="grid overflow-hidden rounded-[2rem] border bg-card/74 shadow-[0_24px_90px_hsl(var(--foreground)/0.07)] lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="grid overflow-hidden rounded-[2rem] border border-border/75 bg-card/90 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025),0_18px_56px_hsl(var(--foreground)/0.055)] lg:grid-cols-[1.15fr_0.85fr]">
           <div className="p-7 sm:p-10 lg:p-14">
             <div className="grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
               <ShieldCheck className="size-6" aria-hidden="true" />
@@ -230,7 +230,7 @@ function IllustrativePortfolio() {
   return (
     <article
       aria-label="Illustrative portfolio overview"
-      className="relative min-w-0 rounded-[2rem] border bg-card/80 p-5 shadow-[0_28px_100px_hsl(var(--foreground)/0.12)] backdrop-blur sm:p-7 lg:translate-y-5"
+      className="relative min-w-0 rounded-[2rem] border border-border/80 bg-card/92 p-5 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.035),0_22px_64px_hsl(var(--foreground)/0.09)] sm:p-7 lg:translate-y-2"
     >
       <div className="flex items-start justify-between gap-4 border-b pb-6">
         <div>

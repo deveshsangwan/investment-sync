@@ -17,7 +17,7 @@ export function PageShell({
     <main
       id="main-content"
       className={cn(
-        "mx-auto w-full max-w-7xl px-4 pb-24 pt-8 sm:px-6 sm:pt-10 md:pb-12 lg:px-8",
+        "mx-auto w-full max-w-7xl px-4 pb-24 pt-7 sm:px-6 sm:pt-9 md:pb-12 lg:px-8",
         className,
       )}
     >
@@ -42,25 +42,25 @@ export function PageHeader({
   meta?: React.ReactNode;
 }) {
   return (
-    <section className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <section className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
       <div className="min-w-0">
         {before}
         {eyebrow ? (
-          <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-primary">
+          <p className="mb-2 text-[0.7rem] font-semibold tracking-[0.12em] text-primary">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="text-3xl font-semibold leading-[1.04] tracking-[-0.045em] text-foreground sm:text-4xl">
+        <h1 className="text-[2rem] font-semibold leading-[1.04] tracking-[-0.045em] text-foreground sm:text-[2.5rem]">
           {title}
         </h1>
         {description ? (
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-[0.95rem]">
+          <p className="mt-3 max-w-[65ch] text-sm leading-6 text-muted-foreground sm:text-[0.95rem]">
             {description}
           </p>
         ) : null}
         {meta ? <div className="mt-3">{meta}</div> : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="shrink-0 sm:pb-0.5">{action}</div> : null}
     </section>
   );
 }

@@ -232,7 +232,7 @@ export function HoldingsClient({
                     ["value", "Largest value"],
                     ["pnl", "Largest gain"],
                     ["return", "Best return"],
-                    ["name", "Name A–Z"],
+                    ["name", "Name A-Z"],
                   ]}
                 />
               </div>
