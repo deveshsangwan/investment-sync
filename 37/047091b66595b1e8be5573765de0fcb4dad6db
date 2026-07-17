@@ -1,0 +1,20 @@
+apps/mobile/src/sign-in-screen.tsx
+  s_1c3fad600f87e3::t_3cf564367d1948 1,9,17-22,35-37,39-46,50-57,59-63
+  s_1c3fad600f87e3::t_74d00addb505d1 3,47-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "37047091b66595b1e8be5573765de0fcb4dad6db",
+  "prompts": {},
+  "sessions": {
+    "s_1c3fad600f87e3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f71b0-c87a-76b0-a9de-ed44d6c3fdbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
