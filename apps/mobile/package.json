@@ -15,6 +15,7 @@
   "dependencies": {
     "@clerk/clerk-expo": "^2.6.9",
     "@expo/metro-runtime": "~6.1.2",
+    "@expo/vector-icons": "^15.1.1",
     "@investment-sync/api": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@tanstack/react-query": "^4.36.1",
@@ -32,6 +33,7 @@
     "react": "^19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-safe-area-context": "^5.8.0",
     "superjson": "^2.2.2"
   },
   "devDependencies": {
