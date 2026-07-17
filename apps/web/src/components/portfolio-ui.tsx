@@ -17,7 +17,7 @@ export function PageShell({
     <main
       id="main-content"
       className={cn(
-        "mx-auto w-full max-w-7xl px-4 pb-24 pt-7 sm:px-6 sm:pt-9 md:pb-12 lg:px-8",
+        "mx-auto w-full max-w-[90rem] px-4 pb-24 pt-6 sm:px-6 sm:pt-8 md:pb-12 lg:px-8",
         className,
       )}
     >
@@ -42,15 +42,13 @@ export function PageHeader({
   meta?: React.ReactNode;
 }) {
   return (
-    <section className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
+    <section className="mb-7 flex flex-col gap-5 border-b border-border/70 pb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
       <div className="min-w-0">
         {before}
         {eyebrow ? (
-          <p className="mb-2 text-[0.7rem] font-semibold tracking-[0.12em] text-primary">
-            {eyebrow}
-          </p>
+          <p className="mb-2 text-xs font-semibold text-primary">{eyebrow}</p>
         ) : null}
-        <h1 className="text-[2rem] font-semibold leading-[1.04] tracking-[-0.045em] text-foreground sm:text-[2.5rem]">
+        <h1 className="text-[1.85rem] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground sm:text-[2.25rem]">
           {title}
         </h1>
         {description ? (
@@ -81,7 +79,7 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("overflow-hidden bg-card/66 shadow-none", className)}>
+    <Card className={cn("overflow-hidden shadow-none", className)}>
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -97,7 +95,7 @@ export function MetricCard({
             </p>
           </div>
           {Icon ? (
-            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-secondary text-primary">
+            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
               <Icon className="size-4" aria-hidden="true" />
             </div>
           ) : null}
@@ -128,8 +126,8 @@ export function SectionCard({
   contentClassName?: string;
 }) {
   return (
-    <Card className={cn("min-h-44", className)}>
-      <CardHeader className="flex-row items-start justify-between gap-4">
+    <Card className={className}>
+      <CardHeader className="flex-row items-start justify-between gap-4 border-b border-border/65">
         <div>
           <CardTitle>{title}</CardTitle>
           {description ? (
@@ -140,7 +138,9 @@ export function SectionCard({
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </CardHeader>
-      <CardContent className={contentClassName}>{children}</CardContent>
+      <CardContent className={cn("pt-5", contentClassName)}>
+        {children}
+      </CardContent>
     </Card>
   );
 }
@@ -157,9 +157,9 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-32 flex-col items-start gap-4 rounded-xl border border-dashed bg-muted/25 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+    <div className="flex min-h-32 flex-col items-start gap-4 rounded-lg border border-dashed bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
       <div className="flex items-start gap-3.5">
-        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-background text-primary shadow-sm">
+        <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-primary">
           <Icon className="size-5" aria-hidden="true" />
         </div>
         <div>
@@ -186,7 +186,7 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className="rounded-2xl border border-negative/20 bg-negative/5 p-5 sm:p-6"
+      className="rounded-xl border border-negative/25 bg-negative/5 p-5 sm:p-6"
     >
       <div className="flex items-start gap-3">
         <AlertTriangle
@@ -229,7 +229,7 @@ export function PortfolioContentSkeleton({
       <span className="sr-only">Loading portfolio data</span>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: metricCount }, (_, index) => (
-          <Card key={index} className="bg-card/60 shadow-none">
+          <Card key={index} className="shadow-none">
             <CardContent className="p-5 sm:p-6">
               <Skeleton className="h-3 w-24" />
               <Skeleton className="mt-4 h-8 w-36" />

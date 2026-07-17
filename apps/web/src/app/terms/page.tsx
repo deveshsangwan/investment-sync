@@ -48,7 +48,7 @@ export default function TermsPage() {
         className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20"
       >
         <div className="max-w-3xl">
-          <div className="grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
+          <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
             <Scale className="size-5" aria-hidden="true" />
           </div>
           <p className="mt-6 text-xs font-semibold tracking-[0.16em] text-primary">
@@ -62,7 +62,7 @@ export default function TermsPage() {
           </p>
         </div>
 
-        <div className="mt-12 overflow-hidden rounded-[2rem] border bg-card/78 shadow-[0_24px_90px_hsl(var(--foreground)/0.07)]">
+        <div className="mt-12 overflow-hidden rounded-xl border bg-card">
           <section className="p-7 sm:p-10">
             <h2 className="text-2xl font-semibold tracking-[-0.035em]">
               Using Investment Sync

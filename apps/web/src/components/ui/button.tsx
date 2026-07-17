@@ -4,16 +4,16 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-[background-color,color,border-color,box-shadow,transform] duration-200 ease-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 active:translate-y-px active:scale-[0.99] [&_svg]:pointer-events-none [&_svg]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 active:translate-y-px active:scale-[0.99] [&_svg]:pointer-events-none [&_svg]:size-4",
   {
     variants: {
       variant: {
         default:
-          "border border-primary/80 bg-primary text-primary-foreground shadow-[inset_0_1px_0_hsl(var(--primary-foreground)/0.16),0_8px_20px_hsl(var(--primary)/0.16)] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_hsl(var(--primary-foreground)/0.16),0_10px_24px_hsl(var(--primary)/0.2)]",
+          "border border-primary bg-primary text-primary-foreground shadow-[0_1px_2px_hsl(var(--primary)/0.2)] hover:bg-primary/90",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
-          "border border-input bg-card/75 shadow-[0_1px_0_hsl(var(--foreground)/0.03)] hover:border-primary/35 hover:bg-accent hover:text-accent-foreground",
+          "border border-input bg-card text-foreground hover:border-primary/45 hover:bg-accent hover:text-accent-foreground",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/75",
         ghost:
@@ -22,7 +22,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-lg px-3 text-xs",
+        sm: "h-8 px-3 text-xs",
         lg: "h-12 px-6",
         icon: "size-10",
       },

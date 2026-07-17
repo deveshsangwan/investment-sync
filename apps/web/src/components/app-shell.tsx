@@ -1,15 +1,18 @@
 "use client";
 
-import { SignedIn, UserButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import {
   BriefcaseBusiness,
   CloudUpload,
   Landmark,
   LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -47,112 +50,188 @@ const navItems = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="min-h-dvh">
+    <>
       <SignedIn>
-        <a className="skip-link" href="#main-content">
-          Skip to portfolio
-        </a>
-        <header className="sticky top-0 z-40 border-b border-border/65 bg-background/88 shadow-[0_1px_0_hsl(var(--foreground)/0.02)] backdrop-blur-xl">
-          <div className="mx-auto flex min-h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
-            <Link
-              href="/dashboard"
-              aria-label="Investment Sync overview"
-              className="flex shrink-0 items-center gap-2.5"
+        <div className="min-h-dvh">
+          <a className="skip-link" href="#main-content">
+            Skip to portfolio
+          </a>
+
+          <aside
+            id="desktop-sidebar"
+            className={cn(
+              "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border/75 bg-card transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
+              sidebarCollapsed ? "w-[4.5rem]" : "w-60",
+            )}
+          >
+            <div
+              className={cn(
+                "flex h-16 items-center border-b border-border/65",
+                sidebarCollapsed ? "justify-center px-3" : "px-5",
+              )}
             >
-              <span className="grid size-9 place-items-center rounded-xl border border-primary/80 bg-primary text-primary-foreground shadow-[inset_0_1px_0_hsl(var(--primary-foreground)/0.16),0_8px_20px_hsl(var(--primary)/0.16)]">
-                <WalletCards className="size-[1.05rem]" aria-hidden="true" />
-              </span>
-              <span className="hidden text-sm font-semibold tracking-[-0.02em] sm:inline">
-                Investment Sync
-              </span>
-            </Link>
+              <Brand showLabel={!sidebarCollapsed} />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={
+                  sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+                }
+                aria-controls="desktop-sidebar"
+                aria-expanded={!sidebarCollapsed}
+                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+                className="absolute right-[-0.875rem] top-[1.125rem] size-7 rounded-full bg-card shadow-sm"
+              >
+                {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+              </Button>
+            </div>
 
             <nav
               aria-label="Primary navigation"
-              className="mx-auto hidden items-center gap-0.5 rounded-xl border border-border/60 bg-card/55 p-1 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025)] md:flex"
+              className="flex flex-1 flex-col gap-1 p-3"
             >
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.href}
-                  href={item.href}
-                  label={item.label}
-                  active={item.isActive(pathname)}
-                />
-              ))}
+              <p
+                className={cn(
+                  "px-3 pb-2 pt-2 text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground",
+                  sidebarCollapsed && "sr-only",
+                )}
+              >
+                Portfolio
+              </p>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = item.isActive(pathname);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    title={sidebarCollapsed ? item.label : undefined}
+                    className={cn(
+                      "group flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground",
+                      sidebarCollapsed && "justify-center px-0",
+                      active && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "size-[1.05rem] shrink-0",
+                        active ? "text-primary" : "group-hover:text-foreground",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className={cn(sidebarCollapsed && "sr-only")}>
+                      {item.label}
+                    </span>
+                  </Link>
+                );
+              })}
             </nav>
 
-            <div className="ml-auto flex items-center gap-1.5 md:ml-0">
-              <Button asChild size="sm" className="hidden lg:inline-flex">
-                <Link href="/uploads">
-                  <CloudUpload className="size-4" aria-hidden="true" />
-                  Import data
-                </Link>
-              </Button>
+            <div className="border-t border-border/65 p-3">
+              <div
+                className={cn(
+                  "flex rounded-lg",
+                  sidebarCollapsed
+                    ? "flex-col items-center gap-2 py-1"
+                    : "items-center justify-between px-2 py-1.5",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex items-center",
+                    !sidebarCollapsed && "gap-2.5",
+                  )}
+                >
+                  <UserButton
+                    afterSignOutUrl="/"
+                    appearance={{
+                      elements: { avatarBox: "size-8 rounded-lg" },
+                    }}
+                  />
+                  {!sidebarCollapsed && (
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Your account
+                    </span>
+                  )}
+                </div>
+                <ThemeToggle />
+              </div>
+            </div>
+          </aside>
+
+          <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border/75 bg-background/95 px-4 backdrop-blur md:hidden">
+            <Brand />
+            <div className="flex items-center gap-1.5">
               <ThemeToggle />
               <UserButton
                 afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox: "size-9 rounded-xl",
-                  },
-                }}
+                appearance={{ elements: { avatarBox: "size-9 rounded-lg" } }}
               />
             </div>
-          </div>
-        </header>
+          </header>
 
-        <nav
-          aria-label="Mobile navigation"
-          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 grid grid-cols-4 rounded-2xl border border-border/75 bg-background/94 p-1.5 shadow-[0_12px_36px_hsl(var(--foreground)/0.14)] backdrop-blur-xl md:hidden"
-        >
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = item.isActive(pathname);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[0.68rem] font-medium text-muted-foreground transition-[background-color,color,transform] duration-150 active:scale-[0.98]",
-                  active &&
-                    "bg-accent text-accent-foreground shadow-[inset_0_1px_0_hsl(var(--foreground)/0.03)]",
-                )}
-              >
-                <Icon className="size-4" aria-hidden="true" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+          <div
+            className={cn(
+              "transition-[padding-left] duration-200 ease-out motion-reduce:transition-none",
+              sidebarCollapsed ? "md:pl-[4.5rem]" : "md:pl-60",
+            )}
+          >
+            {children}
+          </div>
+
+          <nav
+            aria-label="Mobile navigation"
+            className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 grid grid-cols-4 rounded-xl border border-border/80 bg-card/95 p-1.5 shadow-[0_12px_36px_hsl(var(--foreground)/0.14)] backdrop-blur md:hidden"
+          >
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = item.isActive(pathname);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.68rem] font-medium text-muted-foreground transition-[background-color,color,transform] duration-150 active:scale-[0.98]",
+                    active && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  <Icon
+                    className={cn("size-4", active && "text-primary")}
+                    aria-hidden="true"
+                  />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
       </SignedIn>
-      {children}
-    </div>
+      <SignedOut>{children}</SignedOut>
+    </>
   );
 }
 
-function NavLink({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-}) {
+function Brand({ showLabel = true }: { showLabel?: boolean }) {
   return (
     <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-[background-color,color,box-shadow] duration-150 hover:bg-muted/55 hover:text-foreground",
-        active &&
-          "bg-accent text-accent-foreground shadow-[0_1px_2px_hsl(var(--foreground)/0.06)]",
-      )}
+      href="/dashboard"
+      aria-label="Investment Sync overview"
+      className="flex min-w-0 items-center gap-2.5"
     >
-      {label}
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+        <WalletCards className="size-4" aria-hidden="true" />
+      </span>
+      {showLabel && (
+        <span className="truncate text-sm font-semibold tracking-[-0.02em]">
+          Investment Sync
+        </span>
+      )}
     </Link>
   );
 }

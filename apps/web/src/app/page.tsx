@@ -54,7 +54,7 @@ export default async function HomePage() {
           aria-label="Investment Sync home"
           className="flex items-center gap-2.5 font-semibold tracking-[-0.02em]"
         >
-          <span className="grid size-9 place-items-center rounded-xl border border-primary/80 bg-primary text-primary-foreground shadow-[inset_0_1px_0_hsl(var(--primary-foreground)/0.16),0_8px_20px_hsl(var(--primary)/0.16)]">
+          <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
             <WalletCards className="size-[1.05rem]" aria-hidden="true" />
           </span>
           <span>Investment Sync</span>
@@ -138,7 +138,7 @@ export default async function HomePage() {
             return (
               <article
                 key={source.name}
-                className={`group flex min-h-56 flex-col justify-between rounded-2xl border border-border/75 bg-card/88 p-6 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025),0_14px_42px_hsl(var(--foreground)/0.045)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025),0_18px_48px_hsl(var(--foreground)/0.065)] sm:p-7 ${source.className}`}
+                className={`group flex min-h-56 flex-col justify-between rounded-xl border border-border/80 bg-card p-6 transition-[transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/35 sm:p-7 ${source.className}`}
               >
                 <div className="grid size-11 place-items-center rounded-xl bg-secondary text-primary">
                   <Icon className="size-5" aria-hidden="true" />
@@ -165,9 +165,9 @@ export default async function HomePage() {
         aria-labelledby="privacy-title"
         className="mx-auto w-full max-w-7xl scroll-mt-20 px-4 py-20 sm:px-6 sm:py-24 lg:px-8"
       >
-        <div className="grid overflow-hidden rounded-[2rem] border border-border/75 bg-card/90 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025),0_18px_56px_hsl(var(--foreground)/0.055)] lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="grid overflow-hidden rounded-xl border border-border/80 bg-card lg:grid-cols-[1.15fr_0.85fr]">
           <div className="p-7 sm:p-10 lg:p-14">
-            <div className="grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
+            <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
               <ShieldCheck className="size-6" aria-hidden="true" />
             </div>
             <h2
@@ -230,7 +230,7 @@ function IllustrativePortfolio() {
   return (
     <article
       aria-label="Illustrative portfolio overview"
-      className="relative min-w-0 rounded-[2rem] border border-border/80 bg-card/92 p-5 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.035),0_22px_64px_hsl(var(--foreground)/0.09)] sm:p-7 lg:translate-y-2"
+      className="relative min-w-0 rounded-xl border border-border/80 bg-card p-5 shadow-[0_12px_40px_hsl(var(--foreground)/0.06)] sm:p-7 lg:translate-y-2"
     >
       <div className="flex items-start justify-between gap-4 border-b pb-6">
         <div>
@@ -259,7 +259,7 @@ function IllustrativePortfolio() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-secondary/58 p-4 sm:p-5">
+      <div className="rounded-lg bg-secondary/70 p-4 sm:p-5">
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm font-semibold">Allocation</p>
           <p className="text-xs text-muted-foreground">Example data</p>
@@ -279,7 +279,7 @@ function IllustrativePortfolio() {
         </dl>
       </div>
 
-      <div className="mt-5 flex items-center gap-3 rounded-2xl border bg-background/55 p-4">
+      <div className="mt-5 flex items-center gap-3 rounded-lg border bg-background p-4">
         <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
           <FileSpreadsheet className="size-4" aria-hidden="true" />
         </div>

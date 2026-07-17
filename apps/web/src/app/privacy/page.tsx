@@ -20,7 +20,7 @@ export default function PrivacyPage() {
         className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[0.55fr_1.45fr] lg:px-8 lg:py-20"
       >
         <aside className="lg:sticky lg:top-8 lg:self-start">
-          <div className="grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
+          <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
             <ShieldCheck className="size-5" aria-hidden="true" />
           </div>
           <p className="mt-6 text-xs font-semibold tracking-[0.16em] text-primary">
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
           </Button>
         </aside>
 
-        <div className="overflow-hidden rounded-[2rem] border bg-card/78 shadow-[0_24px_90px_hsl(var(--foreground)/0.07)]">
+        <div className="overflow-hidden rounded-xl border bg-card">
           <section className="p-7 sm:p-10">
             <h2 className="text-2xl font-semibold tracking-[-0.035em]">
               The short version
@@ -77,16 +77,16 @@ export default function PrivacyPage() {
               How the data is used
             </h2>
             <ul className="mt-5 grid gap-3 text-sm leading-6 text-muted-foreground">
-              <li className="rounded-xl bg-secondary/42 px-4 py-3">
+              <li className="rounded-lg bg-secondary/55 px-4 py-3">
                 Authenticate your session and identify the correct household.
               </li>
-              <li className="rounded-xl bg-secondary/42 px-4 py-3">
+              <li className="rounded-lg bg-secondary/55 px-4 py-3">
                 Parse, review, and apply supported portfolio exports.
               </li>
-              <li className="rounded-xl bg-secondary/42 px-4 py-3">
+              <li className="rounded-lg bg-secondary/55 px-4 py-3">
                 Calculate and display allocation, value, gains, and returns.
               </li>
-              <li className="rounded-xl bg-secondary/42 px-4 py-3">
+              <li className="rounded-lg bg-secondary/55 px-4 py-3">
                 Preserve import status after an original source file expires.
               </li>
             </ul>

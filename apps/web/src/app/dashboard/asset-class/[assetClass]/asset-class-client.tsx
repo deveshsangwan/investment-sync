@@ -111,9 +111,8 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
 
   return (
     <>
-      <Card className="relative overflow-hidden border-primary/20 bg-primary/[0.065]">
-        <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-primary/10 blur-3xl" />
-        <CardContent className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
+      <Card className="overflow-hidden border-primary/25 bg-accent/35">
+        <CardContent className="grid gap-6 p-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs font-medium text-muted-foreground">
@@ -201,7 +200,7 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
                 <Link
                   key={holding.id}
                   href={`/dashboard/holdings/${holding.id}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl bg-muted/30 p-3.5 transition-colors hover:bg-muted/55"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-transparent bg-muted/30 p-3.5 transition-colors hover:border-border hover:bg-muted/55"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-semibold">
@@ -385,7 +384,7 @@ function AssetPositionCard({
             {holding.symbol ?? holding.instrumentName}
           </p>
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            {holding.accountName} ·{" "}
+            {holding.accountName} /{" "}
             {exited ? formatAsOfDate(holding.snapshotDate) : holding.provider}
           </p>
         </div>
