@@ -9,8 +9,14 @@ const levelPriority: Record<LogLevel, number> = {
 
 function configuredLevel(): LogLevel {
   const value = process.env.LOG_LEVEL?.toLowerCase();
-  if (value === "debug" || value === "info" || value === "warn") return value;
-  return "error";
+  if (
+    value === "debug" ||
+    value === "info" ||
+    value === "warn" ||
+    value === "error"
+  )
+    return value;
+  return "info";
 }
 
 function shouldLog(level: LogLevel) {
