@@ -1,0 +1,81 @@
+apps/web/src/app/api/cron/cleanup-imports/route.ts
+  s_b371449cdd8d2e::t_d83042cf412dac 5-8,12-13,16-23,26-27,31-56
+packages/db/drizzle/0005_calm_colonel_america.sql
+  s_b371449cdd8d2e::t_8a5cc6c14afbf0 1-14,16-18
+  s_b371449cdd8d2e::t_79b180b4b9cc97 15
+packages/importers/src/import-validation.test.ts
+  s_b371449cdd8d2e::t_a4a7df366d8797 24-38
+packages/api/src/services/import-lifecycle.ts
+  s_b371449cdd8d2e::t_fc5b31629416d8 308-309
+  s_b371449cdd8d2e::t_09eccaafdaa4e1 144
+  s_b371449cdd8d2e::t_54a8c6a2ca92d7 1-143,145-307,310-392
+packages/api/src/services/import-service.integration.test.ts
+  s_b371449cdd8d2e::t_0b3fd075d6dd67 258-287,291,293-295
+  s_b371449cdd8d2e::t_c05b711ec57a55 296-324,326-329,331-351,412,417-419
+  s_b371449cdd8d2e::t_fb213547cacf54 330,545-546,552-554
+  s_b371449cdd8d2e::t_5160ffbb0d939b 398,420-443,589-593,595-604
+  s_b371449cdd8d2e::t_3ac9ac193ac915 379-380,385-386
+  s_b371449cdd8d2e::t_3320ecd51559e7 240-253,255-257
+  s_b371449cdd8d2e::t_b9a55078af1f02 325
+  s_b371449cdd8d2e::t_8234e5e590b7fa 594
+  s_b371449cdd8d2e::t_d993fbf4bb09d7 378,413-416,467
+  s_b371449cdd8d2e::t_06d328b25f17d6 510
+  s_b371449cdd8d2e::t_58f7ef4a00f199 17,19,21-23,48,116,167,229,254,288,292,369
+  s_b371449cdd8d2e::t_afb8f5f8b0ce20 2,352-358,360-368,376,475-476,567-587
+  s_b371449cdd8d2e::t_920cd4b8b5f493 359
+  s_b371449cdd8d2e::t_316f9bd678d5c1 512-520
+  s_b371449cdd8d2e::t_b9a76280e13b9d 18,20,53-55,377,381-384,387-397,399-411,444-466,468-474
+  s_b371449cdd8d2e::t_eeff8bb60ae9e3 49-50,117-118,168-169,230-231,289-290,370-375
+  s_b371449cdd8d2e::t_b921ca1cc2db87 588
+packages/api/src/routers/imports.ts
+  s_b371449cdd8d2e::t_428b4773bc8e2b 51
+  s_b371449cdd8d2e::t_e858ae763eddfa 1,3-9,15-23,25-29,32-50,52-59
+.env.example
+  s_b371449cdd8d2e::t_68c6babded9406 6
+apps/web/src/app/uploads/uploads-client.tsx
+  s_b371449cdd8d2e::t_68c6babded9406 214-215,308,830,836
+apps/web/src/app/api/imports/upload/route.ts
+  s_b371449cdd8d2e::t_01c821536c8ef6 4-7,11,32-42,46,51-57,61-71,73-74
+docs/local-development.md
+  s_b371449cdd8d2e::t_839583b445e40d 69,73
+CONTEXT.md
+  s_b371449cdd8d2e::t_6444fbbf84e8a1 1-29
+packages/importers/src/import-validation.ts
+  s_b371449cdd8d2e::t_c5d6170e1ba623 1,18
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_b371449cdd8d2e::t_68c6babded9406 234-238
+packages/api/src/services/import-service.ts
+  s_b371449cdd8d2e::t_f348ef2fb09ba6 47-48,50,52-62,66-67,69,71-79,81,85-86,89-90,92-96,98-99
+  s_b371449cdd8d2e::t_1e72bf7fccbd6e 102-103,106,345
+  s_b371449cdd8d2e::t_bd92b063516ea8 116,127-129,132-134,150,165-179,213
+  s_b371449cdd8d2e::t_ab23fb99119d98 162-163
+  s_b371449cdd8d2e::t_2fda1e9bd1dfaa 110-113,117-126,130-131,151-152
+  s_b371449cdd8d2e::t_aa66cc3bfe50cb 114-115,135-149
+  s_b371449cdd8d2e::t_fc5b31629416d8 1
+  s_b371449cdd8d2e::t_6ea039a9d36b0c 17-30,45
+packages/db/src/schema.ts
+  s_b371449cdd8d2e::t_85f68699973ba5 15,219-220
+  s_b371449cdd8d2e::t_d993fbf4bb09d7 218
+packages/api/src/services/import-errors.ts
+  s_b371449cdd8d2e::t_cc4a4413efe2dd 1-101
+packages/db/drizzle/meta/0005_snapshot.json
+  s_b371449cdd8d2e::t_cf6b856ed669d4 1-1670
+packages/db/drizzle/meta/_journal.json
+  s_b371449cdd8d2e::t_9686a25350f525 39-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "efb41e8c7b7d5eedc398f2535d62224ecc9d9784",
+  "prompts": {},
+  "sessions": {
+    "s_b371449cdd8d2e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7a7c-9171-7f53-bfde-9301ebdfa60a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
