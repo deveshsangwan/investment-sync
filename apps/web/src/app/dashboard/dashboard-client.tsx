@@ -231,7 +231,11 @@ export function DashboardClient({
                 source={latestCommittedImport?.sourceType}
                 fileName={latestCommittedImport?.originalFileName}
                 committedAt={latestCommittedImport?.committedAt}
-                sourceFileExpired={latestCommittedImport?.status === "expired"}
+                sourceFileExpired={
+                  latestCommittedImport
+                    ? !latestCommittedImport.sourceFileAvailable
+                    : false
+                }
               />
             </div>
           </SectionCard>

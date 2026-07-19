@@ -1,15 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
-import {
-  and,
-  asc,
-  eq,
-  inArray,
-  isNotNull,
-  lte,
-  or,
-  sql,
-  type SQL,
-} from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import {
   accounts,
   holdingSnapshots,
@@ -22,13 +11,23 @@ import {
 } from "@investment-sync/db";
 import {
   normalizedImportRowSchema,
-  parseImportFile,
-  type ImportFile,
   type NormalizedHoldingRow,
   type NormalizedImportRow,
 } from "@investment-sync/importers";
-import { getImportBucketName, validateImportFile } from "../config";
-import type { ApiContext } from "../context";
+import { Clock, Effect } from "effect";
+import {
+  duplicateImportError,
+  importEffect,
+  ImportConflictError,
+  type ImportDependencies,
+  ImportNotFoundError,
+  ImportPersistenceError,
+} from "./import-errors";
+import {
+  cleanupExpiredImportFilesPromise,
+  listImportsPromise,
+  uploadAndProcessImportPromise,
+} from "./import-lifecycle";
 import type { MembershipContext } from "./membership";
 import { clearHouseholdPortfolioCache } from "./portfolio-cache";
 import {
@@ -38,221 +37,119 @@ import {
   type InstrumentIdentity,
 } from "./portfolio/identity";
 
-const IMPORT_TTL_DAYS = 30;
-const CLEANUP_BATCH_SIZE = 100;
 type ImportDatabase = Pick<
   Database,
   "execute" | "insert" | "select" | "update"
 >;
 
-async function ensureImportBucket(ctx: ApiContext) {
-  const bucket = getImportBucketName();
-  const existing = await ctx.supabase.storage.getBucket(bucket);
-  if (!existing.error) return;
+export * from "./import-errors";
 
-  const created = await ctx.supabase.storage.createBucket(bucket, {
-    public: false,
-    fileSizeLimit: "50MB",
-  });
-
-  if (
-    created.error &&
-    !created.error.message.toLowerCase().includes("already exists")
-  ) {
-    throw created.error;
-  }
-}
-
-export async function createImportUpload(
-  ctx: ApiContext,
-  membership: MembershipContext,
-  fileName: string,
-) {
-  validateImportFile({ fileName, sizeBytes: 0 });
-  await ensureImportBucket(ctx);
-  const bucket = getImportBucketName();
-  const expiresAt = new Date(
-    Date.now() + IMPORT_TTL_DAYS * 24 * 60 * 60 * 1000,
-  );
-  const importId = randomUUID();
-  const storagePath = `${membership.userId}/${importId}/${sanitizeFileName(fileName)}`;
-
-  const [batch] = await ctx.db
-    .insert(importBatches)
-    .values({
-      id: importId,
-      householdId: membership.householdId,
-      uploadedByUserId: membership.appUserId,
-      originalFileName: fileName,
-      storagePath,
-      expiresAt,
-      status: "created",
-    })
-    .returning();
-
-  if (!batch) throw new Error("Failed to create import batch");
-
-  const signed = await ctx.supabase.storage
-    .from(bucket)
-    .createSignedUploadUrl(storagePath);
-  if (signed.error) throw signed.error;
-
-  return {
-    importBatchId: batch.id,
-    storagePath,
-    token: signed.data.token,
-    signedUrl: signed.data.signedUrl,
-    expiresAt,
-  };
-}
-
-export async function uploadAndProcessImport(
-  ctx: ApiContext,
+export function uploadAndProcessImport(
+  dependencies: ImportDependencies,
   membership: MembershipContext,
   input: { fileName: string; mimeType?: string; content: Buffer },
 ) {
-  validateImportFile({
-    fileName: input.fileName,
-    mimeType: input.mimeType,
-    sizeBytes: input.content.length,
-  });
-  const fileHash = createHash("sha256").update(input.content).digest("hex");
-  const existing = await ctx.db
-    .select({
-      id: importBatches.id,
-      status: importBatches.status,
-      parserVersion: importBatches.parserVersion,
-    })
-    .from(importBatches)
-    .where(
-      and(
-        eq(importBatches.householdId, membership.householdId),
-        eq(importBatches.fileHash, fileHash),
-      ),
-    )
-    .limit(10);
-
-  const committedDuplicate = existing.find(
-    (batch) => batch.status === "committed",
-  );
-  if (committedDuplicate) {
-    const parsed = parseImportFile(input);
-    const sameParserVersionCommitted = existing.some(
-      (batch) =>
-        batch.status === "committed" &&
-        batch.parserVersion === parsed.parserVersion,
-    );
-    if (sameParserVersionCommitted) {
-      throw new Error("This file has already been imported and committed");
-    }
-  }
-
-  const upload = await createImportUpload(ctx, membership, input.fileName);
-  const bucket = getImportBucketName();
-  const storageUpload = await ctx.supabase.storage
-    .from(bucket)
-    .upload(upload.storagePath, input.content, {
-      contentType: input.mimeType,
-      upsert: true,
-    });
-
-  if (storageUpload.error) {
-    await ctx.db
-      .update(importBatches)
-      .set({ status: "failed", errors: [storageUpload.error.message] })
-      .where(eq(importBatches.id, upload.importBatchId));
-    throw storageUpload.error;
-  }
-
-  return processImport(ctx, membership, {
-    importBatchId: upload.importBatchId,
-    fileName: input.fileName,
-    mimeType: input.mimeType,
-    content: input.content,
-    fileHash,
-  });
-}
-
-export async function processImport(
-  ctx: ApiContext,
-  membership: MembershipContext,
-  input: ImportFile & { importBatchId: string; fileHash?: string },
-) {
-  validateImportFile({
-    fileName: input.fileName,
-    mimeType: input.mimeType,
-    sizeBytes: input.content.length,
-  });
-
-  let parsed: ReturnType<typeof parseImportFile>;
-  let validatedRows: NormalizedImportRow[];
-  try {
-    parsed = parseImportFile(input);
-    validatedRows = parsed.rows.map((row) =>
-      normalizedImportRowSchema.parse(row),
-    );
-  } catch (error) {
-    await ctx.db
-      .update(importBatches)
-      .set({
-        status: "failed",
-        errors: [error instanceof Error ? error.message : "Import failed"],
-        processedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(importBatches.id, input.importBatchId),
-          eq(importBatches.householdId, membership.householdId),
+  return Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) =>
+      importEffect(() =>
+        uploadAndProcessImportPromise(
+          dependencies,
+          membership,
+          input,
+          new Date(now),
         ),
-      );
-    throw error;
-  }
-
-  await ctx.db
-    .update(importBatches)
-    .set({
-      sourceType: parsed.sourceType,
-      status: "parsed",
-      parserVersion: parsed.parserVersion,
-      rowCount: validatedRows.length,
-      warnings: parsed.warnings,
-      fileHash: input.fileHash,
-      processedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(importBatches.id, input.importBatchId),
-        eq(importBatches.householdId, membership.householdId),
       ),
-    );
-
-  if (validatedRows.length > 0) {
-    await ctx.db.insert(importRows).values(
-      validatedRows.map((row, index) => ({
-        importBatchId: input.importBatchId,
-        rowNumber: index + 1,
-        normalizedPayload: row as unknown as Record<string, unknown>,
-      })),
-    );
-  }
-
-  return {
-    importBatchId: input.importBatchId,
-    sourceType: parsed.sourceType,
-    parserVersion: parsed.parserVersion,
-    rowCount: validatedRows.length,
-    rows: validatedRows,
-    warnings: parsed.warnings,
-  };
+    ),
+  );
 }
 
-export async function commitImport(
-  ctx: ApiContext,
+export function commitImport(
+  dependencies: ImportDependencies,
   membership: MembershipContext,
   importBatchId: string,
 ) {
+  return Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) =>
+      importEffect(() =>
+        commitImportPromise(
+          dependencies,
+          membership,
+          importBatchId,
+          new Date(now),
+        ),
+      ),
+    ),
+  );
+}
+
+export function listImports(
+  dependencies: ImportDependencies,
+  membership: MembershipContext,
+) {
+  return importEffect(() => listImportsPromise(dependencies, membership));
+}
+
+export function cleanupExpiredImportFiles(dependencies: ImportDependencies) {
+  return Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) =>
+      importEffect(() =>
+        cleanupExpiredImportFilesPromise(dependencies, new Date(now)),
+      ),
+    ),
+  );
+}
+
+async function commitImportPromise(
+  ctx: ImportDependencies,
+  membership: MembershipContext,
+  importBatchId: string,
+  committedAt: Date,
+) {
   const committed = await ctx.db.transaction(async (tx) => {
     const db: ImportDatabase = tx;
+    const [batch] = await db
+      .select({
+        status: importBatches.status,
+        rowCount: importBatches.rowCount,
+        fileHash: importBatches.fileHash,
+        parserVersion: importBatches.parserVersion,
+        uploadedAt: importBatches.uploadedAt,
+      })
+      .from(importBatches)
+      .where(
+        and(
+          eq(importBatches.id, importBatchId),
+          eq(importBatches.householdId, membership.householdId),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!batch) {
+      throw new ImportNotFoundError({ message: "Import Batch was not found" });
+    }
+    if (batch.status === "committed") return batch.rowCount;
+    if (batch.status !== "parsed") {
+      throw new ImportConflictError({
+        message: "Import Batch is not ready to commit",
+      });
+    }
+    if (batch.fileHash && batch.parserVersion) {
+      const [duplicate] = await db
+        .select({ id: importBatches.id })
+        .from(importBatches)
+        .where(
+          and(
+            eq(importBatches.householdId, membership.householdId),
+            eq(importBatches.fileHash, batch.fileHash),
+            eq(importBatches.parserVersion, batch.parserVersion),
+            eq(importBatches.status, "committed"),
+            ne(importBatches.id, importBatchId),
+          ),
+        )
+        .limit(1);
+      if (duplicate) throw duplicateImportError();
+    }
+
     const batchRows = await db
       .select({ id: importRows.id, payload: importRows.normalizedPayload })
       .from(importRows)
@@ -262,12 +159,24 @@ export async function commitImport(
           eq(importRows.importBatchId, importBatchId),
           eq(importBatches.householdId, membership.householdId),
         ),
-      );
+      )
+      .orderBy(asc(importRows.rowNumber));
 
-    const parsedRows = batchRows.map((row) => ({
-      id: row.id,
-      payload: normalizedImportRowSchema.parse(row.payload),
-    }));
+    if (batchRows.length === 0 || batchRows.length !== batch.rowCount) {
+      throw new ImportPersistenceError({
+        message: "Import Batch rows are incomplete",
+      });
+    }
+    const parsedRows = batchRows.map((row, index) => {
+      const parsed = normalizedImportRowSchema.safeParse(row.payload);
+      if (!parsed.success) {
+        throw new ImportPersistenceError({
+          message: `Import Batch row ${index + 1} is invalid`,
+          cause: parsed.error,
+        });
+      }
+      return { id: row.id, payload: parsed.data };
+    });
     const accountRows: AccountImportRow[] = [];
     for (const row of parsedRows) {
       if (
@@ -301,7 +210,7 @@ export async function commitImport(
           ),
           importBatchId,
           snapshotDate:
-            payload.sourceDate ?? new Date().toISOString().slice(0, 10),
+            payload.sourceDate ?? batch.uploadedAt.toISOString().slice(0, 10),
           quantity: payload.quantity?.toString(),
           investedAmount: payload.investedAmount.toString(),
           currentValue: payload.currentValue.toString(),
@@ -433,7 +342,7 @@ export async function commitImport(
 
     await db
       .update(importBatches)
-      .set({ status: "committed", committedAt: new Date() })
+      .set({ status: "committed", committedAt })
       .where(
         and(
           eq(importBatches.id, importBatchId),
@@ -447,47 +356,6 @@ export async function commitImport(
   clearHouseholdPortfolioCache(membership.householdId);
 
   return { committed };
-}
-
-export async function cleanupExpiredImportFiles(ctx: ApiContext) {
-  const now = new Date();
-  const expired = await ctx.db
-    .select({ id: importBatches.id, storagePath: importBatches.storagePath })
-    .from(importBatches)
-    .where(
-      and(
-        isNotNull(importBatches.storagePath),
-        lte(importBatches.expiresAt, now),
-      ),
-    )
-    .limit(CLEANUP_BATCH_SIZE);
-
-  const toDelete = expired.filter(
-    (batch): batch is { id: string; storagePath: string } =>
-      typeof batch.storagePath === "string" && batch.storagePath.length > 0,
-  );
-  if (toDelete.length === 0) return { deleted: 0 };
-
-  const bucket = getImportBucketName();
-  let deleted = 0;
-
-  const removed = await ctx.supabase.storage
-    .from(bucket)
-    .remove(toDelete.map((batch) => batch.storagePath));
-  if (!removed.error) {
-    await ctx.db
-      .update(importBatches)
-      .set({ status: "expired", storagePath: null })
-      .where(
-        inArray(
-          importBatches.id,
-          toDelete.map((batch) => batch.id),
-        ),
-      );
-    deleted = toDelete.length;
-  }
-
-  return { deleted };
 }
 
 type AccountImportRow = NormalizedHoldingRow | NormalizedTransactionRow;
@@ -690,8 +558,4 @@ function requiredMapValue(
   const value = values.get(key);
   if (!value) throw new Error(`Failed to resolve ${label} for import row`);
   return value;
-}
-
-function sanitizeFileName(fileName: string): string {
-  return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
 }

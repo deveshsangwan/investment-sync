@@ -36,6 +36,13 @@
       "when": 1780417800000,
       "tag": "0004_identity_performance_currency_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784482468645,
+      "tag": "0005_calm_colonel_america",
+      "breakpoints": true
     }
   ]
 }

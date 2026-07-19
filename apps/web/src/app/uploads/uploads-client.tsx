@@ -211,8 +211,8 @@ export function UploadsClient({
             (warning): warning is string => typeof warning === "string",
           )
         : [];
-      const rows = Array.isArray(data.rows)
-        ? data.rows.filter(isPreviewRow).slice(0, 3)
+      const rows = Array.isArray(data.previewRows)
+        ? data.previewRows.filter(isPreviewRow).slice(0, 3)
         : [];
 
       setPreview({
@@ -305,7 +305,7 @@ export function UploadsClient({
                 </p>
                 <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
                   Supported exports are detected automatically. Maximum file
-                  size is 50 MB.
+                  size is 4 MB.
                 </p>
                 <Button
                   type="button"
@@ -827,13 +827,13 @@ function historyWorkflow(batch: {
 
 function historyRetention(batch: {
   status: string;
-  storagePath: string | null;
+  sourceFileAvailable: boolean;
   expiresAt: Date | string;
 }) {
   if (batch.status === "failed") {
     return { label: "Source file unavailable", variant: "negative" as const };
   }
-  if (batch.status === "expired" || !batch.storagePath) {
+  if (!batch.sourceFileAvailable) {
     return { label: "Source file expired", variant: "warning" as const };
   }
   return {

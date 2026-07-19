@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const assetClassEnum = pgEnum("asset_class", [
   "indian_stock",
@@ -214,6 +215,9 @@ export const importBatches = pgTable(
     householdIdx: index("import_batches_household_idx").on(table.householdId),
     expiryIdx: index("import_batches_expiry_idx").on(table.expiresAt),
     fileHashIdx: index("import_batches_file_hash_idx").on(table.fileHash),
+    committedFileIdx: uniqueIndex("import_batches_committed_file_parser_idx")
+      .on(table.householdId, table.fileHash, table.parserVersion)
+      .where(sql`${table.status} = 'committed'`),
   }),
 );
 
