@@ -1,0 +1,39 @@
+packages/api/src/services/currency-rates.test.ts
+  s_b371449cdd8d2e::t_0086eda1eedaf1 72-89
+  s_b371449cdd8d2e::t_6120696330ce35 104-126
+  s_b371449cdd8d2e::t_574271252a08ae 65,68-69
+  s_b371449cdd8d2e::t_b5ae77f207b7b7 71,90-103
+  s_b371449cdd8d2e::t_c111a76a3780f9 5,10-28,145-156
+  s_b371449cdd8d2e::t_c7f2a1a4f27dd9 54-64,66-67,70
+  s_b371449cdd8d2e::t_a4369ee68d5d8a 127-143
+packages/api/package.json
+  s_b371449cdd8d2e::t_3ec2f1da27cd8e 19
+packages/api/src/logger.ts
+  s_b371449cdd8d2e::t_f2d9541a23e8a1 12-19
+packages/api/src/services/currency-rates.ts
+  s_b371449cdd8d2e::t_8f9bd1d745fd50 41-44,46-65,68-70,72-80,82-111,188,194-207,245,260-271
+  s_b371449cdd8d2e::t_97256c44f0c7bf 232
+  s_b371449cdd8d2e::t_996c26ecb78aea 10-24,112,115-169
+  s_b371449cdd8d2e::t_bfdc2600aba991 3,193
+  s_b371449cdd8d2e::t_9fddb26da1ee59 7,257-259
+  s_b371449cdd8d2e::t_0acc45560125dc 236-244
+  s_b371449cdd8d2e::t_eb9a1e3c13a500 246
+pnpm-lock.yaml
+  s_b371449cdd8d2e::t_31cf26b92cab60 238-240,3958-3960,4297-4300,5510-5512,9667-9674,10491-10495,11046-11049,12426-12427,13564
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "194b9b2b5331850347b53867aaff608057982ebf",
+  "prompts": {},
+  "sessions": {
+    "s_b371449cdd8d2e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7a7c-9171-7f53-bfde-9301ebdfa60a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
