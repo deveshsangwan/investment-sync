@@ -1,0 +1,25 @@
+apps/web/src/app/settings/settings-client.tsx
+  s_e9a44938849c05::t_c540001218ee7a 168
+apps/web/src/app/globals.css
+  s_e9a44938849c05::t_c540001218ee7a 91
+apps/web/src/app/uploads/uploads-client.tsx
+  s_e9a44938849c05::t_c540001218ee7a 598
+apps/web/src/app/holdings/holdings-client.tsx
+  s_e9a44938849c05::t_c540001218ee7a 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ad9e4bfa55943eae7ffa81f9844e4a861d5c0930",
+  "prompts": {},
+  "sessions": {
+    "s_e9a44938849c05": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9de5-b154-7492-8845-75be3f1531b6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
