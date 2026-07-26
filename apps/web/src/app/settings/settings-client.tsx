@@ -165,7 +165,7 @@ export function SettingsClient() {
         description="What Investment Sync keeps after you upload a portfolio file."
         className="mt-4"
       >
-        <div className="grid overflow-hidden rounded-lg border border-border/70 md:grid-cols-2 md:divide-x">
+        <div className="grid overflow-hidden rounded-lg border border-border/70 md:grid-cols-2 md:divide-x md:divide-border/70">
           <div className="border-b border-border/70 p-5 md:border-b-0">
             <div className="flex items-center gap-3">
               <span className="grid size-10 place-items-center rounded-lg bg-accent text-primary">

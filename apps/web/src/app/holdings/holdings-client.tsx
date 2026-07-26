@@ -48,7 +48,7 @@ type PositionStatus = "current" | "exited" | "all";
 type SortKey = "value" | "pnl" | "return" | "name";
 
 const controlClass =
-  "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary";
+  "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
 
 export function HoldingsClient({
   isDataConfigured,
@@ -328,7 +328,6 @@ function FilterSelect({
     <label className="grid gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <select
-        aria-label={label}
         className={`${controlClass} w-full`}
         value={value}
         onChange={(event) => onChange(event.target.value)}

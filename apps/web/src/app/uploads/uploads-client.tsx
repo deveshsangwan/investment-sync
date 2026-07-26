@@ -595,7 +595,7 @@ function ImportProgress({ currentStep }: { currentStep: FlowStep }) {
       aria-label="Import progress"
       className="mb-4 border-b border-border/70"
     >
-      <ol className="grid grid-cols-4">
+      <ol className="-mb-px grid grid-cols-4">
         {flowSteps.map((flowStep, index) => {
           const complete = index < currentIndex;
           const current = index === currentIndex;
