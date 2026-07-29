@@ -26,3 +26,10 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 Original uploaded files are retained for 30 days by default. Normalized portfolio data remains until deleted from the app.
 
 For fake local portfolio data without production records, see `docs/local-development.md`.
+
+## Build outputs
+
+Turbo's `build` task only tracks `.next/**` and `dist/**`/`build/**` artifacts. Most workspace packages don't emit any of those:
+
+- **Compiled/published** (produce build artifacts): `apps/web` (`next build` emits `.next/**`).
+- **Typechecked only** (`tsc --noEmit`, no emitted files): `packages/api`, `packages/db`, `packages/importers`, `packages/analytics`, `apps/mobile`. These exist purely to fail the build on type errors, so `turbo.json` scopes their `build` task outputs to `[]` — otherwise Turbo logs a "no output files found" warning on every run even though nothing is wrong.

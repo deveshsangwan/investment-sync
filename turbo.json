@@ -5,6 +5,26 @@
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"]
     },
+    "@investment-sync/api#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@investment-sync/db#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@investment-sync/importers#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@investment-sync/analytics#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@investment-sync/mobile#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "dev": {
       "cache": false,
       "persistent": true
