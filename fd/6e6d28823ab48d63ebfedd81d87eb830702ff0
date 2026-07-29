@@ -1,0 +1,23 @@
+turbo.json
+  s_14085bd81710b8::t_640a0736ce46bf 8-27
+README.md
+  s_14085bd81710b8::t_b5278b691549a2 29-35
+.github/workflows/ci.yml
+  s_14085bd81710b8::t_57fd1f847830e6 16-32,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "fd6e6d28823ab48d63ebfedd81d87eb830702ff0",
+  "prompts": {},
+  "sessions": {
+    "s_14085bd81710b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7acc3cfe-0d6f-4adf-a756-888a4c9af419",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
