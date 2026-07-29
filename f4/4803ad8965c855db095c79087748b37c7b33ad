@@ -1,0 +1,30 @@
+packages/db/drizzle/0006_crypto_amounts_are_inr.sql
+  s_14085bd81710b8::t_ddc490ac7d4db2 1-26
+packages/api/src/services/portfolio/utils.ts
+  s_14085bd81710b8::t_a056bf9e0a495e 37-44,53
+packages/importers/src/xlsx.ts
+  s_14085bd81710b8::t_4d989b034b1325 416-419
+packages/api/src/services/portfolio/utils.test.ts
+  s_14085bd81710b8::t_90dedf7a94406f 4
+  s_14085bd81710b8::t_9edab3f07fd3ae 37-43
+  s_14085bd81710b8::t_c605a15406ebcf 165
+  s_14085bd81710b8::t_f8a0565b3dcbae 122-156
+packages/db/drizzle/meta/_journal.json
+  s_14085bd81710b8::t_271a2ee803c24e 39-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f44803ad8965c855db095c79087748b37c7b33ad",
+  "prompts": {},
+  "sessions": {
+    "s_14085bd81710b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7acc3cfe-0d6f-4adf-a756-888a4c9af419",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
