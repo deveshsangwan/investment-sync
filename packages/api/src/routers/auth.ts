@@ -1,6 +1,7 @@
 import { households, users } from "@investment-sync/db";
 import { eq } from "drizzle-orm";
 import { router, protectedProcedure } from "../trpc";
+import { canManageHousehold } from "../services/membership";
 
 export const authRouter = router({
   me: protectedProcedure.query(async ({ ctx }) => {
@@ -20,8 +21,8 @@ export const authRouter = router({
     return {
       user: profile,
       permissions: {
-        canUpload: ctx.membership.role === "owner",
-        canManageHousehold: ctx.membership.role === "owner",
+        canUpload: canManageHousehold(ctx.membership),
+        canManageHousehold: canManageHousehold(ctx.membership),
       },
     };
   }),
