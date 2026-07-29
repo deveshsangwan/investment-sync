@@ -154,6 +154,54 @@ export function objectFromRow(
   return record;
 }
 
+/**
+ * Looks up a value from an `objectFromRow` record by trying each alias (in
+ * order) after normalizing it the same way headers are normalized. Lets
+ * callers accept a column under a few known spellings (e.g. "Current Value"
+ * vs "Current Value ₹") without hard-coding numeric offsets.
+ */
+export function pick(
+  record: Record<string, unknown>,
+  aliases: string[],
+): unknown {
+  for (const alias of aliases) {
+    const key = normalizeHeader(alias);
+    if (key in record) return record[key];
+  }
+  return undefined;
+}
+
+export interface RequiredColumn {
+  /** Human-readable name used in the thrown error message. */
+  field: string;
+  /** Accepted header spellings for this column, matched after normalizing. */
+  aliases: string[];
+}
+
+/**
+ * Throws a clear schema error naming the sheet and any required columns
+ * that aren't present in the header row, instead of letting missing/renamed
+ * columns silently shift every other column's values.
+ */
+export function requireColumns(
+  headers: unknown[],
+  columns: RequiredColumn[],
+  sheetName: string,
+): void {
+  const headerKeys = new Set(headers.map(normalizeHeader));
+  const missing = columns.filter(
+    (column) =>
+      !column.aliases.some((alias) => headerKeys.has(normalizeHeader(alias))),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${sheetName} sheet is missing required column(s): ${missing
+        .map((column) => column.field)
+        .join(", ")}`,
+    );
+  }
+}
+
 export function sourceDateFromText(text: string): string | undefined {
   const match = text.match(/(\d{1,2})[-\s]([A-Za-z]{3,})[-\s](\d{2,4})/);
   if (!match) return undefined;

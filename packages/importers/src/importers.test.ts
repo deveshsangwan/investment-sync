@@ -13,6 +13,43 @@ function workbookToBuffer(workbook: XLSX.WorkBook): Buffer {
   return Buffer.from(String(output));
 }
 
+// Builds a minimal Investment Portfolio workbook with just enough sheets
+// (Investment Portfolio + Stock Investments + Mutual Funds) to hit the
+// importer's detection threshold, so header-mapping tests can override just
+// the sheet under test and leave the other with a harmless header-only stub.
+function buildWorkbook(options: {
+  stockRows?: unknown[][];
+  mutualFundRows?: unknown[][];
+}): Buffer {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet([
+      ["Date", "Asset Type", "Investment Amount", "Current Value"],
+    ]),
+    "Investment Portfolio",
+  );
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet(
+      options.stockRows ?? [
+        ["Security", "Invested Value ₹", "Current Value ₹"],
+      ],
+    ),
+    "Stock Investments",
+  );
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet(
+      options.mutualFundRows ?? [
+        ["Fund Name", "Invested Amt ₹", "Current Value ₹"],
+      ],
+    ),
+    "Mutual Funds",
+  );
+  return workbookToBuffer(workbook);
+}
+
 describe("Tickertape importers", () => {
   it("parses stock holdings CSV", () => {
     const csv = `,,,Holdings - 16-May-26 IST
@@ -217,5 +254,172 @@ describe("Investment workbook importer", () => {
         (row) => row.kind === "holding" && row.instrumentName === "USSTOCK",
       ),
     ).toHaveLength(1);
+  });
+});
+
+describe("Investment workbook importer - header mapping", () => {
+  it("Stock Investments: parses correctly when columns are reordered", () => {
+    const result = parseImportFile({
+      fileName: "Personal Workbook.xlsx",
+      content: buildWorkbook({
+        stockRows: [
+          [
+            "Current Value ₹",
+            "Security",
+            "P & L ₹",
+            "Quantity",
+            "Invested Value ₹",
+            "Net Change %",
+          ],
+          [1100, "ABC", 100, 2, 1000, 10],
+        ],
+      }),
+    });
+
+    const abc = result.rows.find(
+      (row) => row.kind === "holding" && row.instrumentName === "ABC",
+    );
+    expect(abc).toMatchObject({
+      currentValue: 1100,
+      investedAmount: 1000,
+      quantity: 2,
+    });
+  });
+
+  it("Stock Investments: parses correctly with an extra inserted column", () => {
+    const result = parseImportFile({
+      fileName: "Personal Workbook.xlsx",
+      content: buildWorkbook({
+        stockRows: [
+          [
+            "Security",
+            "Sector",
+            "Quantity",
+            "Invested Value ₹",
+            "Current Value ₹",
+          ],
+          ["ABC", "Technology", 2, 1000, 1100],
+        ],
+      }),
+    });
+
+    const abc = result.rows.find(
+      (row) => row.kind === "holding" && row.instrumentName === "ABC",
+    );
+    expect(abc).toMatchObject({
+      currentValue: 1100,
+      investedAmount: 1000,
+      quantity: 2,
+    });
+  });
+
+  it("Stock Investments: throws a schema error when a required column is missing", () => {
+    expect(() =>
+      parseImportFile({
+        fileName: "Personal Workbook.xlsx",
+        content: buildWorkbook({
+          stockRows: [
+            ["Security", "Quantity", "Current Value ₹"],
+            ["ABC", 2, 1100],
+          ],
+        }),
+      }),
+    ).toThrow(/Stock Investments.*Invested Value/);
+  });
+
+  it("Stock Investments: throws a schema error when a required column is renamed", () => {
+    expect(() =>
+      parseImportFile({
+        fileName: "Personal Workbook.xlsx",
+        content: buildWorkbook({
+          stockRows: [
+            ["Security", "Quantity", "Invested Value ₹", "Value ₹"],
+            ["ABC", 2, 1000, 1100],
+          ],
+        }),
+      }),
+    ).toThrow(/Stock Investments.*Current Value/);
+  });
+
+  it("Mutual Funds: parses correctly when columns are reordered", () => {
+    const result = parseImportFile({
+      fileName: "Personal Workbook.xlsx",
+      content: buildWorkbook({
+        mutualFundRows: [
+          [
+            "Current Value ₹",
+            "Fund Name",
+            "P&L ₹",
+            "Units",
+            "Invested Amt ₹",
+            "P&L %",
+          ],
+          [125, "Fund A", 25, 10, 100, 25],
+        ],
+      }),
+    });
+
+    const fundA = result.rows.find(
+      (row) => row.kind === "holding" && row.instrumentName === "Fund A",
+    );
+    expect(fundA).toMatchObject({
+      currentValue: 125,
+      investedAmount: 100,
+      quantity: 10,
+    });
+  });
+
+  it("Mutual Funds: parses correctly with an extra inserted column", () => {
+    const result = parseImportFile({
+      fileName: "Personal Workbook.xlsx",
+      content: buildWorkbook({
+        mutualFundRows: [
+          [
+            "Fund Name",
+            "Category",
+            "AMC Name",
+            "Invested Amt ₹",
+            "Current Value ₹",
+          ],
+          ["Fund A", "Equity", "AMC", 100, 125],
+        ],
+      }),
+    });
+
+    const fundA = result.rows.find(
+      (row) => row.kind === "holding" && row.instrumentName === "Fund A",
+    );
+    expect(fundA).toMatchObject({
+      currentValue: 125,
+      investedAmount: 100,
+    });
+  });
+
+  it("Mutual Funds: throws a schema error when a required column is missing", () => {
+    expect(() =>
+      parseImportFile({
+        fileName: "Personal Workbook.xlsx",
+        content: buildWorkbook({
+          mutualFundRows: [
+            ["Fund Name", "Units", "Current Value ₹"],
+            ["Fund A", 10, 125],
+          ],
+        }),
+      }),
+    ).toThrow(/Mutual Funds.*Invested Amount/);
+  });
+
+  it("Mutual Funds: throws a schema error when a required column is renamed", () => {
+    expect(() =>
+      parseImportFile({
+        fileName: "Personal Workbook.xlsx",
+        content: buildWorkbook({
+          mutualFundRows: [
+            ["Fund Name", "Units", "Invested Amt ₹", "Value ₹"],
+            ["Fund A", 10, 100, 125],
+          ],
+        }),
+      }),
+    ).toThrow(/Mutual Funds.*Current Value/);
   });
 });

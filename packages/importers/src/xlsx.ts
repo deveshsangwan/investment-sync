@@ -14,8 +14,11 @@ import {
   objectFromRow,
   parseNumber,
   parseRequiredNumber,
+  pick,
+  requireColumns,
   toStringValue,
   toIsoDate,
+  type RequiredColumn,
 } from "./utils";
 
 interface WorkbookContext {
@@ -129,7 +132,7 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
 
 export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   sourceType: "investment_portfolio_xlsx",
-  parserVersion: "investment-portfolio-workbook-v3",
+  parserVersion: "investment-portfolio-workbook-v4",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -225,13 +228,28 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   },
 };
 
+const STOCK_INVESTMENTS_COLUMNS: RequiredColumn[] = [
+  { field: "Security", aliases: ["security"] },
+  { field: "Invested Value", aliases: ["invested value rs", "invested value"] },
+  { field: "Current Value", aliases: ["current value rs", "current value"] },
+];
+
 function parseStockInvestments(
   workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   const rows = workbookRows(workbook, "Stock Investments");
-  const headerRow = findHeaderRow(rows, ["Security", "Quantity"]);
+  if (rows.length === 0) return [];
+  // ponytail: locate the header row with just the "Security" anchor so a
+  // renamed money column still produces the clearer missing-column error
+  // below instead of a generic "header row not found". If "Security" itself
+  // is renamed, the sheet is treated as absent (silent skip) — broaden this
+  // anchor list if that surfaces in real workbooks.
+  const headerRow = findHeaderRow(rows, ["Security"]);
   if (headerRow < 0) return [];
+
+  const headers = rows[headerRow] ?? [];
+  requireColumns(headers, STOCK_INVESTMENTS_COLUMNS, "Stock Investments");
 
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
@@ -241,13 +259,24 @@ function parseStockInvestments(
       return [];
     }
 
-    const symbol = toStringValue(row[0]).trim();
+    const record = objectFromRow(headers, row);
+    const symbol = toStringValue(pick(record, ["security"])).trim();
     if (!symbol || ["stocks/etfs", "total"].includes(symbol.toLowerCase())) {
       return [];
     }
-    const investedAmount = parseNumber(row[6]) ?? 0;
-    const currentValue = parseNumber(row[7]) ?? 0;
-    if (investedAmount === 0 && currentValue === 0) return [];
+
+    const investedAmount = parseNumber(
+      pick(record, ["invested value rs", "invested value"]),
+    );
+    const currentValue = parseNumber(
+      pick(record, ["current value rs", "current value"]),
+    );
+    if (investedAmount === undefined && currentValue === undefined) return [];
+    if (investedAmount === undefined || currentValue === undefined) {
+      throw new Error(
+        `Stock Investments sheet row for "${symbol}" is missing a required value (Invested Value or Current Value)`,
+      );
+    }
 
     return [
       {
@@ -260,32 +289,56 @@ function parseStockInvestments(
         symbol,
         assetClass: "indian_stock",
         currency: "INR",
-        quantity: parseNumber(row[2]),
+        quantity: parseNumber(pick(record, ["quantity"])),
         investedAmount,
         currentValue,
-        pnlAmount: parseNumber(row[8]),
-        pnlPercent: parseNumber(row[9]),
+        pnlAmount: parseNumber(pick(record, ["p & l rs", "p & l"])),
+        pnlPercent: parseNumber(pick(record, ["net change %"])),
         metadata: {
           sourceSheet: "Stock Investments",
-          smallcases: parseNumber(row[1]),
-          averageCost: parseNumber(row[3]),
-          portfolioWeight: parseNumber(row[4]),
-          ltp: parseNumber(row[5]),
-          dailyChangeAmount: parseNumber(row[10]),
-          dailyChangePercent: parseNumber(row[11]),
+          smallcases: parseNumber(pick(record, ["no. of smallcases"])),
+          averageCost: parseNumber(
+            pick(record, ["average cost rs", "average cost"]),
+          ),
+          portfolioWeight: parseNumber(pick(record, ["portfolio weight %"])),
+          ltp: parseNumber(pick(record, ["ltp rs", "ltp"])),
+          dailyChangeAmount: parseNumber(
+            pick(record, ["daily change rs", "daily change"]),
+          ),
+          dailyChangePercent: parseNumber(pick(record, ["daily change %"])),
         },
       },
     ];
   });
 }
 
+const MUTUAL_FUNDS_COLUMNS: RequiredColumn[] = [
+  { field: "Fund Name", aliases: ["fund name"] },
+  {
+    field: "Invested Amount",
+    aliases: [
+      "invested amt rs",
+      "invested amt",
+      "invested amount",
+      "invested value",
+    ],
+  },
+  { field: "Current Value", aliases: ["current value rs", "current value"] },
+];
+
 function parseMutualFunds(
   workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   const rows = workbookRows(workbook, "Mutual Funds");
-  const headerRow = findHeaderRow(rows, ["Fund Name", "Current Value"]);
+  if (rows.length === 0) return [];
+  // ponytail: same "Fund Name" anchor + explicit requireColumns split as
+  // Stock Investments above — see the comment there for the tradeoff.
+  const headerRow = findHeaderRow(rows, ["Fund Name"]);
   if (headerRow < 0) return [];
+
+  const headers = rows[headerRow] ?? [];
+  requireColumns(headers, MUTUAL_FUNDS_COLUMNS, "Mutual Funds");
 
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
@@ -295,11 +348,27 @@ function parseMutualFunds(
       return [];
     }
 
-    const fundName = toStringValue(row[0]).trim();
+    const record = objectFromRow(headers, row);
+    const fundName = toStringValue(pick(record, ["fund name"])).trim();
     if (!fundName || fundName.toLowerCase() === "total") return [];
-    const investedAmount = parseNumber(row[8]) ?? 0;
-    const currentValue = parseNumber(row[9]) ?? 0;
-    if (investedAmount === 0 && currentValue === 0) return [];
+
+    const investedAmount = parseNumber(
+      pick(record, [
+        "invested amt rs",
+        "invested amt",
+        "invested amount",
+        "invested value",
+      ]),
+    );
+    const currentValue = parseNumber(
+      pick(record, ["current value rs", "current value"]),
+    );
+    if (investedAmount === undefined && currentValue === undefined) return [];
+    if (investedAmount === undefined || currentValue === undefined) {
+      throw new Error(
+        `Mutual Funds sheet row for "${fundName}" is missing a required value (Invested Amount or Current Value)`,
+      );
+    }
 
     return [
       {
@@ -311,52 +380,70 @@ function parseMutualFunds(
         instrumentName: fundName,
         assetClass: "mutual_fund",
         currency: "INR",
-        quantity: parseNumber(row[7]),
+        quantity: parseNumber(pick(record, ["units"])),
         investedAmount,
         currentValue,
-        pnlAmount: parseNumber(row[11]),
-        pnlPercent: parseNumber(row[12]),
+        pnlAmount: parseNumber(pick(record, ["p&l rs", "p&l"])),
+        pnlPercent: parseNumber(pick(record, ["p&l %"])),
         metadata: {
           sourceSheet: "Mutual Funds",
-          amcName: row[1],
-          category: row[2],
-          subCategory: row[3],
-          planType: row[4],
-          optionType: row[5],
-          nav: parseNumber(row[6]),
-          weight: parseNumber(row[10]),
-          xirr: parseNumber(row[13]),
-          investedSince: row[14],
+          amcName: pick(record, ["amc name"]),
+          category: pick(record, ["category"]),
+          subCategory: pick(record, ["sub-category"]),
+          planType: pick(record, ["plan type"]),
+          optionType: pick(record, ["option type"]),
+          nav: parseNumber(pick(record, ["nav rs", "nav"])),
+          weight: parseNumber(pick(record, ["weight %"])),
+          xirr: parseNumber(pick(record, ["xirr %", "xirr"])),
+          investedSince: pick(record, ["invested since"]),
         },
       },
     ];
   });
 }
 
+const NPS_COLUMNS: RequiredColumn[] = [
+  { field: "Value", aliases: ["value", "current value"] },
+  {
+    field: "Contribution",
+    aliases: ["contribution", "invested amount", "investment amount"],
+  },
+];
+
 function parseNps(
   workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   const rows = workbookRows(workbook, "NPS");
+  if (rows.length === 0) return [];
+
+  const headers = rows[0] ?? [];
+  requireColumns(headers, NPS_COLUMNS, "NPS");
+
   let sourceDate = initialDate;
   const parsed: NormalizedHoldingRow[] = [];
 
-  for (const row of rows) {
+  for (const row of rows.slice(1)) {
     const date = toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       continue;
     }
-    const currentValue = parseNumber(row[0]);
-    const investedAmount = parseNumber(row[2]);
-    if (
-      !sourceDate ||
-      currentValue === undefined ||
-      investedAmount === undefined
-    ) {
-      continue;
+
+    const record = objectFromRow(headers, row);
+    const currentValue = parseNumber(pick(record, ["value", "current value"]));
+    const investedAmount = parseNumber(
+      pick(record, ["contribution", "invested amount", "investment amount"]),
+    );
+    if (currentValue === undefined && investedAmount === undefined) continue;
+    if (!sourceDate) continue;
+    if (currentValue === undefined || investedAmount === undefined) {
+      throw new Error(
+        `NPS sheet row is missing a required value (Value or Contribution) for date ${sourceDate}`,
+      );
     }
-    const pnlAmount = parseNumber(row[4]);
+
+    const pnlAmount = parseNumber(pick(record, ["gain/loss", "p&l", "pnl"]));
     parsed.push({
       kind: "holding",
       sourceType: "investment_portfolio_xlsx",
@@ -375,10 +462,10 @@ function parseNps(
           : (pnlAmount / investedAmount) * 100,
       metadata: {
         sourceSheet: "NPS",
-        contributions: parseNumber(row[1]),
-        withdrawals: parseNumber(row[3]),
-        charges: parseNumber(row[5]),
-        xirr: parseNumber(row[7]),
+        contributions: parseNumber(pick(record, ["count", "contributions"])),
+        withdrawals: parseNumber(pick(record, ["withdrawals", "withdrawal"])),
+        charges: parseNumber(pick(record, ["charges"])),
+        xirr: parseNumber(pick(record, ["xirr", "xirr %"])),
       },
     });
   }
@@ -397,10 +484,10 @@ function parseUlips(
     assetClass: "ulip",
     currency: "INR",
     sourceSheet: "ULIPS",
-    nameColumn: 0,
-    investedColumn: 1,
-    currentColumn: 3,
-    pnlColumn: 2,
+    nameAliases: ["name"],
+    investedAliases: ["invested"],
+    currentAliases: ["current value"],
+    pnlAliases: ["returns"],
   });
 }
 
@@ -415,11 +502,11 @@ function parseCrypto(
     assetClass: "crypto",
     currency: "OTHER",
     sourceSheet: "Crypto",
-    nameColumn: 0,
-    quantityColumn: 1,
-    investedColumn: 2,
-    currentColumn: 4,
-    pnlColumn: 3,
+    nameAliases: ["name"],
+    quantityAliases: ["units"],
+    investedAliases: ["invested"],
+    currentAliases: ["total asset value"],
+    pnlAliases: ["returns"],
   });
 }
 
@@ -434,12 +521,12 @@ function parseUsStocks(
     assetClass: "us_stock",
     currency: "USD",
     sourceSheet: "US stocks",
-    nameColumn: 0,
-    quantityColumn: 1,
-    investedColumn: 3,
-    currentColumn: 2,
-    pnlColumn: 4,
-    pnlPercentColumn: 5,
+    nameAliases: ["name"],
+    quantityAliases: ["quantity"],
+    investedAliases: ["invested"],
+    currentAliases: ["current value"],
+    pnlAliases: ["returns"],
+    pnlPercentAliases: ["%"],
     symbolFromName: true,
   });
 }
@@ -451,12 +538,12 @@ function parseSimpleSectionHoldings({
   assetClass,
   currency,
   sourceSheet,
-  nameColumn,
-  quantityColumn,
-  investedColumn,
-  currentColumn,
-  pnlColumn,
-  pnlPercentColumn,
+  nameAliases,
+  quantityAliases,
+  investedAliases,
+  currentAliases,
+  pnlAliases,
+  pnlPercentAliases,
   symbolFromName,
 }: {
   rows: unknown[][];
@@ -465,14 +552,27 @@ function parseSimpleSectionHoldings({
   assetClass: AssetClass;
   currency: Currency;
   sourceSheet: string;
-  nameColumn: number;
-  quantityColumn?: number;
-  investedColumn: number;
-  currentColumn: number;
-  pnlColumn?: number;
-  pnlPercentColumn?: number;
+  nameAliases: string[];
+  quantityAliases?: string[];
+  investedAliases: string[];
+  currentAliases: string[];
+  pnlAliases?: string[];
+  pnlPercentAliases?: string[];
   symbolFromName?: boolean;
 }): NormalizedHoldingRow[] {
+  if (rows.length === 0) return [];
+  // These sheets have no leading title rows, so the header is always row 0.
+  const headers = rows[0] ?? [];
+  requireColumns(
+    headers,
+    [
+      { field: "Name", aliases: nameAliases },
+      { field: "Invested", aliases: investedAliases },
+      { field: "Current Value", aliases: currentAliases },
+    ],
+    sourceSheet,
+  );
+
   let sourceDate = initialDate;
   return rows.slice(1).flatMap((row) => {
     const date = toIsoDate(row[0]);
@@ -481,11 +581,18 @@ function parseSimpleSectionHoldings({
       return [];
     }
 
-    const instrumentName = toStringValue(row[nameColumn]).trim();
+    const record = objectFromRow(headers, row);
+    const instrumentName = toStringValue(pick(record, nameAliases)).trim();
     if (!instrumentName || instrumentName.toLowerCase() === "total") return [];
-    const investedAmount = parseNumber(row[investedColumn]) ?? 0;
-    const currentValue = parseNumber(row[currentColumn]) ?? 0;
-    if (investedAmount === 0 && currentValue === 0) return [];
+
+    const investedAmount = parseNumber(pick(record, investedAliases));
+    const currentValue = parseNumber(pick(record, currentAliases));
+    if (investedAmount === undefined && currentValue === undefined) return [];
+    if (investedAmount === undefined || currentValue === undefined) {
+      throw new Error(
+        `${sourceSheet} sheet row for "${instrumentName}" is missing a required value (Invested or Current Value)`,
+      );
+    }
 
     return [
       {
@@ -498,18 +605,17 @@ function parseSimpleSectionHoldings({
         symbol: symbolFromName ? instrumentName : undefined,
         assetClass,
         currency,
-        quantity:
-          quantityColumn === undefined
-            ? undefined
-            : parseNumber(row[quantityColumn]),
+        quantity: quantityAliases
+          ? parseNumber(pick(record, quantityAliases))
+          : undefined,
         investedAmount,
         currentValue,
-        pnlAmount:
-          pnlColumn === undefined ? undefined : parseNumber(row[pnlColumn]),
-        pnlPercent:
-          pnlPercentColumn === undefined
-            ? undefined
-            : parseNumber(row[pnlPercentColumn]),
+        pnlAmount: pnlAliases
+          ? parseNumber(pick(record, pnlAliases))
+          : undefined,
+        pnlPercent: pnlPercentAliases
+          ? parseNumber(pick(record, pnlPercentAliases))
+          : undefined,
         metadata: { sourceSheet },
       },
     ];
