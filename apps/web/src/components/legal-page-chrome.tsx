@@ -15,7 +15,7 @@ export function LegalHeader() {
           aria-label="Investment Sync home"
           className="flex items-center gap-2.5 font-semibold tracking-[-0.02em]"
         >
-          <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-[0_10px_28px_hsl(var(--primary)/0.2)]">
+          <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
             <WalletCards className="size-[1.05rem]" aria-hidden="true" />
           </span>
           <span>Investment Sync</span>

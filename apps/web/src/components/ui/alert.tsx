@@ -6,7 +6,7 @@ function Alert({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     <div
       role="alert"
       className={cn(
-        "relative w-full rounded-2xl border border-border/80 bg-card/90 px-4 py-3.5 text-sm shadow-[0_12px_40px_hsl(var(--foreground)/0.04)]",
+        "relative w-full rounded-xl border border-border/80 bg-card px-4 py-3.5 text-sm",
         className,
       )}
       {...props}

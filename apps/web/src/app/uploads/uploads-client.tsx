@@ -285,7 +285,7 @@ export function UploadsClient({
             >
               <div
                 className={cn(
-                  "rounded-2xl border border-dashed bg-muted/20 px-5 py-8 text-center transition-colors sm:px-8 sm:py-10",
+                  "rounded-lg border border-dashed bg-muted/20 px-5 py-8 text-center transition-colors sm:px-8 sm:py-10",
                   isDragging && "border-primary bg-primary/5",
                   fileError && "border-negative/40 bg-negative/5",
                 )}
@@ -297,7 +297,7 @@ export function UploadsClient({
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
               >
-                <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-background text-primary shadow-sm">
+                <div className="mx-auto grid size-12 place-items-center rounded-lg border bg-card text-primary">
                   <UploadCloud className="size-5" aria-hidden="true" />
                 </div>
                 <p className="mt-4 font-semibold tracking-[-0.01em]">
@@ -591,8 +591,11 @@ function ImportProgress({ currentStep }: { currentStep: FlowStep }) {
   );
 
   return (
-    <nav aria-label="Import progress" className="mb-4">
-      <ol className="grid grid-cols-4 gap-2 rounded-2xl border bg-card/60 p-2 sm:gap-3 sm:p-3">
+    <nav
+      aria-label="Import progress"
+      className="mb-4 border-b border-border/70"
+    >
+      <ol className="-mb-px grid grid-cols-4">
         {flowSteps.map((flowStep, index) => {
           const complete = index < currentIndex;
           const current = index === currentIndex;
@@ -601,16 +604,16 @@ function ImportProgress({ currentStep }: { currentStep: FlowStep }) {
               key={flowStep.value}
               aria-current={current ? "step" : undefined}
               className={cn(
-                "flex min-w-0 flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-[11px] font-semibold text-muted-foreground sm:flex-row sm:gap-2 sm:px-3 sm:text-sm",
-                current && "bg-secondary text-foreground",
+                "flex min-w-0 flex-col items-center justify-center gap-1.5 border-b-2 border-transparent px-1 py-3 text-[11px] font-semibold text-muted-foreground sm:flex-row sm:gap-2 sm:px-3 sm:text-sm",
+                current && "border-primary text-foreground",
                 complete && "text-primary",
               )}
             >
               <span
                 className={cn(
-                  "grid size-6 shrink-0 place-items-center rounded-lg border text-[11px]",
+                  "grid size-6 shrink-0 place-items-center rounded-md border text-[11px]",
                   current &&
-                    "border-primary/30 bg-primary text-primary-foreground",
+                    "border-primary bg-primary text-primary-foreground",
                   complete && "border-primary/20 bg-primary/10",
                 )}
                 aria-hidden="true"
