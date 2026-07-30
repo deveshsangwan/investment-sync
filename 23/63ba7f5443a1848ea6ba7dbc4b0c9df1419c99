@@ -1,0 +1,19 @@
+packages/api/src/services/membership.ts
+  s_14085bd81710b8::t_9073f7f35d0696 73-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2363ba7f5443a1848ea6ba7dbc4b0c9df1419c99",
+  "prompts": {},
+  "sessions": {
+    "s_14085bd81710b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7acc3cfe-0d6f-4adf-a756-888a4c9af419",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
