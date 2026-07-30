@@ -24,3 +24,20 @@ UPDATE "instruments"
 SET "currency" = 'INR', "updated_at" = now()
 WHERE "asset_class" = 'crypto'
   AND "currency" = 'OTHER';
+--> statement-breakpoint
+-- Import batches parsed before this deploy still carry currency OTHER inside
+-- normalized_payload, and commitImport inserts payload.currency verbatim. Left
+-- alone, committing one of those in-flight batches would recreate exactly the
+-- excluded rows the statements above just repaired.
+UPDATE "import_rows"
+SET "normalized_payload" = jsonb_set("normalized_payload", '{currency}', '"INR"')
+WHERE "normalized_payload"->>'currency' = 'OTHER'
+  AND "normalized_payload"->>'assetClass' = 'crypto';
+--> statement-breakpoint
+-- ensureAccounts stamps the account with the row's currency, so importer-created
+-- Crypto accounts carry OTHER too. Not used in totals, but leaving it behind
+-- makes the account disagree with every snapshot under it.
+UPDATE "accounts"
+SET "currency" = 'INR', "updated_at" = now()
+WHERE "account_type" = 'crypto'
+  AND "currency" = 'OTHER';
