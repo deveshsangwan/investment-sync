@@ -240,11 +240,13 @@ function parseStockInvestments(
 ): NormalizedHoldingRow[] {
   const rows = workbookRows(workbook, "Stock Investments");
   if (rows.length === 0) return [];
-  // ponytail: locate the header row with just the "Security" anchor so a
-  // renamed money column still produces the clearer missing-column error
-  // below instead of a generic "header row not found". If "Security" itself
-  // is renamed, the sheet is treated as absent (silent skip) — broaden this
-  // anchor list if that surfaces in real workbooks.
+  // ponytail: anchor on "Security" alone. Adding a money column as a second
+  // anchor turns a renamed money column into a silent skip, which is the exact
+  // data loss this parser exists to prevent; with one anchor it throws a named
+  // missing-column error instead. The cost is that a preamble cell like
+  // "Security allocation" could win the header search and throw a confusing
+  // error -- loud and rare, so accepted. Score candidate rows by matched
+  // columns if a real workbook ever hits it.
   const headerRow = findHeaderRow(rows, ["Security"]);
   if (headerRow < 0) return [];
 
@@ -253,14 +255,18 @@ function parseStockInvestments(
 
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
-    const date = toIsoDate(row[0]);
+    const record = objectFromRow(headers, row);
+    const symbol = toStringValue(pick(record, ["security"])).trim();
+
+    // A row that names a holding is never a date separator. Checking the
+    // mapped column rather than row[0] alone keeps a reordered sheet whose
+    // first column is money (2024 parses as a date) from silently dropping it.
+    const date = symbol ? undefined : toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       return [];
     }
 
-    const record = objectFromRow(headers, row);
-    const symbol = toStringValue(pick(record, ["security"])).trim();
     if (!symbol || ["stocks/etfs", "total"].includes(symbol.toLowerCase())) {
       return [];
     }
@@ -277,6 +283,10 @@ function parseStockInvestments(
         `Stock Investments sheet row for "${symbol}" is missing a required value (Invested Value or Current Value)`,
       );
     }
+
+    // Both amounts explicitly zero means a template or aggregate row, not a
+    // holding. Keeping these would create junk instruments and accounts.
+    if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
       {
@@ -342,14 +352,15 @@ function parseMutualFunds(
 
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
-    const date = toIsoDate(row[0]);
+    const record = objectFromRow(headers, row);
+    const fundName = toStringValue(pick(record, ["fund name"])).trim();
+
+    const date = fundName ? undefined : toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       return [];
     }
 
-    const record = objectFromRow(headers, row);
-    const fundName = toStringValue(pick(record, ["fund name"])).trim();
     if (!fundName || fundName.toLowerCase() === "total") return [];
 
     const investedAmount = parseNumber(
@@ -369,6 +380,10 @@ function parseMutualFunds(
         `Mutual Funds sheet row for "${fundName}" is missing a required value (Invested Amount or Current Value)`,
       );
     }
+
+    // Both amounts explicitly zero means a template or aggregate row, not a
+    // holding. Keeping these would create junk instruments and accounts.
+    if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
       {
@@ -424,18 +439,23 @@ function parseNps(
   const parsed: NormalizedHoldingRow[] = [];
 
   for (const row of rows.slice(1)) {
-    const date = toIsoDate(row[0]);
-    if (date) {
-      sourceDate = date;
-      continue;
-    }
-
     const record = objectFromRow(headers, row);
     const currentValue = parseNumber(pick(record, ["value", "current value"]));
     const investedAmount = parseNumber(
       pick(record, ["contribution", "invested amount", "investment amount"]),
     );
-    if (currentValue === undefined && investedAmount === undefined) continue;
+
+    // NPS rows have no name column, so a row carrying either amount is data,
+    // not a date separator.
+    const hasAmount =
+      currentValue !== undefined || investedAmount !== undefined;
+    const date = hasAmount ? undefined : toIsoDate(row[0]);
+    if (date) {
+      sourceDate = date;
+      continue;
+    }
+
+    if (!hasAmount) continue;
     if (!sourceDate) continue;
     if (currentValue === undefined || investedAmount === undefined) {
       throw new Error(
@@ -575,14 +595,15 @@ function parseSimpleSectionHoldings({
 
   let sourceDate = initialDate;
   return rows.slice(1).flatMap((row) => {
-    const date = toIsoDate(row[0]);
+    const record = objectFromRow(headers, row);
+    const instrumentName = toStringValue(pick(record, nameAliases)).trim();
+
+    const date = instrumentName ? undefined : toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       return [];
     }
 
-    const record = objectFromRow(headers, row);
-    const instrumentName = toStringValue(pick(record, nameAliases)).trim();
     if (!instrumentName || instrumentName.toLowerCase() === "total") return [];
 
     const investedAmount = parseNumber(pick(record, investedAliases));
@@ -593,6 +614,10 @@ function parseSimpleSectionHoldings({
         `${sourceSheet} sheet row for "${instrumentName}" is missing a required value (Invested or Current Value)`,
       );
     }
+
+    // Both amounts explicitly zero means a template or aggregate row, not a
+    // holding. Keeping these would create junk instruments and accounts.
+    if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
       {

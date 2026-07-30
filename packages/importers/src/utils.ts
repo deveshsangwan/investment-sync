@@ -188,16 +188,28 @@ export function requireColumns(
   columns: RequiredColumn[],
   sheetName: string,
 ): void {
-  const headerKeys = new Set(headers.map(normalizeHeader));
-  const missing = columns.filter(
-    (column) =>
-      !column.aliases.some((alias) => headerKeys.has(normalizeHeader(alias))),
-  );
+  const headerKeys = headers.map(normalizeHeader);
+  const missing: string[] = [];
+  const ambiguous: string[] = [];
+
+  for (const column of columns) {
+    const matches = headerKeys.filter((key) =>
+      column.aliases.some((alias) => key === normalizeHeader(alias)),
+    );
+    if (matches.length === 0) missing.push(column.field);
+    // objectFromRow keys by header name, so a repeated column silently
+    // overwrites the earlier value. Refuse rather than pick one at random.
+    if (matches.length > 1) ambiguous.push(column.field);
+  }
+
   if (missing.length > 0) {
     throw new Error(
-      `${sheetName} sheet is missing required column(s): ${missing
-        .map((column) => column.field)
-        .join(", ")}`,
+      `${sheetName} sheet is missing required column(s): ${missing.join(", ")}`,
+    );
+  }
+  if (ambiguous.length > 0) {
+    throw new Error(
+      `${sheetName} sheet has duplicate column(s): ${ambiguous.join(", ")}`,
     );
   }
 }

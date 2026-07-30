@@ -286,6 +286,75 @@ describe("Investment workbook importer - header mapping", () => {
     });
   });
 
+  it("Stock Investments: keeps a reordered row whose first cell parses as a date", () => {
+    // 2024 reaches `new Date("2024")` and yields a valid date, so a reordered
+    // sheet with a money column first used to be swallowed as a date marker.
+    const result = parseImportFile({
+      fileName: "Personal Workbook.xlsx",
+      content: buildWorkbook({
+        stockRows: [
+          [
+            "Current Value \u20b9",
+            "Security",
+            "Quantity",
+            "Invested Value \u20b9",
+          ],
+          [2024, "ABC", 2, 1000],
+        ],
+      }),
+    });
+
+    expect(
+      result.rows.find(
+        (row) => row.kind === "holding" && row.instrumentName === "ABC",
+      ),
+    ).toMatchObject({ currentValue: 2024, investedAmount: 1000 });
+  });
+
+  it("Stock Investments: throws when a required column appears twice", () => {
+    expect(() =>
+      parseImportFile({
+        fileName: "Personal Workbook.xlsx",
+        content: buildWorkbook({
+          stockRows: [
+            [
+              "Security",
+              "Quantity",
+              "Invested Value \u20b9",
+              "Current Value \u20b9",
+              "Current Value \u20b9",
+            ],
+            ["ABC", 2, 1000, 1100, 9999],
+          ],
+        }),
+      }),
+    ).toThrow(/duplicate column/i);
+  });
+
+  it("Stock Investments: drops rows whose amounts are both zero", () => {
+    const result = parseImportFile({
+      fileName: "Personal Workbook.xlsx",
+      content: buildWorkbook({
+        stockRows: [
+          [
+            "Security",
+            "Quantity",
+            "Invested Value \u20b9",
+            "Current Value \u20b9",
+          ],
+          ["Grand Total", 0, 0, 0],
+          ["ABC", 2, 1000, 1100],
+        ],
+      }),
+    });
+
+    const names = result.rows
+      .filter((row) => row.kind === "holding")
+      .map((row) => row.instrumentName);
+    expect(names).toContain("ABC");
+    expect(names).not.toContain("Grand Total");
+  });
+
   it("Stock Investments: parses correctly with an extra inserted column", () => {
     const result = parseImportFile({
       fileName: "Personal Workbook.xlsx",
