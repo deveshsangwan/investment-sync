@@ -6,7 +6,6 @@ import {
   users,
 } from "@investment-sync/db";
 import type { ApiContext } from "../context";
-import { logger } from "../logger";
 
 export interface MembershipContext {
   userId: string;
@@ -22,15 +21,6 @@ export interface MembershipContext {
 export function canManageHousehold(membership: MembershipContext): boolean {
   return membership.role === "owner";
 }
-
-const MEMBERSHIP_CACHE_TTL_MS = 30_000;
-
-interface CachedMembership {
-  expiresAt: number;
-  promise: Promise<MembershipContext>;
-}
-
-const membershipCache = new Map<string, CachedMembership>();
 
 const defaultAccounts = [
   {
@@ -80,39 +70,12 @@ export async function ensureMembership(
   const clerkUserId = ctx.auth.userId;
   if (!clerkUserId) throw new Error("Missing Clerk user id");
 
-  const membership = cachedMembership(clerkUserId, () => loadMembership(ctx));
+  // Request-scoped only. A cross-request cache held role and householdId for
+  // 30s, which let a demoted or removed member keep mutating the household
+  // after the change landed -- authorization state, not a perf detail.
+  const membership = loadMembership(ctx);
   ctx.cache.set("membership", membership);
   return membership;
-}
-
-function cachedMembership(
-  clerkUserId: string,
-  load: () => Promise<MembershipContext>,
-): Promise<MembershipContext> {
-  const now = Date.now();
-  const existing = membershipCache.get(clerkUserId);
-
-  if (existing && existing.expiresAt > now) {
-    logger.debug("membership cache hit");
-    return existing.promise;
-  }
-
-  logger.debug("membership cache miss");
-
-  const promise = load().catch((error) => {
-    const latest = membershipCache.get(clerkUserId);
-    if (latest?.promise === promise) {
-      membershipCache.delete(clerkUserId);
-    }
-    throw error;
-  });
-
-  membershipCache.set(clerkUserId, {
-    expiresAt: now + MEMBERSHIP_CACHE_TTL_MS,
-    promise,
-  });
-
-  return promise;
 }
 
 async function selectMembership(
