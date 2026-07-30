@@ -1,0 +1,19 @@
+packages/api/src/services/import-service.integration.test.ts
+  s_14085bd81710b8::t_6c09f94b689430 20-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c36773b8508ee10834490e9556fa9a1be0e2f43d",
+  "prompts": {},
+  "sessions": {
+    "s_14085bd81710b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7acc3cfe-0d6f-4adf-a756-888a4c9af419",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
