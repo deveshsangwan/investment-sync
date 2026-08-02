@@ -3,27 +3,11 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"]
-    },
-    "@investment-sync/api#build": {
-      "dependsOn": ["^build"],
       "outputs": []
     },
-    "@investment-sync/db#build": {
+    "@investment-sync/web#build": {
       "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "@investment-sync/importers#build": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "@investment-sync/analytics#build": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "@investment-sync/mobile#build": {
-      "dependsOn": ["^build"],
-      "outputs": []
+      "outputs": [".next/**", "!.next/cache/**"]
     },
     "dev": {
       "cache": false,

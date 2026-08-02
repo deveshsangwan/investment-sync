@@ -29,7 +29,4 @@ For fake local portfolio data without production records, see `docs/local-develo
 
 ## Build outputs
 
-Turbo's `build` task only tracks `.next/**` and `dist/**`/`build/**` artifacts. Most workspace packages don't emit any of those:
-
-- **Compiled/published** (produce build artifacts): `apps/web` (`next build` emits `.next/**`).
-- **Typechecked only** (`tsc --noEmit`, no emitted files): `packages/api`, `packages/db`, `packages/importers`, `packages/analytics`, `apps/mobile`. These exist purely to fail the build on type errors, so `turbo.json` scopes their `build` task outputs to `[]` — otherwise Turbo logs a "no output files found" warning on every run even though nothing is wrong.
+`apps/web` is the only workspace that emits build artifacts (`next build` → `.next/**`); every other package's `build` is `tsc --noEmit`, which exists purely to fail on type errors. So `turbo.json` defaults `build` outputs to `[]` and overrides only `@investment-sync/web#build` — otherwise Turbo logs a "no output files found" warning for each package on every run even though nothing is wrong.
