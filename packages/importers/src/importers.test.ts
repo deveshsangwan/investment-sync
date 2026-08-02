@@ -410,6 +410,23 @@ describe("Investment workbook importer - header mapping", () => {
     ).toThrow(/Stock Investments.*Current Value/);
   });
 
+  it("Stock Investments: throws instead of dropping the sheet when the anchor column is renamed", () => {
+    // requireColumns never runs if the header row can't be found at all, so
+    // renaming the anchor is the one schema change that could still lose every
+    // holding on the sheet silently.
+    expect(() =>
+      parseImportFile({
+        fileName: "Personal Workbook.xlsx",
+        content: buildWorkbook({
+          stockRows: [
+            ["Ticker", "Quantity", "Invested Value ₹", "Current Value ₹"],
+            ["ABC", 2, 1000, 1100],
+          ],
+        }),
+      }),
+    ).toThrow(/Stock Investments.*no header row.*Security/);
+  });
+
   it("Mutual Funds: parses correctly when columns are reordered", () => {
     const result = parseImportFile({
       fileName: "Personal Workbook.xlsx",

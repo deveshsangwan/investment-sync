@@ -142,6 +142,27 @@ export function findHeaderRow(
   });
 }
 
+/**
+ * Same as `findHeaderRow`, but for a sheet that is known to have rows and so
+ * must have a header. Renaming an anchor column is a schema change, not an
+ * empty sheet -- returning -1 to the caller there would silently drop every
+ * holding on the sheet, which is the data loss `requireColumns` exists to
+ * prevent.
+ */
+export function requireHeaderRow(
+  rows: unknown[][],
+  anchors: string[],
+  sheetName: string,
+): number {
+  const headerRow = findHeaderRow(rows, anchors);
+  if (headerRow < 0) {
+    throw new Error(
+      `${sheetName} sheet has rows but no header row containing: ${anchors.join(", ")}`,
+    );
+  }
+  return headerRow;
+}
+
 export function objectFromRow(
   headers: unknown[],
   row: unknown[],

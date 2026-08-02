@@ -16,6 +16,7 @@ import {
   parseRequiredNumber,
   pick,
   requireColumns,
+  requireHeaderRow,
   toStringValue,
   toIsoDate,
   type RequiredColumns,
@@ -247,8 +248,7 @@ function parseStockInvestments(
   // "Security allocation" could win the header search and throw a confusing
   // error -- loud and rare, so accepted. Score candidate rows by matched
   // columns if a real workbook ever hits it.
-  const headerRow = findHeaderRow(rows, ["Security"]);
-  if (headerRow < 0) return [];
+  const headerRow = requireHeaderRow(rows, ["Security"], "Stock Investments");
 
   const headers = rows[headerRow] ?? [];
   requireColumns(headers, STOCK_INVESTMENTS_COLUMNS, "Stock Investments");
@@ -343,8 +343,7 @@ function parseMutualFunds(
   if (rows.length === 0) return [];
   // ponytail: same "Fund Name" anchor + explicit requireColumns split as
   // Stock Investments above — see the comment there for the tradeoff.
-  const headerRow = findHeaderRow(rows, ["Fund Name"]);
-  if (headerRow < 0) return [];
+  const headerRow = requireHeaderRow(rows, ["Fund Name"], "Mutual Funds");
 
   const headers = rows[headerRow] ?? [];
   requireColumns(headers, MUTUAL_FUNDS_COLUMNS, "Mutual Funds");
