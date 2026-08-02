@@ -18,7 +18,7 @@ import {
   requireColumns,
   toStringValue,
   toIsoDate,
-  type RequiredColumn,
+  type RequiredColumns,
 } from "./utils";
 
 interface WorkbookContext {
@@ -228,11 +228,11 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   },
 };
 
-const STOCK_INVESTMENTS_COLUMNS: RequiredColumn[] = [
-  { field: "Security", aliases: ["security"] },
-  { field: "Invested Value", aliases: ["invested value rs", "invested value"] },
-  { field: "Current Value", aliases: ["current value rs", "current value"] },
-];
+const STOCK_INVESTMENTS_COLUMNS = {
+  Security: ["security"],
+  "Invested Value": ["invested value rs", "invested value"],
+  "Current Value": ["current value rs", "current value"],
+} satisfies RequiredColumns;
 
 function parseStockInvestments(
   workbook: WorkbookContext,
@@ -256,7 +256,9 @@ function parseStockInvestments(
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
     const record = objectFromRow(headers, row);
-    const symbol = toStringValue(pick(record, ["security"])).trim();
+    const symbol = toStringValue(
+      pick(record, STOCK_INVESTMENTS_COLUMNS.Security),
+    ).trim();
 
     // A row that names a holding is never a date separator. Checking the
     // mapped column rather than row[0] alone keeps a reordered sheet whose
@@ -272,10 +274,10 @@ function parseStockInvestments(
     }
 
     const investedAmount = parseNumber(
-      pick(record, ["invested value rs", "invested value"]),
+      pick(record, STOCK_INVESTMENTS_COLUMNS["Invested Value"]),
     );
     const currentValue = parseNumber(
-      pick(record, ["current value rs", "current value"]),
+      pick(record, STOCK_INVESTMENTS_COLUMNS["Current Value"]),
     );
     if (investedAmount === undefined && currentValue === undefined) return [];
     if (investedAmount === undefined || currentValue === undefined) {
@@ -322,19 +324,16 @@ function parseStockInvestments(
   });
 }
 
-const MUTUAL_FUNDS_COLUMNS: RequiredColumn[] = [
-  { field: "Fund Name", aliases: ["fund name"] },
-  {
-    field: "Invested Amount",
-    aliases: [
-      "invested amt rs",
-      "invested amt",
-      "invested amount",
-      "invested value",
-    ],
-  },
-  { field: "Current Value", aliases: ["current value rs", "current value"] },
-];
+const MUTUAL_FUNDS_COLUMNS = {
+  "Fund Name": ["fund name"],
+  "Invested Amount": [
+    "invested amt rs",
+    "invested amt",
+    "invested amount",
+    "invested value",
+  ],
+  "Current Value": ["current value rs", "current value"],
+} satisfies RequiredColumns;
 
 function parseMutualFunds(
   workbook: WorkbookContext,
@@ -353,7 +352,9 @@ function parseMutualFunds(
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
     const record = objectFromRow(headers, row);
-    const fundName = toStringValue(pick(record, ["fund name"])).trim();
+    const fundName = toStringValue(
+      pick(record, MUTUAL_FUNDS_COLUMNS["Fund Name"]),
+    ).trim();
 
     const date = fundName ? undefined : toIsoDate(row[0]);
     if (date) {
@@ -364,15 +365,10 @@ function parseMutualFunds(
     if (!fundName || fundName.toLowerCase() === "total") return [];
 
     const investedAmount = parseNumber(
-      pick(record, [
-        "invested amt rs",
-        "invested amt",
-        "invested amount",
-        "invested value",
-      ]),
+      pick(record, MUTUAL_FUNDS_COLUMNS["Invested Amount"]),
     );
     const currentValue = parseNumber(
-      pick(record, ["current value rs", "current value"]),
+      pick(record, MUTUAL_FUNDS_COLUMNS["Current Value"]),
     );
     if (investedAmount === undefined && currentValue === undefined) return [];
     if (investedAmount === undefined || currentValue === undefined) {
@@ -417,13 +413,10 @@ function parseMutualFunds(
   });
 }
 
-const NPS_COLUMNS: RequiredColumn[] = [
-  { field: "Value", aliases: ["value", "current value"] },
-  {
-    field: "Contribution",
-    aliases: ["contribution", "invested amount", "investment amount"],
-  },
-];
+const NPS_COLUMNS = {
+  Value: ["value", "current value"],
+  Contribution: ["contribution", "invested amount", "investment amount"],
+} satisfies RequiredColumns;
 
 function parseNps(
   workbook: WorkbookContext,
@@ -440,10 +433,8 @@ function parseNps(
 
   for (const row of rows.slice(1)) {
     const record = objectFromRow(headers, row);
-    const currentValue = parseNumber(pick(record, ["value", "current value"]));
-    const investedAmount = parseNumber(
-      pick(record, ["contribution", "invested amount", "investment amount"]),
-    );
+    const currentValue = parseNumber(pick(record, NPS_COLUMNS.Value));
+    const investedAmount = parseNumber(pick(record, NPS_COLUMNS.Contribution));
 
     // NPS rows have no name column, so a row carrying either amount is data,
     // not a date separator.
@@ -585,11 +576,11 @@ function parseSimpleSectionHoldings({
   const headers = rows[0] ?? [];
   requireColumns(
     headers,
-    [
-      { field: "Name", aliases: nameAliases },
-      { field: "Invested", aliases: investedAliases },
-      { field: "Current Value", aliases: currentAliases },
-    ],
+    {
+      Name: nameAliases,
+      Invested: investedAliases,
+      "Current Value": currentAliases,
+    },
     sourceSheet,
   );
 

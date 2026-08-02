@@ -171,12 +171,14 @@ export function pick(
   return undefined;
 }
 
-export interface RequiredColumn {
-  /** Human-readable name used in the thrown error message. */
-  field: string;
-  /** Accepted header spellings for this column, matched after normalizing. */
-  aliases: string[];
-}
+/**
+ * Required columns for a sheet, keyed by the human-readable name used in the
+ * thrown error message. Values are the accepted header spellings, matched
+ * after normalizing, and are the same arrays passed to `pick` when reading the
+ * column -- so a renamed column can't be accepted by one and missed by the
+ * other.
+ */
+export type RequiredColumns = Record<string, string[]>;
 
 /**
  * Throws a clear schema error naming the sheet and any required columns
@@ -185,21 +187,21 @@ export interface RequiredColumn {
  */
 export function requireColumns(
   headers: unknown[],
-  columns: RequiredColumn[],
+  columns: RequiredColumns,
   sheetName: string,
 ): void {
   const headerKeys = headers.map(normalizeHeader);
   const missing: string[] = [];
   const ambiguous: string[] = [];
 
-  for (const column of columns) {
+  for (const [field, aliases] of Object.entries(columns)) {
     const matches = headerKeys.filter((key) =>
-      column.aliases.some((alias) => key === normalizeHeader(alias)),
+      aliases.some((alias) => key === normalizeHeader(alias)),
     );
-    if (matches.length === 0) missing.push(column.field);
+    if (matches.length === 0) missing.push(field);
     // objectFromRow keys by header name, so a repeated column silently
     // overwrites the earlier value. Refuse rather than pick one at random.
-    if (matches.length > 1) ambiguous.push(column.field);
+    if (matches.length > 1) ambiguous.push(field);
   }
 
   if (missing.length > 0) {
