@@ -1,0 +1,21 @@
+README.md
+  s_d239c98ffefac4::t_4bad810f5c472a 32
+turbo.json
+  s_d239c98ffefac4::t_cfa33e88c35733 8,10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "36c2853e20c74a6f03184cdcce7be801a31b7ac8",
+  "prompts": {},
+  "sessions": {
+    "s_d239c98ffefac4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "755aeae9-55b2-4e5a-812f-8e2e971cbe91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
