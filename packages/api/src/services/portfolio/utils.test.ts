@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { INVESTMENT_PORTFOLIO_SUMMARY_SHEET } from "@investment-sync/importers";
 import { isAggregateHolding } from "./aggregates";
+import type { Currency } from "./types";
 import {
   aggregateSnapshotTotalsByDate,
   convertToInr,
@@ -33,6 +34,13 @@ describe("convertToInr", () => {
   it("converts USD when a rate is provided", () => {
     expect(convertToInr(100, "USD", 83.5)).toBe(8350);
   });
+
+  it.each(["BTC", "ETH", "OTHER"] as const)(
+    "excludes %s instead of counting it as rupees",
+    (currency) => {
+      expect(convertToInr(100, currency, 83.5)).toBe(0);
+    },
+  );
 });
 
 describe("filterAggregateRowsBySnapshotGroup", () => {
@@ -111,6 +119,41 @@ describe("aggregateSnapshotTotalsByDate", () => {
       currentValue: 1059,
     });
   });
+
+  it("sums INR and USD but never unsupported currencies", () => {
+    const rows = [
+      snapshotRow({
+        instrumentId: "inr-1",
+        investedAmount: "100",
+        currentValue: "110",
+      }),
+      snapshotRow({
+        instrumentId: "usd-1",
+        currency: "USD",
+        investedAmount: "10",
+        currentValue: "20",
+      }),
+      snapshotRow({
+        instrumentId: "btc-1",
+        currency: "BTC",
+        investedAmount: "5",
+        currentValue: "9",
+      }),
+      snapshotRow({
+        instrumentId: "other-1",
+        currency: "OTHER",
+        investedAmount: "7",
+        currentValue: "8",
+      }),
+    ];
+
+    // 100 + 10*80 invested, 110 + 20*80 current; BTC and OTHER contribute
+    // nothing rather than adding 5/7 and 9/8 rupees.
+    expect(aggregateSnapshotTotalsByDate(rows, 80).get("2026-06-16")).toEqual({
+      investedAmount: 900,
+      currentValue: 1710,
+    });
+  });
 });
 
 function snapshotRow(
@@ -119,7 +162,7 @@ function snapshotRow(
     accountName: string;
     provider: string;
     assetClass: string;
-    currency: "INR";
+    currency: Currency;
     sourceSheet: string;
     snapshotDate: string;
     instrumentName: string;
