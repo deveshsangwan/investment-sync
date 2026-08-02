@@ -1,0 +1,25 @@
+packages/importers/src/xlsx.ts
+  s_2ea1d628b88b69::t_b6b96e22821ecf 251
+  s_2ea1d628b88b69::t_5643411f2ca4dd 346
+  s_2ea1d628b88b69::t_b9479dbcf85176 19
+packages/importers/src/utils.ts
+  s_2ea1d628b88b69::t_5f128314890990 145-165
+packages/importers/src/importers.test.ts
+  s_2ea1d628b88b69::t_2d5fea27d8add6 413-429
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "945f7f0a63cf77cc8529c0a9ba758dbff7a04209",
+  "prompts": {},
+  "sessions": {
+    "s_2ea1d628b88b69": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "116c573a-a316-43cd-ad14-3780e9c62158",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
