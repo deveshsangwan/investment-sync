@@ -81,19 +81,27 @@ export const users = pgTable(
   }),
 );
 
-export const households = pgTable("households", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
-  ownerUserId: uuid("owner_user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const households = pgTable(
+  "households",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // One default household per owner: makes first-login provisioning idempotent
+    // across concurrent serverless instances.
+    ownerIdx: uniqueIndex("households_owner_user_idx").on(table.ownerUserId),
+  }),
+);
 
 export const householdMembers = pgTable(
   "household_members",
