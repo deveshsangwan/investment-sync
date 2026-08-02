@@ -38,6 +38,13 @@
       "breakpoints": true
     },
     {
+      "idx": 5,
+      "version": "7",
+      "when": 1785168000000,
+      "tag": "0005_one_household_per_owner",
+      "breakpoints": true
+    },
+    {
       "idx": 6,
       "version": "7",
       "when": 1785254400000,
