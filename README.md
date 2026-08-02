@@ -26,3 +26,9 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 Original uploaded files are retained for 30 days by default. Normalized portfolio data remains until deleted from the app.
 
 For fake local portfolio data without production records, see `docs/local-development.md`.
+
+## Build outputs
+
+`apps/web` is the only workspace that emits build artifacts (`next build` → `.next/**`); every other package's `build` is `tsc --noEmit`, which exists purely to fail on type errors. So `turbo.json` defaults `build` outputs to `[]` and overrides only `@investment-sync/web#build` — otherwise Turbo logs a "no output files found" warning for each package on every uncached execution even though nothing is wrong.
+
+**If you add a workspace that does emit build artifacts, give it its own `<package>#build` override in `turbo.json`.** A `package#task` entry replaces the generic task outright rather than merging into it, so the override must repeat `dependsOn` as well. Without one the package inherits `outputs: []` and Turbo will report a cache hit while restoring nothing.
