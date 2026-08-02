@@ -36,6 +36,20 @@
       "when": 1780417800000,
       "tag": "0004_identity_performance_currency_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785168000000,
+      "tag": "0005_one_household_per_owner",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785254400000,
+      "tag": "0006_crypto_amounts_are_inr",
+      "breakpoints": true
     }
   ]
 }

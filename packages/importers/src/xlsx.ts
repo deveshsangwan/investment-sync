@@ -413,7 +413,10 @@ function parseCrypto(
     initialDate,
     accountName: "Crypto",
     assetClass: "crypto",
-    currency: "OTHER",
+    // The Crypto sheet's Invested/Total Asset Value columns are rupee amounts;
+    // only the Units column is denominated in the coin. Tagging these rows
+    // OTHER made INR totals depend on unsupported currencies passing through.
+    currency: "INR",
     sourceSheet: "Crypto",
     nameColumn: 0,
     quantityColumn: 1,
