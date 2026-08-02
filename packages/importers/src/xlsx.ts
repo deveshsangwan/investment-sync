@@ -14,8 +14,12 @@ import {
   objectFromRow,
   parseNumber,
   parseRequiredNumber,
+  pick,
+  requireColumns,
+  requireHeaderRow,
   toStringValue,
   toIsoDate,
+  type RequiredColumns,
 } from "./utils";
 
 interface WorkbookContext {
@@ -129,7 +133,7 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
 
 export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   sourceType: "investment_portfolio_xlsx",
-  parserVersion: "investment-portfolio-workbook-v3",
+  parserVersion: "investment-portfolio-workbook-v4",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -225,28 +229,65 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   },
 };
 
+const STOCK_INVESTMENTS_COLUMNS = {
+  Security: ["security"],
+  "Invested Value": ["invested value rs", "invested value"],
+  "Current Value": ["current value rs", "current value"],
+} satisfies RequiredColumns;
+
 function parseStockInvestments(
   workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   const rows = workbookRows(workbook, "Stock Investments");
-  const headerRow = findHeaderRow(rows, ["Security", "Quantity"]);
-  if (headerRow < 0) return [];
+  if (rows.length === 0) return [];
+  // ponytail: anchor on "Security" alone. Adding a money column as a second
+  // anchor turns a renamed money column into a silent skip, which is the exact
+  // data loss this parser exists to prevent; with one anchor it throws a named
+  // missing-column error instead. The cost is that a preamble cell like
+  // "Security allocation" could win the header search and throw a confusing
+  // error -- loud and rare, so accepted. Score candidate rows by matched
+  // columns if a real workbook ever hits it.
+  const headerRow = requireHeaderRow(rows, ["Security"], "Stock Investments");
+
+  const headers = rows[headerRow] ?? [];
+  requireColumns(headers, STOCK_INVESTMENTS_COLUMNS, "Stock Investments");
 
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
-    const date = toIsoDate(row[0]);
+    const record = objectFromRow(headers, row);
+    const symbol = toStringValue(
+      pick(record, STOCK_INVESTMENTS_COLUMNS.Security),
+    ).trim();
+
+    // A row that names a holding is never a date separator. Checking the
+    // mapped column rather than row[0] alone keeps a reordered sheet whose
+    // first column is money (2024 parses as a date) from silently dropping it.
+    const date = symbol ? undefined : toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       return [];
     }
 
-    const symbol = toStringValue(row[0]).trim();
     if (!symbol || ["stocks/etfs", "total"].includes(symbol.toLowerCase())) {
       return [];
     }
-    const investedAmount = parseNumber(row[6]) ?? 0;
-    const currentValue = parseNumber(row[7]) ?? 0;
+
+    const investedAmount = parseNumber(
+      pick(record, STOCK_INVESTMENTS_COLUMNS["Invested Value"]),
+    );
+    const currentValue = parseNumber(
+      pick(record, STOCK_INVESTMENTS_COLUMNS["Current Value"]),
+    );
+    if (investedAmount === undefined && currentValue === undefined) return [];
+    if (investedAmount === undefined || currentValue === undefined) {
+      throw new Error(
+        `Stock Investments sheet row for "${symbol}" is missing a required value (Invested Value or Current Value)`,
+      );
+    }
+
+    // Both amounts explicitly zero means a template or aggregate row, not a
+    // holding. Keeping these would create junk instruments and accounts.
     if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
@@ -260,45 +301,83 @@ function parseStockInvestments(
         symbol,
         assetClass: "indian_stock",
         currency: "INR",
-        quantity: parseNumber(row[2]),
+        quantity: parseNumber(pick(record, ["quantity"])),
         investedAmount,
         currentValue,
-        pnlAmount: parseNumber(row[8]),
-        pnlPercent: parseNumber(row[9]),
+        pnlAmount: parseNumber(pick(record, ["p & l rs", "p & l"])),
+        pnlPercent: parseNumber(pick(record, ["net change %"])),
         metadata: {
           sourceSheet: "Stock Investments",
-          smallcases: parseNumber(row[1]),
-          averageCost: parseNumber(row[3]),
-          portfolioWeight: parseNumber(row[4]),
-          ltp: parseNumber(row[5]),
-          dailyChangeAmount: parseNumber(row[10]),
-          dailyChangePercent: parseNumber(row[11]),
+          smallcases: parseNumber(pick(record, ["no. of smallcases"])),
+          averageCost: parseNumber(
+            pick(record, ["average cost rs", "average cost"]),
+          ),
+          portfolioWeight: parseNumber(pick(record, ["portfolio weight %"])),
+          ltp: parseNumber(pick(record, ["ltp rs", "ltp"])),
+          dailyChangeAmount: parseNumber(
+            pick(record, ["daily change rs", "daily change"]),
+          ),
+          dailyChangePercent: parseNumber(pick(record, ["daily change %"])),
         },
       },
     ];
   });
 }
 
+const MUTUAL_FUNDS_COLUMNS = {
+  "Fund Name": ["fund name"],
+  "Invested Amount": [
+    "invested amt rs",
+    "invested amt",
+    "invested amount",
+    "invested value",
+  ],
+  "Current Value": ["current value rs", "current value"],
+} satisfies RequiredColumns;
+
 function parseMutualFunds(
   workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   const rows = workbookRows(workbook, "Mutual Funds");
-  const headerRow = findHeaderRow(rows, ["Fund Name", "Current Value"]);
-  if (headerRow < 0) return [];
+  if (rows.length === 0) return [];
+  // ponytail: same "Fund Name" anchor + explicit requireColumns split as
+  // Stock Investments above — see the comment there for the tradeoff.
+  const headerRow = requireHeaderRow(rows, ["Fund Name"], "Mutual Funds");
+
+  const headers = rows[headerRow] ?? [];
+  requireColumns(headers, MUTUAL_FUNDS_COLUMNS, "Mutual Funds");
 
   let sourceDate = initialDate;
   return rows.slice(headerRow + 1).flatMap((row) => {
-    const date = toIsoDate(row[0]);
+    const record = objectFromRow(headers, row);
+    const fundName = toStringValue(
+      pick(record, MUTUAL_FUNDS_COLUMNS["Fund Name"]),
+    ).trim();
+
+    const date = fundName ? undefined : toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       return [];
     }
 
-    const fundName = toStringValue(row[0]).trim();
     if (!fundName || fundName.toLowerCase() === "total") return [];
-    const investedAmount = parseNumber(row[8]) ?? 0;
-    const currentValue = parseNumber(row[9]) ?? 0;
+
+    const investedAmount = parseNumber(
+      pick(record, MUTUAL_FUNDS_COLUMNS["Invested Amount"]),
+    );
+    const currentValue = parseNumber(
+      pick(record, MUTUAL_FUNDS_COLUMNS["Current Value"]),
+    );
+    if (investedAmount === undefined && currentValue === undefined) return [];
+    if (investedAmount === undefined || currentValue === undefined) {
+      throw new Error(
+        `Mutual Funds sheet row for "${fundName}" is missing a required value (Invested Amount or Current Value)`,
+      );
+    }
+
+    // Both amounts explicitly zero means a template or aggregate row, not a
+    // holding. Keeping these would create junk instruments and accounts.
     if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
@@ -311,52 +390,70 @@ function parseMutualFunds(
         instrumentName: fundName,
         assetClass: "mutual_fund",
         currency: "INR",
-        quantity: parseNumber(row[7]),
+        quantity: parseNumber(pick(record, ["units"])),
         investedAmount,
         currentValue,
-        pnlAmount: parseNumber(row[11]),
-        pnlPercent: parseNumber(row[12]),
+        pnlAmount: parseNumber(pick(record, ["p&l rs", "p&l"])),
+        pnlPercent: parseNumber(pick(record, ["p&l %"])),
         metadata: {
           sourceSheet: "Mutual Funds",
-          amcName: row[1],
-          category: row[2],
-          subCategory: row[3],
-          planType: row[4],
-          optionType: row[5],
-          nav: parseNumber(row[6]),
-          weight: parseNumber(row[10]),
-          xirr: parseNumber(row[13]),
-          investedSince: row[14],
+          amcName: pick(record, ["amc name"]),
+          category: pick(record, ["category"]),
+          subCategory: pick(record, ["sub-category"]),
+          planType: pick(record, ["plan type"]),
+          optionType: pick(record, ["option type"]),
+          nav: parseNumber(pick(record, ["nav rs", "nav"])),
+          weight: parseNumber(pick(record, ["weight %"])),
+          xirr: parseNumber(pick(record, ["xirr %", "xirr"])),
+          investedSince: pick(record, ["invested since"]),
         },
       },
     ];
   });
 }
 
+const NPS_COLUMNS = {
+  Value: ["value", "current value"],
+  Contribution: ["contribution", "invested amount", "investment amount"],
+} satisfies RequiredColumns;
+
 function parseNps(
   workbook: WorkbookContext,
   initialDate?: string,
 ): NormalizedHoldingRow[] {
   const rows = workbookRows(workbook, "NPS");
+  if (rows.length === 0) return [];
+
+  const headers = rows[0] ?? [];
+  requireColumns(headers, NPS_COLUMNS, "NPS");
+
   let sourceDate = initialDate;
   const parsed: NormalizedHoldingRow[] = [];
 
-  for (const row of rows) {
-    const date = toIsoDate(row[0]);
+  for (const row of rows.slice(1)) {
+    const record = objectFromRow(headers, row);
+    const currentValue = parseNumber(pick(record, NPS_COLUMNS.Value));
+    const investedAmount = parseNumber(pick(record, NPS_COLUMNS.Contribution));
+
+    // NPS rows have no name column, so a row carrying either amount is data,
+    // not a date separator.
+    const hasAmount =
+      currentValue !== undefined || investedAmount !== undefined;
+    const date = hasAmount ? undefined : toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       continue;
     }
-    const currentValue = parseNumber(row[0]);
-    const investedAmount = parseNumber(row[2]);
-    if (
-      !sourceDate ||
-      currentValue === undefined ||
-      investedAmount === undefined
-    ) {
-      continue;
+
+    if (!hasAmount) continue;
+    if (!sourceDate) continue;
+    if (currentValue === undefined || investedAmount === undefined) {
+      throw new Error(
+        `NPS sheet row is missing a required value (Value or Contribution) for date ${sourceDate}`,
+      );
     }
-    const pnlAmount = parseNumber(row[4]);
+
+    const pnlAmount = parseNumber(pick(record, ["gain/loss", "p&l", "pnl"]));
     parsed.push({
       kind: "holding",
       sourceType: "investment_portfolio_xlsx",
@@ -375,10 +472,10 @@ function parseNps(
           : (pnlAmount / investedAmount) * 100,
       metadata: {
         sourceSheet: "NPS",
-        contributions: parseNumber(row[1]),
-        withdrawals: parseNumber(row[3]),
-        charges: parseNumber(row[5]),
-        xirr: parseNumber(row[7]),
+        contributions: parseNumber(pick(record, ["count", "contributions"])),
+        withdrawals: parseNumber(pick(record, ["withdrawals", "withdrawal"])),
+        charges: parseNumber(pick(record, ["charges"])),
+        xirr: parseNumber(pick(record, ["xirr", "xirr %"])),
       },
     });
   }
@@ -397,10 +494,10 @@ function parseUlips(
     assetClass: "ulip",
     currency: "INR",
     sourceSheet: "ULIPS",
-    nameColumn: 0,
-    investedColumn: 1,
-    currentColumn: 3,
-    pnlColumn: 2,
+    nameAliases: ["name"],
+    investedAliases: ["invested"],
+    currentAliases: ["current value"],
+    pnlAliases: ["returns"],
   });
 }
 
@@ -418,11 +515,11 @@ function parseCrypto(
     // OTHER made INR totals depend on unsupported currencies passing through.
     currency: "INR",
     sourceSheet: "Crypto",
-    nameColumn: 0,
-    quantityColumn: 1,
-    investedColumn: 2,
-    currentColumn: 4,
-    pnlColumn: 3,
+    nameAliases: ["name"],
+    quantityAliases: ["units"],
+    investedAliases: ["invested"],
+    currentAliases: ["total asset value"],
+    pnlAliases: ["returns"],
   });
 }
 
@@ -437,12 +534,12 @@ function parseUsStocks(
     assetClass: "us_stock",
     currency: "USD",
     sourceSheet: "US stocks",
-    nameColumn: 0,
-    quantityColumn: 1,
-    investedColumn: 3,
-    currentColumn: 2,
-    pnlColumn: 4,
-    pnlPercentColumn: 5,
+    nameAliases: ["name"],
+    quantityAliases: ["quantity"],
+    investedAliases: ["invested"],
+    currentAliases: ["current value"],
+    pnlAliases: ["returns"],
+    pnlPercentAliases: ["%"],
     symbolFromName: true,
   });
 }
@@ -454,12 +551,12 @@ function parseSimpleSectionHoldings({
   assetClass,
   currency,
   sourceSheet,
-  nameColumn,
-  quantityColumn,
-  investedColumn,
-  currentColumn,
-  pnlColumn,
-  pnlPercentColumn,
+  nameAliases,
+  quantityAliases,
+  investedAliases,
+  currentAliases,
+  pnlAliases,
+  pnlPercentAliases,
   symbolFromName,
 }: {
   rows: unknown[][];
@@ -468,26 +565,51 @@ function parseSimpleSectionHoldings({
   assetClass: AssetClass;
   currency: Currency;
   sourceSheet: string;
-  nameColumn: number;
-  quantityColumn?: number;
-  investedColumn: number;
-  currentColumn: number;
-  pnlColumn?: number;
-  pnlPercentColumn?: number;
+  nameAliases: string[];
+  quantityAliases?: string[];
+  investedAliases: string[];
+  currentAliases: string[];
+  pnlAliases?: string[];
+  pnlPercentAliases?: string[];
   symbolFromName?: boolean;
 }): NormalizedHoldingRow[] {
+  if (rows.length === 0) return [];
+  // These sheets have no leading title rows, so the header is always row 0.
+  const headers = rows[0] ?? [];
+  requireColumns(
+    headers,
+    {
+      Name: nameAliases,
+      Invested: investedAliases,
+      "Current Value": currentAliases,
+    },
+    sourceSheet,
+  );
+
   let sourceDate = initialDate;
   return rows.slice(1).flatMap((row) => {
-    const date = toIsoDate(row[0]);
+    const record = objectFromRow(headers, row);
+    const instrumentName = toStringValue(pick(record, nameAliases)).trim();
+
+    const date = instrumentName ? undefined : toIsoDate(row[0]);
     if (date) {
       sourceDate = date;
       return [];
     }
 
-    const instrumentName = toStringValue(row[nameColumn]).trim();
     if (!instrumentName || instrumentName.toLowerCase() === "total") return [];
-    const investedAmount = parseNumber(row[investedColumn]) ?? 0;
-    const currentValue = parseNumber(row[currentColumn]) ?? 0;
+
+    const investedAmount = parseNumber(pick(record, investedAliases));
+    const currentValue = parseNumber(pick(record, currentAliases));
+    if (investedAmount === undefined && currentValue === undefined) return [];
+    if (investedAmount === undefined || currentValue === undefined) {
+      throw new Error(
+        `${sourceSheet} sheet row for "${instrumentName}" is missing a required value (Invested or Current Value)`,
+      );
+    }
+
+    // Both amounts explicitly zero means a template or aggregate row, not a
+    // holding. Keeping these would create junk instruments and accounts.
     if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
@@ -501,18 +623,17 @@ function parseSimpleSectionHoldings({
         symbol: symbolFromName ? instrumentName : undefined,
         assetClass,
         currency,
-        quantity:
-          quantityColumn === undefined
-            ? undefined
-            : parseNumber(row[quantityColumn]),
+        quantity: quantityAliases
+          ? parseNumber(pick(record, quantityAliases))
+          : undefined,
         investedAmount,
         currentValue,
-        pnlAmount:
-          pnlColumn === undefined ? undefined : parseNumber(row[pnlColumn]),
-        pnlPercent:
-          pnlPercentColumn === undefined
-            ? undefined
-            : parseNumber(row[pnlPercentColumn]),
+        pnlAmount: pnlAliases
+          ? parseNumber(pick(record, pnlAliases))
+          : undefined,
+        pnlPercent: pnlPercentAliases
+          ? parseNumber(pick(record, pnlPercentAliases))
+          : undefined,
         metadata: { sourceSheet },
       },
     ];
