@@ -17,6 +17,16 @@ import { appRouter } from "../root";
 import { commitImport } from "./import-service";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+
+// Skipping locally is fine; skipping in CI is how this suite silently stopped
+// running before. Fail loudly instead so a renamed or dropped env var breaks
+// the build rather than turning the database tests back off unnoticed.
+if (process.env.CI && !testDatabaseUrl) {
+  throw new Error(
+    "TEST_DATABASE_URL must be set in CI so the import integration suite runs",
+  );
+}
+
 const describeDb = testDatabaseUrl ? describe : describe.skip;
 
 describeDb("import service integration", () => {
