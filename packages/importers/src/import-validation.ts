@@ -1,4 +1,4 @@
-export const MAX_IMPORT_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_IMPORT_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 export const ALLOWED_IMPORT_EXTENSIONS = [".csv", ".xlsx"] as const;
 export const ALLOWED_IMPORT_MIME_TYPES = [
   "text/csv",
@@ -15,7 +15,7 @@ export function getImportFileValidationError(input: {
   sizeBytes: number;
 }): string | null {
   if (input.sizeBytes > MAX_IMPORT_FILE_SIZE_BYTES) {
-    return "Import files must be 50 MB or smaller";
+    return "Import files must be 4 MB or smaller";
   }
 
   const lowerName = input.fileName.toLowerCase();

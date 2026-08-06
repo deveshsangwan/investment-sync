@@ -21,4 +21,19 @@ describe("getImportFileValidationError", () => {
       }),
     ).toBe("Import file type is not supported");
   });
+
+  it("caps imports at four megabytes", () => {
+    expect(
+      getImportFileValidationError({
+        fileName: "holdings.csv",
+        sizeBytes: 4 * 1024 * 1024,
+      }),
+    ).toBeNull();
+    expect(
+      getImportFileValidationError({
+        fileName: "holdings.csv",
+        sizeBytes: 4 * 1024 * 1024 + 1,
+      }),
+    ).toBe("Import files must be 4 MB or smaller");
+  });
 });

@@ -2,10 +2,14 @@ import {
   canManageHousehold,
   createApiContext,
   ensureMembership,
+  importErrorHttpStatus,
+  isImportError,
+  logger,
+  runImportEffect,
   uploadAndProcessImport,
   validateImportFile,
 } from "@investment-sync/api";
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -26,15 +30,21 @@ export async function POST(request: Request) {
       mimeType: file.type,
       sizeBytes: file.size,
     });
-    const user = await currentUser();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Invalid import file" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const claims = session.sessionClaims as
+      | { email?: string; email_address?: string }
+      | undefined;
     const ctx = createApiContext({
       auth: {
         userId: session.userId,
-        email:
-          user?.primaryEmailAddress?.emailAddress ??
-          (typeof session.sessionClaims?.email === "string"
-            ? session.sessionClaims.email
-            : null),
+        email: claims?.email ?? claims?.email_address ?? null,
       },
     });
     const membership = await ensureMembership(ctx);
@@ -46,17 +56,30 @@ export async function POST(request: Request) {
     }
 
     const content = Buffer.from(await file.arrayBuffer());
-    const result = await uploadAndProcessImport(ctx, membership, {
-      fileName: file.name,
-      mimeType: file.type,
-      content,
-    });
+    const result = await runImportEffect(
+      uploadAndProcessImport(ctx, membership, {
+        fileName: file.name,
+        mimeType: file.type,
+        content,
+      }),
+    );
 
     return NextResponse.json(result);
   } catch (error) {
+    if (isImportError(error)) {
+      logger.error("Import upload failed", {
+        tag: error._tag,
+        cause: "cause" in error ? error.cause : undefined,
+      });
+      return NextResponse.json(
+        { error: error.message },
+        { status: importErrorHttpStatus(error) },
+      );
+    }
+    logger.error("Unexpected import upload failure", { error });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Import failed" },
-      { status: 400 },
+      { error: "Import operation failed" },
+      { status: 500 },
     );
   }
 }

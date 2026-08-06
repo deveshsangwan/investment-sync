@@ -66,9 +66,11 @@ DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/invest
 SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_SERVICE_ROLE_KEY=local-dev-placeholder
 SUPABASE_IMPORT_BUCKET=portfolio-imports
+CRON_SECRET=replace-with-a-random-secret
 ```
 
 Uploads need real Supabase-compatible storage. Dashboard/history testing only needs Postgres.
+The Source File cleanup endpoint fails closed when `CRON_SECRET` is absent.
 
 ## Apply Schema
 
