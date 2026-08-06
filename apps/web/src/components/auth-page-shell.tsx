@@ -24,13 +24,13 @@ export const authAppearance = {
     colorRing: "hsl(var(--ring))",
     colorDanger: "hsl(var(--negative))",
     fontFamily: "var(--font-geist-sans)",
-    borderRadius: "0.875rem",
+    borderRadius: "0.75rem",
     spacing: "1rem",
   },
   elements: {
-    rootBox: "w-full",
-    cardBox: "w-full shadow-none",
-    card: "w-full bg-transparent p-0 shadow-none",
+    rootBox: "!mx-auto !w-full !max-w-sm",
+    cardBox: "!mx-auto !w-full !max-w-full !shadow-none",
+    card: "!mx-auto !w-full !max-w-full bg-transparent p-0 shadow-none",
     header: "text-left",
     headerTitle:
       "text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl",
@@ -44,9 +44,9 @@ export const authAppearance = {
     formFieldInput:
       "h-11 border-input bg-background/70 text-foreground shadow-none focus:border-primary focus:ring-primary",
     formButtonPrimary:
-      "h-11 bg-primary text-sm font-semibold text-primary-foreground shadow-[0_10px_28px_hsl(var(--primary)/0.18)] hover:bg-primary/90",
+      "h-11 bg-primary text-sm font-semibold text-primary-foreground shadow-none hover:bg-primary/90",
     footerActionLink: "font-semibold text-primary hover:text-primary/80",
-    footer: "bg-transparent",
+    footer: "!mx-auto !w-full !max-w-full !bg-transparent",
   },
 };
 
@@ -80,9 +80,9 @@ export function AuthPageShell({
 
       <section
         id="auth-content"
-        className="mx-auto grid min-h-[calc(100dvh-4.5rem)] w-full max-w-7xl items-stretch px-4 pb-6 sm:px-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(26rem,0.68fr)] lg:px-8"
+        className="mx-auto grid min-h-[calc(100dvh-4.5rem)] w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-stretch px-4 pb-6 sm:px-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(26rem,0.68fr)] lg:px-8"
       >
-        <aside className="flex flex-col justify-between rounded-t-[2rem] border border-b-0 bg-secondary/48 p-7 sm:p-10 lg:rounded-l-[2rem] lg:rounded-tr-none lg:border-b lg:border-r-0 lg:p-14">
+        <aside className="flex flex-col justify-between rounded-t-xl border border-b-0 bg-secondary/55 p-7 sm:p-10 lg:rounded-l-xl lg:rounded-tr-none lg:border-b lg:border-r-0 lg:p-14">
           <div>
             <p className="text-xs font-semibold tracking-[0.16em] text-primary">
               {eyebrow}
@@ -95,7 +95,7 @@ export function AuthPageShell({
             </p>
           </div>
 
-          <div className="mt-12 grid gap-6">
+          <div className="mt-12 hidden gap-6 lg:grid">
             <TrustItem
               icon={ShieldCheck}
               title="Household-scoped access"
@@ -114,8 +114,8 @@ export function AuthPageShell({
           </div>
         </aside>
 
-        <div className="flex items-center justify-center rounded-b-[2rem] border bg-card/78 p-5 shadow-[0_28px_100px_hsl(var(--foreground)/0.08)] sm:p-9 lg:rounded-r-[2rem] lg:rounded-bl-none">
-          <div className="w-full max-w-md">{children}</div>
+        <div className="flex min-w-0 items-center justify-center rounded-b-xl border bg-card p-5 sm:p-9 lg:rounded-r-xl lg:rounded-bl-none">
+          <div className="w-full max-w-sm">{children}</div>
         </div>
       </section>
 
@@ -141,7 +141,7 @@ function BrandLink() {
       aria-label="Investment Sync home"
       className="flex items-center gap-2.5 font-semibold tracking-[-0.02em]"
     >
-      <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-[0_10px_28px_hsl(var(--primary)/0.2)]">
+      <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
         <WalletCards className="size-[1.05rem]" aria-hidden="true" />
       </span>
       <span>Investment Sync</span>
@@ -160,7 +160,7 @@ function TrustItem({
 }) {
   return (
     <div className="flex items-start gap-3.5">
-      <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-background text-primary shadow-sm">
+      <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-primary">
         <Icon className="size-4" aria-hidden="true" />
       </div>
       <div>

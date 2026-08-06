@@ -7,12 +7,22 @@ import {
   listImports,
   runImportEffect,
 } from "../services/import-service";
+import { canManageHousehold } from "../services/membership";
 import { protectedProcedure, router } from "../trpc";
 
 export const importsRouter = router({
   commit: protectedProcedure
     .input(z.object({ importBatchId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      // Stays outside the try below: this TRPCError must reach the client as
+      // FORBIDDEN, not be remapped by toImportTrpcError.
+      if (!canManageHousehold(ctx.membership)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only household owners can commit imports",
+        });
+      }
+
       try {
         return await runImportEffect(
           commitImport(ctx, ctx.membership, input.importBatchId),
@@ -51,9 +61,6 @@ function toImportTrpcError(error: unknown) {
     ImportStorageError: "INTERNAL_SERVER_ERROR",
     ImportPersistenceError: "INTERNAL_SERVER_ERROR",
   }[error._tag] as
-    | "BAD_REQUEST"
-    | "NOT_FOUND"
-    | "CONFLICT"
-    | "INTERNAL_SERVER_ERROR";
+    "BAD_REQUEST" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_SERVER_ERROR";
   return new TRPCError({ code, message: error.message, cause: error });
 }

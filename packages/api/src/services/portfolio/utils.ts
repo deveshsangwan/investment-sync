@@ -34,7 +34,14 @@ export async function getUsdInrRateIfNeeded(
   return currencies.includes("USD") ? getUsdInrRate(db) : undefined;
 }
 
-/** Returns 0 for USD when no rate is available; never passthrough USD as INR. */
+/**
+ * Amounts are denominated in the row's own currency. Only INR, and USD when a
+ * rate is available, can be stated in INR; anything else contributes 0 rather
+ * than being counted as rupees.
+ *
+ * ponytail: excluded rather than converted -- there is no BTC/ETH rate source
+ * in currency_rates today. Convert here once one exists.
+ */
 export function convertToInr(
   amount: number,
   currency: Currency,
@@ -43,7 +50,7 @@ export function convertToInr(
   if (!Number.isFinite(amount)) return 0;
   if (currency === "INR") return amount;
   if (currency === "USD") return usdInrRate ? amount * usdInrRate : 0;
-  return amount;
+  return 0;
 }
 
 export function enrichHoldingWithInr(

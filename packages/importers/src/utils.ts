@@ -142,6 +142,27 @@ export function findHeaderRow(
   });
 }
 
+/**
+ * Same as `findHeaderRow`, but for a sheet that is known to have rows and so
+ * must have a header. Renaming an anchor column is a schema change, not an
+ * empty sheet -- returning -1 to the caller there would silently drop every
+ * holding on the sheet, which is the data loss `requireColumns` exists to
+ * prevent.
+ */
+export function requireHeaderRow(
+  rows: unknown[][],
+  anchors: string[],
+  sheetName: string,
+): number {
+  const headerRow = findHeaderRow(rows, anchors);
+  if (headerRow < 0) {
+    throw new Error(
+      `${sheetName} sheet has rows but no header row containing: ${anchors.join(", ")}`,
+    );
+  }
+  return headerRow;
+}
+
 export function objectFromRow(
   headers: unknown[],
   row: unknown[],
@@ -152,6 +173,68 @@ export function objectFromRow(
     if (key) record[key] = row[index];
   });
   return record;
+}
+
+/**
+ * Looks up a value from an `objectFromRow` record by trying each alias (in
+ * order) after normalizing it the same way headers are normalized. Lets
+ * callers accept a column under a few known spellings (e.g. "Current Value"
+ * vs "Current Value ₹") without hard-coding numeric offsets.
+ */
+export function pick(
+  record: Record<string, unknown>,
+  aliases: string[],
+): unknown {
+  for (const alias of aliases) {
+    const key = normalizeHeader(alias);
+    if (key in record) return record[key];
+  }
+  return undefined;
+}
+
+/**
+ * Required columns for a sheet, keyed by the human-readable name used in the
+ * thrown error message. Values are the accepted header spellings, matched
+ * after normalizing, and are the same arrays passed to `pick` when reading the
+ * column -- so a renamed column can't be accepted by one and missed by the
+ * other.
+ */
+export type RequiredColumns = Record<string, string[]>;
+
+/**
+ * Throws a clear schema error naming the sheet and any required columns
+ * that aren't present in the header row, instead of letting missing/renamed
+ * columns silently shift every other column's values.
+ */
+export function requireColumns(
+  headers: unknown[],
+  columns: RequiredColumns,
+  sheetName: string,
+): void {
+  const headerKeys = headers.map(normalizeHeader);
+  const missing: string[] = [];
+  const ambiguous: string[] = [];
+
+  for (const [field, aliases] of Object.entries(columns)) {
+    const matches = headerKeys.filter((key) =>
+      aliases.some((alias) => key === normalizeHeader(alias)),
+    );
+    if (matches.length === 0) missing.push(field);
+    // objectFromRow keys by header name, so a repeated column silently
+    // overwrites the earlier value. Refuse rather than pick one at random.
+    if (matches.length > 1) ambiguous.push(field);
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `${sheetName} sheet is missing required column(s): ${missing.join(", ")}`,
+    );
+  }
+  if (ambiguous.length > 0) {
+    throw new Error(
+      `${sheetName} sheet has duplicate column(s): ${ambiguous.join(", ")}`,
+    );
+  }
 }
 
 export function sourceDateFromText(text: string): string | undefined {

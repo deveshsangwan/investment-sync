@@ -48,7 +48,7 @@ type PositionStatus = "current" | "exited" | "all";
 type SortKey = "value" | "pnl" | "return" | "name";
 
 const controlClass =
-  "h-11 rounded-xl border border-input bg-background/70 px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/30 focus:border-primary";
+  "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
 
 export function HoldingsClient({
   isDataConfigured,
@@ -139,7 +139,7 @@ export function HoldingsClient({
 
       {query.isSuccess ? (
         <>
-          <section className="mb-4 grid gap-3 sm:grid-cols-3">
+          <section className="mb-4 grid overflow-hidden rounded-xl border border-border/80 bg-card sm:grid-cols-3 sm:divide-x">
             <Summary
               label="Current positions"
               value={query.data.current.length}
@@ -170,19 +170,23 @@ export function HoldingsClient({
                 Find a position
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.4fr)_repeat(5,minmax(130px,0.7fr))]">
-                <label className="relative">
-                  <span className="sr-only">Search holdings</span>
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <input
-                    className={`${controlClass} w-full pl-9`}
-                    type="search"
-                    placeholder="Search name, symbol, or provider"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Search
+                  </span>
+                  <span className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <input
+                      className={`${controlClass} w-full pl-9`}
+                      type="search"
+                      placeholder="Name, symbol, or provider"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </span>
                 </label>
                 <FilterSelect
                   label="Position status"
@@ -232,7 +236,7 @@ export function HoldingsClient({
                     ["value", "Largest value"],
                     ["pnl", "Largest gain"],
                     ["return", "Best return"],
-                    ["name", "Name A–Z"],
+                    ["name", "Name A-Z"],
                   ]}
                 />
               </div>
@@ -300,7 +304,7 @@ function Summary({
   monetary?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/55 px-4 py-3.5">
+    <div className="border-b border-border/65 px-4 py-3.5 last:border-b-0 sm:border-b-0">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={`${monetary ? "number" : ""} mt-1 text-lg font-semibold`}>
         {value}
@@ -321,10 +325,9 @@ function FilterSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label>
-      <span className="sr-only">{label}</span>
+    <label className="grid gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <select
-        aria-label={label}
         className={`${controlClass} w-full`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -408,7 +411,7 @@ function PositionCard({ position }: { position: Position }) {
             ) : null}
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            {position.accountName} · {labelize(position.assetClass)}
+            {position.accountName} / {labelize(position.assetClass)}
           </p>
         </div>
         <p className="number shrink-0 font-semibold">

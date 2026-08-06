@@ -1,13 +1,10 @@
-import {
-  FlatList,
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useMemo } from "react";
+import { FlatList, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AppButton, PageHeader, StatePanel } from "../src/mobile-ui";
+import { type Theme, useTheme } from "../src/theme";
 import { trpc } from "../src/trpc";
-import { colors } from "../src/theme";
 
 const inrCurrency = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -21,64 +18,113 @@ const percentage = new Intl.NumberFormat("en-IN", {
 
 export default function HoldingsScreen() {
   const holdings = trpc.portfolio.holdings.useQuery();
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const data = holdings.data ?? [];
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
       <FlatList
         contentContainerStyle={styles.content}
-        data={holdings.data ?? []}
+        data={data}
         keyExtractor={(item) => item.id}
         onRefresh={() => void holdings.refetch()}
         refreshing={holdings.isFetching && !holdings.isLoading}
+        showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={styles.eyebrow}>Current positions</Text>
-            <Text style={styles.title}>Holdings</Text>
-            <Text style={styles.subtitle}>
-              Latest committed position in each account.
-            </Text>
-          </View>
+          <PageHeader
+            description="Latest committed position in each account."
+            eyebrow="Current positions"
+            title="Holdings"
+          />
         }
         ListEmptyComponent={
           holdings.isLoading ? (
-            <LoadingList />
+            <LoadingList styles={styles} />
           ) : holdings.isError ? (
-            <StatusPanel onRetry={() => void holdings.refetch()} />
+            <StatePanel
+              action={
+                <AppButton
+                  label="Try loading holdings again"
+                  onPress={() => void holdings.refetch()}
+                  variant="secondary"
+                >
+                  Try again
+                </AppButton>
+              }
+              description="Your saved portfolio has not changed."
+              title="Holdings unavailable"
+              tone="error"
+            />
           ) : (
-            <View style={styles.emptyPanel}>
-              <Text style={styles.emptyTitle}>No committed holdings</Text>
-              <Text style={styles.muted}>
-                Import portfolio data from the web app first.
-              </Text>
-            </View>
+            <StatePanel
+              description="Import portfolio data from the web app first."
+              title="No committed holdings"
+            />
           )
         }
-        renderItem={({ item }) => {
+        renderItem={({ index, item }) => {
           const pnl = item.pnlAmountInInr ?? 0;
-          const tone = pnl >= 0 ? styles.positive : styles.negative;
+          const returnTone =
+            pnl > 0
+              ? styles.positive
+              : pnl < 0
+                ? styles.negative
+                : styles.mutedReturn;
+          const returnColor =
+            pnl > 0
+              ? theme.positive
+              : pnl < 0
+                ? theme.negative
+                : theme.mutedForeground;
+          const name = item.symbol ?? item.instrumentName;
+          const formattedReturn = `${percentage.format(
+            Number(item.pnlPercent ?? 0),
+          )}%`;
+
           return (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={styles.nameBlock}>
-                  <Text numberOfLines={1} style={styles.symbol}>
-                    {item.symbol ?? item.instrumentName}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.muted}>
-                    {item.accountName} · {labelize(item.assetClass)}
-                  </Text>
-                </View>
-                <Text style={styles.value}>
+            <View
+              accessible
+              accessibilityLabel={`${name}, ${inrCurrency.format(
+                item.currentValueInInr,
+              )}, return ${formattedReturn}`}
+              style={[
+                styles.holdingRow,
+                index === 0 && styles.firstHoldingRow,
+                index === data.length - 1 && styles.lastHoldingRow,
+              ]}
+            >
+              <View style={styles.holdingHeader}>
+                <Text numberOfLines={1} style={styles.symbol}>
+                  {name}
+                </Text>
+                <Text
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                  style={styles.value}
+                >
                   {inrCurrency.format(item.currentValueInInr)}
                 </Text>
               </View>
-              <View style={styles.row}>
+              <Text numberOfLines={1} style={styles.meta}>
+                {item.accountName} · {labelize(item.assetClass)}
+              </Text>
+              <View style={styles.holdingFooter}>
                 <Text style={styles.date}>
                   As of {formatDate(item.snapshotDate)}
                 </Text>
-                <Text style={[styles.returnValue, tone]}>
-                  {pnl >= 0 ? "↑" : "↓"}{" "}
-                  {percentage.format(Number(item.pnlPercent ?? 0))}%
-                </Text>
+                <View style={styles.returnBlock}>
+                  <Ionicons
+                    color={returnColor}
+                    name={
+                      pnl > 0 ? "arrow-up" : pnl < 0 ? "arrow-down" : "remove"
+                    }
+                    size={13}
+                  />
+                  <Text style={[styles.returnValue, returnTone]}>
+                    {formattedReturn}
+                  </Text>
+                </View>
               </View>
             </View>
           );
@@ -88,24 +134,20 @@ export default function HoldingsScreen() {
   );
 }
 
-function LoadingList() {
+function LoadingList({ styles }: { styles: ReturnType<typeof createStyles> }) {
   return (
-    <View accessibilityLabel="Loading holdings" style={styles.loadingList}>
+    <View
+      accessibilityLabel="Loading holdings"
+      accessibilityRole="progressbar"
+      style={styles.loadingList}
+    >
       {[0, 1, 2].map((item) => (
-        <View key={item} style={styles.loadingCard} />
+        <View key={item} style={styles.loadingRow}>
+          <View style={[styles.loadingBar, styles.loadingName]} />
+          <View style={[styles.loadingBar, styles.loadingMeta]} />
+          <View style={[styles.loadingBar, styles.loadingValue]} />
+        </View>
       ))}
-    </View>
-  );
-}
-
-function StatusPanel({ onRetry }: { onRetry: () => void }) {
-  return (
-    <View style={styles.emptyPanel}>
-      <Text style={styles.emptyTitle}>Holdings unavailable</Text>
-      <Text style={styles.muted}>Your saved portfolio has not changed.</Text>
-      <Pressable onPress={onRetry} style={styles.retryButton}>
-        <Text style={styles.retryText}>Try again</Text>
-      </Pressable>
     </View>
   );
 }
@@ -124,84 +166,90 @@ function formatDate(value: string | Date) {
   }).format(new Date(value));
 }
 
-const styles = StyleSheet.create({
-  screen: { backgroundColor: colors.background, flex: 1 },
-  content: { padding: 18, paddingBottom: 36 },
-  header: { marginBottom: 18, marginTop: 4 },
-  eyebrow: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  title: {
-    color: colors.foreground,
-    fontSize: 34,
-    fontWeight: "700",
-    letterSpacing: -1.2,
-    marginTop: 5,
-  },
-  subtitle: { color: colors.muted, marginTop: 7 },
-  card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    marginBottom: 10,
-    padding: 16,
-  },
-  cardHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  nameBlock: { flex: 1, marginRight: 14 },
-  symbol: { color: colors.foreground, fontSize: 16, fontWeight: "700" },
-  muted: { color: colors.muted, fontSize: 13, lineHeight: 20, marginTop: 3 },
-  value: {
-    color: colors.foreground,
-    fontSize: 15,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
-  },
-  row: {
-    alignItems: "center",
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 14,
-    paddingTop: 11,
-  },
-  date: { color: colors.muted, fontSize: 12 },
-  returnValue: {
-    fontSize: 13,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
-  },
-  positive: { color: colors.positive },
-  negative: { color: colors.negative },
-  emptyPanel: {
-    backgroundColor: colors.panel,
-    borderColor: colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 18,
-  },
-  emptyTitle: { color: colors.foreground, fontSize: 16, fontWeight: "700" },
-  retryButton: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.accentSoft,
-    borderRadius: 12,
-    marginTop: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  retryText: { color: colors.foreground, fontWeight: "700" },
-  loadingList: { gap: 10 },
-  loadingCard: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: 18,
-    height: 108,
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    screen: { backgroundColor: theme.background, flex: 1 },
+    content: { padding: 18, paddingBottom: 28 },
+    holdingRow: {
+      backgroundColor: theme.surface,
+      borderBottomColor: theme.border,
+      borderBottomWidth: 1,
+      borderLeftColor: theme.border,
+      borderLeftWidth: 1,
+      borderRightColor: theme.border,
+      borderRightWidth: 1,
+      minHeight: 108,
+      padding: 16,
+    },
+    firstHoldingRow: {
+      borderTopColor: theme.border,
+      borderTopLeftRadius: 12,
+      borderTopRightRadius: 12,
+      borderTopWidth: 1,
+    },
+    lastHoldingRow: {
+      borderBottomLeftRadius: 12,
+      borderBottomRightRadius: 12,
+    },
+    holdingHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 14,
+      justifyContent: "space-between",
+    },
+    symbol: {
+      color: theme.foreground,
+      flex: 1,
+      fontSize: 16,
+      fontWeight: "700",
+      minWidth: 0,
+    },
+    value: {
+      color: theme.foreground,
+      flexShrink: 1,
+      fontSize: 15,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "700",
+      textAlign: "right",
+    },
+    meta: {
+      color: theme.mutedForeground,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 4,
+    },
+    holdingFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 15,
+    },
+    date: { color: theme.mutedForeground, fontSize: 12 },
+    returnBlock: { alignItems: "center", flexDirection: "row", gap: 3 },
+    returnValue: {
+      fontSize: 13,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "700",
+    },
+    positive: { color: theme.positive },
+    negative: { color: theme.negative },
+    mutedReturn: { color: theme.mutedForeground },
+    loadingList: {
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    loadingRow: {
+      borderBottomColor: theme.border,
+      borderBottomWidth: 1,
+      height: 108,
+      padding: 16,
+    },
+    loadingBar: { backgroundColor: theme.skeleton, borderRadius: 5 },
+    loadingName: { height: 15, width: "44%" },
+    loadingMeta: { height: 11, marginTop: 8, width: "66%" },
+    loadingValue: { height: 13, marginTop: 20, width: "32%" },
+  });
+}

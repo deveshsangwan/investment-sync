@@ -68,7 +68,7 @@ export function HoldingDetailClient({
         title={holding ? (holding.symbol ?? holding.instrumentName) : "Holding"}
         description={
           holding
-            ? `${holding.instrumentName} · ${holding.accountName} · ${holding.provider}`
+            ? `${holding.instrumentName} / ${holding.accountName} / ${holding.provider}`
             : "Position history, return, and source quality."
         }
         before={
@@ -133,9 +133,8 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
 
   return (
     <>
-      <Card className="relative overflow-hidden border-primary/20 bg-primary/[0.065]">
-        <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-primary/10 blur-3xl" />
-        <CardContent className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
+      <Card className="overflow-hidden border-primary/25 bg-accent/35">
+        <CardContent className="grid gap-6 p-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
           <div>
             <p className="text-xs font-medium text-muted-foreground">
               Current value
@@ -235,7 +234,10 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
               ["ISIN", holding.isin ?? "N/A"],
               ["Exchange", holding.exchange ?? "N/A"],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl bg-muted/35 p-3.5">
+              <div
+                key={label}
+                className="rounded-lg border border-border/60 bg-muted/30 p-3.5"
+              >
                 <dt className="text-xs text-muted-foreground">{label}</dt>
                 <dd className="mt-1 wrap-break-word text-sm font-semibold">
                   {value}
@@ -309,7 +311,7 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
                   <div>
                     <p className="font-medium">{labelize(transaction.type)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDate(transaction.tradeDate)} ·{" "}
+                      {formatDate(transaction.tradeDate)} /{" "}
                       {formatQuantity(transaction.quantity)} units
                     </p>
                   </div>

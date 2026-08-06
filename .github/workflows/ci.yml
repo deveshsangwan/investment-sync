@@ -13,6 +13,23 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: investment_sync
+          POSTGRES_PASSWORD: investment_sync
+          POSTGRES_DB: investment_sync_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U investment_sync -d investment_sync_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://investment_sync:investment_sync@localhost:5432/investment_sync_dev
+      TEST_DATABASE_URL: postgres://investment_sync:investment_sync@localhost:5432/investment_sync_dev
     steps:
       - uses: actions/checkout@v6
         with:
@@ -25,6 +42,7 @@ jobs:
           node-version: 24
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @investment-sync/db migrate
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

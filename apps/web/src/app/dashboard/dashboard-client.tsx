@@ -307,7 +307,7 @@ export function DashboardClient({
               className={cn(
                 "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between",
                 hasUsableXirr
-                  ? "border-positive/20 bg-positive/5"
+                  ? "border-primary/20 bg-accent/40"
                   : "border-warning/25 bg-warning/5",
               )}
             >

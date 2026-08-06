@@ -1,4 +1,5 @@
 import {
+  canManageHousehold,
   createApiContext,
   ensureMembership,
   importErrorHttpStatus,
@@ -47,6 +48,13 @@ export async function POST(request: Request) {
       },
     });
     const membership = await ensureMembership(ctx);
+    if (!canManageHousehold(membership)) {
+      return NextResponse.json(
+        { error: "Only household owners can upload imports" },
+        { status: 403 },
+      );
+    }
+
     const content = Buffer.from(await file.arrayBuffer());
     const result = await runImportEffect(
       uploadAndProcessImport(ctx, membership, {

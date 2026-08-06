@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: {
     default: "Investment Sync",
-    template: "%s · Investment Sync",
+    template: "%s | Investment Sync",
   },
   description:
     "A private household portfolio view for Indian and US investments.",
