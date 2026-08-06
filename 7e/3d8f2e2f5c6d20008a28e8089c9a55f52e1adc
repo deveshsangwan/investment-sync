@@ -1,0 +1,120 @@
+packages/api/src/routers/imports.ts
+  s_d239c98ffefac4::t_27588e9bc4d84d 17-18
+  s_d239c98ffefac4::t_e77b2a7064ba47 10,19-25,64
+.github/workflows/ci.yml
+  s_d239c98ffefac4::t_58e13144984963 16-32,45
+.gitignore
+  s_d239c98ffefac4::t_3dfebc337ccf69 15-17
+README.md
+  s_d239c98ffefac4::t_8ee2698c15a45d 29-34
+apps/mobile/app.json
+  s_d239c98ffefac4::t_bfb339f86dc484 8
+apps/mobile/app/_layout.tsx
+  s_d239c98ffefac4::t_18e56beed0ceb5 1,3-5,8-9,12-13,15-75
+apps/mobile/app/holdings.tsx
+  s_d239c98ffefac4::t_c060db1f763094 1-6,21-23,26,29,33,35-39,43,45-58,60-63,66,68-84,86-105,109-112,116-127,137,139-143,145-149,169-255
+apps/mobile/app/index.tsx
+  s_d239c98ffefac4::t_f8f2d376e92a6f 1-7,21,23-24,27,32-34,36-40,42,45-54,56-57,62,65-69,75,80,82,86,88,93,103-113,120-122,124-125,129-142,151,153,156,158,164-165,178,180-185,210-335
+apps/mobile/package.json
+  s_d239c98ffefac4::t_f54e29eefa64a9 18,36
+apps/mobile/src/mobile-ui.tsx
+  s_d239c98ffefac4::t_e2ac519d429b81 1-184
+apps/mobile/src/sign-in-screen.tsx
+  s_d239c98ffefac4::t_c9493eb2471868 1-6,9,11-12,17-22,35-60,62-63,68-120
+apps/mobile/src/theme.ts
+  s_d239c98ffefac4::t_f54259ac3d68dc 1-38,40-49
+apps/web/src/app/api/imports/upload/route.ts
+  s_d239c98ffefac4::t_41829926f57815 2,51-57
+apps/web/src/app/dashboard/asset-class/[assetClass]/asset-class-client.tsx
+  s_d239c98ffefac4::t_013aaa3961efb9 114-115,203,387
+apps/web/src/app/dashboard/dashboard-client.tsx
+  s_d239c98ffefac4::t_44ab4d18eb8214 310
+apps/web/src/app/dashboard/holdings/[id]/holding-detail-client.tsx
+  s_d239c98ffefac4::t_dfe976a10f143c 71,136-137,237-240,314
+apps/web/src/app/globals.css
+  s_d239c98ffefac4::t_ad879d1a0a92f6 44-58,60-72,77-91,93-104,120,131-133,136-140,193-207
+apps/web/src/app/holdings/holdings-client.tsx
+  s_d239c98ffefac4::t_377f583011d5fc 51,142,173-189,239,307,328-329,414
+apps/web/src/app/icon.svg
+  s_d239c98ffefac4::t_c9f66d6849e61a 2-4
+apps/web/src/app/layout.tsx
+  s_d239c98ffefac4::t_0b9565ff7287e0 21
+apps/web/src/app/page.tsx
+  s_d239c98ffefac4::t_9f128b3c13969e 51,57,69,75,87,93,98,141,168,170,233,262,282
+apps/web/src/app/privacy/page.tsx
+  s_d239c98ffefac4::t_c012a7affba240 23,40,80,83,86,89
+apps/web/src/app/settings/settings-client.tsx
+  s_d239c98ffefac4::t_54785751580b8b 168-169,171,187,189
+apps/web/src/app/terms/page.tsx
+  s_d239c98ffefac4::t_d988f4c2acfc72 51,65
+apps/web/src/app/uploads/uploads-client.tsx
+  s_d239c98ffefac4::t_fd2d9150911de2 288,300,594-598,607-608,614,616
+apps/web/src/components/app-shell.tsx
+  s_d239c98ffefac4::t_153d9508d4dcb7 3,9-10,15,53,56,58-74,76-91,95,97-132,135-169,173,176-184,187-213,215-216,220,223-225,227-234
+apps/web/src/components/auth-page-shell.tsx
+  s_d239c98ffefac4::t_8fd3feba5e0339 27,31-33,47,49,83,85,98,117-118,144,163
+apps/web/src/components/legal-page-chrome.tsx
+  s_d239c98ffefac4::t_e91a59bc8f00ae 18
+apps/web/src/components/portfolio-ui.tsx
+  s_d239c98ffefac4::t_02ff12767b90bb 20,45,49,51,55,61,82,98,129-130,141-143,160,162,189,232
+apps/web/src/components/theme-provider.tsx
+  s_d239c98ffefac4::t_c620c0434de27d 7
+apps/web/src/components/ui/alert.tsx
+  s_d239c98ffefac4::t_1d2b194bee8bcf 9
+apps/web/src/components/ui/badge.tsx
+  s_d239c98ffefac4::t_1c63c900a3d88a 6,11-12
+apps/web/src/components/ui/button.tsx
+  s_d239c98ffefac4::t_9ead05903c6ffe 7,12,16,19-20,25
+apps/web/src/components/ui/card.tsx
+  s_d239c98ffefac4::t_704f6e03ba69e0 8,21,53
+apps/web/src/components/ui/skeleton.tsx
+  s_d239c98ffefac4::t_bdda7dc76419c5 11
+apps/web/src/components/ui/table.tsx
+  s_d239c98ffefac4::t_6084761564c2a6 24,46,61,74
+packages/api/src/routers/auth.ts
+  s_d239c98ffefac4::t_1613e7c9cd6dde 4,24-25
+packages/api/src/routers/imports.test.ts
+  s_d239c98ffefac4::t_387dc9666b35ef 1-55
+packages/api/src/services/import-service.integration.test.ts
+  s_d239c98ffefac4::t_6dc338f11c6dab 26-35
+packages/api/src/services/membership.ts
+  s_d239c98ffefac4::t_138618a93a0f4d 1,17-22,73-76,81-82,84-85,97-113,118,121,124-180
+packages/api/src/services/portfolio/utils.test.ts
+  s_d239c98ffefac4::t_924c15ac636f69 4,37-43,122-156,165
+packages/api/src/services/portfolio/utils.ts
+  s_d239c98ffefac4::t_1af0cbc61b0073 37-44,53
+packages/db/drizzle/0005_one_household_per_owner.sql
+  s_d239c98ffefac4::t_328b992d94fb64 1-8
+packages/db/drizzle/0006_crypto_amounts_are_inr.sql
+  s_d239c98ffefac4::t_20268742405ef9 1-43
+packages/db/drizzle/meta/_journal.json
+  s_d239c98ffefac4::t_2a343100c12450 43-58
+packages/db/src/schema.ts
+  s_d239c98ffefac4::t_d65d4272bc5a97 85-105
+packages/importers/src/importers.test.ts
+  s_d239c98ffefac4::t_ccbdba911ed6a7 16-52,259-511
+packages/importers/src/utils.ts
+  s_d239c98ffefac4::t_b00102728f9ce7 145-165,178-239
+packages/importers/src/xlsx.ts
+  s_d239c98ffefac4::t_05cd689ea6b277 17-19,22,136,232-237,243-254,258-266,275-290,304,307-308,311-320,327-337,343-349,353-358,365-380,393,396-397,400-408,415-419,425-429,433-442,447-453,455-456,475-478,497-500,513-516,518-522,537-542,554-559,568-573,576-588,591-594,601-612,626-628,631-636
+pnpm-lock.yaml
+  s_d239c98ffefac4::t_1069e27effc467 56-58,110-112
+turbo.json
+  s_d239c98ffefac4::t_ec110e39d04d14 6-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7e3d8f2e2f5c6d20008a28e8089c9a55f52e1adc",
+  "prompts": {},
+  "sessions": {
+    "s_d239c98ffefac4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "755aeae9-55b2-4e5a-812f-8e2e971cbe91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
