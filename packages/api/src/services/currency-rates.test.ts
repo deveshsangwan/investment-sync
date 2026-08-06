@@ -69,6 +69,33 @@ describe("getUsdInrRate", () => {
     await rejection;
   });
 
+  it("rejects with the tagged error itself, not an opaque FiberFailure", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-19T12:00:00.000Z"));
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    const db = persistedRateDatabase({
+      rate: "81.00",
+      fetchedAt: new Date("2026-07-12T11:59:59.000Z"),
+    });
+    const { getUsdInrRate, CurrencyRateUnavailableError } =
+      await import("./currency-rates");
+
+    // Bare Effect.runPromise rejects with a FiberFailure, which preserves
+    // .message but fails both checks below -- making the exported error class
+    // useless to callers. Asserting on the message alone would not catch that.
+    const caught = getUsdInrRate(db as never).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await vi.runAllTimersAsync();
+    const error = await caught;
+
+    expect(error).toBeInstanceOf(CurrencyRateUnavailableError);
+    expect((error as { _tag?: string })._tag).toBe(
+      "CurrencyRateUnavailableError",
+    );
+  });
+
   it("uses a persisted quote within seven days when the provider is down", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-19T12:00:00.000Z"));

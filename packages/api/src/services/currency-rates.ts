@@ -43,26 +43,34 @@ const cachedRates = Effect.runSync(
   SynchronizedRef.make(new Map<Database | undefined, CachedRate>()),
 );
 
-export function getUsdInrRate(db?: Database): Promise<CurrencyRateQuote> {
-  return Effect.runPromise(
-    Clock.currentTimeMillis.pipe(
-      Effect.flatMap((now) =>
-        SynchronizedRef.modifyEffect(cachedRates, (rates) => {
-          const cached = rates.get(db);
-          if (cached && cached.expiresAt > now) {
-            return Effect.succeed([toQuote(cached, false), rates] as const);
-          }
-          return loadUsdInrRate(db, cached, now).pipe(
-            Effect.map(({ rate, isStale }) => {
-              const next = new Map(rates);
-              next.set(db, rate);
-              return [toQuote(rate, isStale), next] as const;
-            }),
-          );
-        }),
+export async function getUsdInrRate(db?: Database): Promise<CurrencyRateQuote> {
+  // Effect.either before runPromise so a failure rejects with the tagged error
+  // itself. Bare runPromise rejects with an opaque FiberFailure, which would
+  // make the exported CurrencyRateUnavailableError unmatchable by callers.
+  const result = await Effect.runPromise(
+    Effect.either(
+      Clock.currentTimeMillis.pipe(
+        Effect.flatMap((now) =>
+          SynchronizedRef.modifyEffect(cachedRates, (rates) => {
+            const cached = rates.get(db);
+            if (cached && cached.expiresAt > now) {
+              return Effect.succeed([toQuote(cached, false), rates] as const);
+            }
+            return loadUsdInrRate(db, cached, now).pipe(
+              Effect.map(({ rate, isStale }) => {
+                const next = new Map(rates);
+                next.set(db, rate);
+                return [toQuote(rate, isStale), next] as const;
+              }),
+            );
+          }),
+        ),
       ),
     ),
   );
+
+  if (result._tag === "Left") throw result.left;
+  return result.right;
 }
 
 function loadUsdInrRate(
