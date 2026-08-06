@@ -61,6 +61,9 @@ function toImportTrpcError(error: unknown) {
     ImportStorageError: "INTERNAL_SERVER_ERROR",
     ImportPersistenceError: "INTERNAL_SERVER_ERROR",
   }[error._tag] as
-    "BAD_REQUEST" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_SERVER_ERROR";
+    | "BAD_REQUEST"
+    | "NOT_FOUND"
+    | "CONFLICT"
+    | "INTERNAL_SERVER_ERROR";
   return new TRPCError({ code, message: error.message, cause: error });
 }
