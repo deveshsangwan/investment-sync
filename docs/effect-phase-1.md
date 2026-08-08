@@ -20,6 +20,25 @@ Outcome notes, where reality differed from the plan below:
 - `writeParsedRowsInTransaction` stays Promise-shaped alongside `commitImportPromise`, for
   the same reason. Both convert in Phase 2 behind a Database service.
 
+### Carried into Phase 2
+
+A Codex review of the migration diff found one real bug (fixed in `0fc7515`: the
+compensation path could orphan an uploaded file forever) and one deferred item worth
+recording rather than acting on now.
+
+**Use `Effect.acquireUseRelease` for the uploaded file.** The explicit compensation used
+here is behaviorally identical today, but there is an interruption window between the
+upload succeeding and `catchAll` registering; `acquireUseRelease` closes it and runs its
+release uninterruptibly. It is deferred because nothing in this codebase can interrupt a
+fiber today — no `timeout`, no `race`, one `runPromise` per request. Phase 2 introduces
+`ManagedRuntime` and is the first point where that stops being true, so the change belongs
+in the same diff as the interruption source.
+
+Related, for the same phase: the zero-argument `Effect.tryPromise` wrappers do not cancel
+Drizzle or Supabase work, so an interrupted fiber leaves the underlying Promise running.
+The upload-through-persist section should be explicitly uninterruptible, or the drivers
+must honour an `AbortSignal`, before any interruption source is added.
+
 ## PR 1.0 — Safety net (done)
 
 The suite that has to stay green through every PR below.
