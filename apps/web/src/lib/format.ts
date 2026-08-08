@@ -76,6 +76,7 @@ export function formatAsOfDate(value: string | Date) {
 export function sourceLabel(value: string | null | undefined) {
   const labels: Record<string, string> = {
     investment_portfolio_xlsx: "Portfolio workbook",
+    nps_csv: "NPS statement",
     tickertape_stock_csv: "Tickertape stocks",
     tickertape_mutual_fund_csv: "Tickertape mutual funds",
     vested_drivewealth_xlsx: "Vested / DriveWealth",
@@ -84,6 +85,16 @@ export function sourceLabel(value: string | null | undefined) {
     unknown: "Detected file",
   };
   return value ? (labels[value] ?? labelize(value)) : "Detected file";
+}
+
+export function npsSchemeLabel(code: string) {
+  const labels: Record<string, string> = {
+    A: "Scheme A · Alternatives",
+    C: "Scheme C · Corporate debt",
+    E: "Scheme E · Equity",
+    G: "Scheme G · Government securities",
+  };
+  return labels[code] ?? `Scheme ${code}`;
 }
 
 export function trendWidth(value: number, values: number[]) {

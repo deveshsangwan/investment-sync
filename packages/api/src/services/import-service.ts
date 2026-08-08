@@ -107,6 +107,11 @@ async function commitImportPromise(
 ) {
   const committed = await ctx.db.transaction(async (tx) => {
     const db: ImportDatabase = tx;
+    // ponytail: one import lock prevents identity races; shard by normalized
+    // account/instrument keys if commit throughput ever becomes measurable.
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtext('investment-sync-import-commit'))`,
+    );
     const [batch] = await db
       .select({
         status: importBatches.status,
@@ -209,6 +214,7 @@ async function commitImportPromise(
             "instrument",
           ),
           importBatchId,
+          sourceType: payload.sourceType,
           snapshotDate:
             payload.sourceDate ?? batch.uploadedAt.toISOString().slice(0, 10),
           quantity: payload.quantity?.toString(),
@@ -236,6 +242,7 @@ async function commitImportPromise(
           ],
           set: {
             importBatchId,
+            sourceType: sql`excluded.source_type`,
             quantity: sql`excluded.quantity`,
             investedAmount: sql`excluded.invested_amount`,
             currentValue: sql`excluded.current_value`,
@@ -243,6 +250,12 @@ async function commitImportPromise(
             pnlPercent: sql`excluded.pnl_percent`,
             sourcePayload: sql`excluded.source_payload`,
           },
+          // The portal statement contains richer NPS detail than the workbook.
+          // All other same-day source pairs retain last-write-wins behavior.
+          setWhere: sql`
+            excluded.source_type = 'nps_csv'
+              or ${holdingSnapshots.sourceType} <> 'nps_csv'
+          `,
         });
     }
 

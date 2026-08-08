@@ -22,6 +22,7 @@ import {
 } from "@/components/portfolio-ui";
 import { PortfolioTimelineChart } from "@/components/portfolio-charts";
 import { MissingHolding, SetupRequired } from "@/components/dashboard-states";
+import { NpsDetailsSections } from "@/components/nps-details-sections";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -130,6 +131,24 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
   if (!holding) return null;
   const pnlTone = (holding.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   const PnlIcon = pnlTone === "positive" ? ArrowUpRight : ArrowDownRight;
+  const emptyTransactions =
+    data.npsDetails && holding.xirrDataQuality === "source_provided"
+      ? {
+          title: "No normalized transactions",
+          description:
+            "Statement activity is partial and is not used as complete cash-flow history. The portal-provided XIRR remains the return source.",
+        }
+      : data.npsDetails
+        ? {
+            title: "No normalized transactions",
+            description:
+              "Statement activity is partial and is not used as complete cash-flow history.",
+          }
+        : {
+            title: "No transactions yet",
+            description:
+              "Transaction imports will unlock exact cash-flow XIRR and realized gains.",
+          };
 
   return (
     <>
@@ -251,6 +270,14 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
         </SectionCard>
       </section>
 
+      {data.npsDetails ? (
+        <NpsDetailsSections
+          details={data.npsDetails}
+          currency={holding.currency}
+          totalValue={Number(holding.currentValue)}
+        />
+      ) : null}
+
       <SectionCard
         title="Transactions"
         description="Imported cash flows used for return calculations."
@@ -259,8 +286,8 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
         {data.transactions.length === 0 ? (
           <EmptyState
             icon={ReceiptText}
-            title="No transactions yet"
-            description="Transaction imports will unlock exact cash-flow XIRR and realized gains."
+            title={emptyTransactions.title}
+            description={emptyTransactions.description}
           />
         ) : (
           <>

@@ -214,6 +214,7 @@ describe("Investment workbook importer", () => {
     });
 
     expect(result.sourceType).toBe("investment_portfolio_xlsx");
+    expect(result.parserVersion).toBe("investment-portfolio-workbook-v5");
     expect(
       result.rows.some(
         (row) =>
@@ -236,12 +237,24 @@ describe("Investment workbook importer", () => {
         }),
         expect.objectContaining({
           kind: "holding",
+          instrumentName: "NPS",
+          assetClass: "nps",
+          provider: "NPS",
+        }),
+        expect.objectContaining({
+          kind: "holding",
           instrumentName: "USSTOCK",
           assetClass: "us_stock",
           currentValue: 200,
         }),
       ]),
     );
+    const npsRow = result.rows.find(
+      (row) => row.kind === "holding" && row.instrumentName === "NPS",
+    );
+    expect(npsRow?.metadata).toMatchObject({
+      sourceSheet: "NPS",
+    });
     const fundARow = result.rows.find(
       (row) => row.kind === "holding" && row.instrumentName === "Fund A",
     );

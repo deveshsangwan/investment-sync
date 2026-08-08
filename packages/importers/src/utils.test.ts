@@ -33,6 +33,14 @@ describe("toIsoDate", () => {
   it("preserves historical two-digit years in source text", () => {
     expect(sourceDateFromText("As of 16-Jun-99")).toBe("1999-06-16");
   });
+
+  it("parses named month-first dates embedded in portal text", () => {
+    expect(sourceDateFromText("Holdings as on August 08 2026")).toBe(
+      "2026-08-08",
+    );
+    expect(sourceDateFromText("Holdings as on August 40 2026")).toBeUndefined();
+    expect(sourceDateFromText("Holdings as on August 2026")).toBeUndefined();
+  });
 });
 
 describe("normalizedImportRowSchema", () => {

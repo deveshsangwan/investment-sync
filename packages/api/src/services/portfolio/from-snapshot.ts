@@ -6,7 +6,7 @@ import {
 import type { CurrencyRateQuote } from "../currency-rates";
 import {
   convertToInr,
-  enrichHoldingWithInr,
+  toPublicHoldingWithInr,
   parseDate,
   roundMoney,
   sourceXirrFromPayload,
@@ -22,7 +22,7 @@ export function buildPortfolioHoldingsFromSnapshot(
   usdInrRate?: number,
 ) {
   return latestHoldings
-    .map((holding) => enrichHoldingWithInr(holding, usdInrRate))
+    .map((holding) => toPublicHoldingWithInr(holding, usdInrRate))
     .sort((a, b) => {
       const dateOrder =
         new Date(b.snapshotDate).getTime() - new Date(a.snapshotDate).getTime();

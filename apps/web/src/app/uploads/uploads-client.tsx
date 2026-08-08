@@ -56,6 +56,12 @@ const flowSteps: Array<{ value: FlowStep; label: string }> = [
 
 const sourceGuidance = [
   {
+    title: "NPS",
+    format: "CSV",
+    description:
+      "Download the Tier I transaction statement from the NPS portal.",
+  },
+  {
     title: "Tickertape",
     format: "CSV",
     description:

@@ -11,6 +11,7 @@ import {
   instruments,
   users,
 } from "@investment-sync/db";
+import type { ImportSourceType } from "@investment-sync/importers";
 import { eq } from "drizzle-orm";
 import { createApiContext, type ApiContext } from "../context";
 import { appRouter } from "../root";
@@ -84,6 +85,9 @@ describeDb("import service integration", () => {
     expect(overview.summary).toEqual(summary);
     expect(overview.performance.absoluteReturnPercent).toBe(25);
     expect(overview.timeline).toHaveLength(1);
+    expect(JSON.stringify({ holdings, overview })).not.toContain(
+      "sourcePayload",
+    );
   });
 
   it("keeps dashboard and asset-class holdings aligned for aggregate edges", async () => {
@@ -245,6 +249,115 @@ describeDb("import service integration", () => {
 
     expect(holdings).toHaveLength(1);
     expect(holdings[0]?.currentValue).toBe("125.0000");
+  });
+
+  it("keeps the richer snapshot regardless of same-date import order", async () => {
+    if (!db) throw new Error("TEST_DATABASE_URL is required");
+
+    for (const order of [
+      [
+        npsHoldingRow("nps_csv", 200),
+        npsHoldingRow("investment_portfolio_xlsx", 100),
+      ],
+      [
+        npsHoldingRow("investment_portfolio_xlsx", 100),
+        npsHoldingRow("nps_csv", 200),
+      ],
+    ]) {
+      const [first, second] = order;
+      if (!first || !second) throw new Error("Invalid priority test fixture");
+      const fixture = await createFixture([first], first.sourceType);
+      const ctx = createApiContext({
+        auth: { userId: fixture.clerkUserId, email: fixture.email },
+        db,
+        supabase: {} as ApiContext["supabase"],
+      });
+      await runImportEffect(
+        commitImport(ctx, fixture.membership, fixture.batchId),
+      );
+      const secondBatchId = await createBatch(
+        fixture.membership,
+        [second],
+        second.sourceType,
+      );
+      await runImportEffect(
+        commitImport(ctx, fixture.membership, secondBatchId),
+      );
+
+      const [snapshot] = await db
+        .select({
+          id: holdingSnapshots.id,
+          currentValue: holdingSnapshots.currentValue,
+          sourceType: holdingSnapshots.sourceType,
+          sourcePayload: holdingSnapshots.sourcePayload,
+        })
+        .from(holdingSnapshots)
+        .where(
+          eq(holdingSnapshots.householdId, fixture.membership.householdId),
+        );
+      expect(snapshot?.currentValue).toBe("200.0000");
+      expect(snapshot?.sourceType).toBe("nps_csv");
+      expect(snapshot?.sourcePayload).toMatchObject({
+        npsDetails: { schemaVersion: 1, tier: "I" },
+      });
+      if (!snapshot) throw new Error("Expected one NPS snapshot");
+      const detail = await appRouter
+        .createCaller(ctx)
+        .portfolio.holdingDetail({ id: snapshot.id });
+      expect(detail?.npsDetails).toMatchObject({
+        schemaVersion: 1,
+        tier: "I",
+      });
+      expect(JSON.stringify(detail)).not.toContain("sourcePayload");
+      const householdAccounts = await db
+        .select({ provider: accounts.provider, name: accounts.name })
+        .from(accounts)
+        .where(eq(accounts.householdId, fixture.membership.householdId));
+      expect(householdAccounts).toEqual([{ provider: "NPS", name: "NPS" }]);
+    }
+  });
+
+  it("serializes concurrent imports before creating shared identities", async () => {
+    if (!db) throw new Error("TEST_DATABASE_URL is required");
+    const fixture = await createFixture(
+      [npsHoldingRow("investment_portfolio_xlsx", 100)],
+      "investment_portfolio_xlsx",
+    );
+    const portalBatchId = await createBatch(
+      fixture.membership,
+      [npsHoldingRow("nps_csv", 200)],
+      "nps_csv",
+    );
+    const ctx = createApiContext({
+      auth: { userId: fixture.clerkUserId, email: fixture.email },
+      db,
+      supabase: {} as ApiContext["supabase"],
+    });
+
+    await Promise.all([
+      runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
+      runImportEffect(commitImport(ctx, fixture.membership, portalBatchId)),
+    ]);
+
+    const [householdAccounts, snapshots] = await Promise.all([
+      db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.householdId, fixture.membership.householdId)),
+      db
+        .select({
+          currentValue: holdingSnapshots.currentValue,
+          sourceType: holdingSnapshots.sourceType,
+        })
+        .from(holdingSnapshots)
+        .where(
+          eq(holdingSnapshots.householdId, fixture.membership.householdId),
+        ),
+    ]);
+    expect(householdAccounts).toHaveLength(1);
+    expect(snapshots).toEqual([
+      { currentValue: "200.0000", sourceType: "nps_csv" },
+    ]);
   });
 
   it("rejects an Import Batch that is not parsed", async () => {
@@ -486,11 +599,11 @@ describeDb("import service integration", () => {
 
   async function createFixture(
     rows: Record<string, unknown>[] = [holdingRow()],
+    sourceType: ImportSourceType = "unknown",
   ) {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const appUserId = randomUUID();
     const householdId = randomUUID();
-    const batchId = randomUUID();
     const clerkUserId = `test_${randomUUID()}`;
     const email = `${clerkUserId}@example.com`;
     householdIds.push(householdId);
@@ -510,10 +623,34 @@ describeDb("import service integration", () => {
       userId: appUserId,
       role: "owner",
     });
+    const membership = {
+      userId: clerkUserId,
+      appUserId,
+      householdId,
+      role: "owner",
+    } as const;
+    const batchId = await createBatch(membership, rows, sourceType);
+
+    return {
+      batchId,
+      clerkUserId,
+      email,
+      membership,
+    };
+  }
+
+  async function createBatch(
+    membership: { householdId: string; appUserId: string },
+    rows: Record<string, unknown>[],
+    sourceType: ImportSourceType = "unknown",
+  ) {
+    if (!db) throw new Error("TEST_DATABASE_URL is required");
+    const batchId = randomUUID();
     await db.insert(importBatches).values({
       id: batchId,
-      householdId,
-      uploadedByUserId: appUserId,
+      householdId: membership.householdId,
+      uploadedByUserId: membership.appUserId,
+      sourceType,
       originalFileName: "holdings.csv",
       expiresAt: new Date(Date.now() + 86_400_000),
       status: "parsed",
@@ -528,20 +665,51 @@ describeDb("import service integration", () => {
         })),
       );
     }
-
-    return {
-      batchId,
-      clerkUserId,
-      email,
-      membership: {
-        userId: clerkUserId,
-        appUserId,
-        householdId,
-        role: "owner",
-      },
-    };
+    return batchId;
   }
 });
+
+function npsHoldingRow(
+  sourceType: "investment_portfolio_xlsx" | "nps_csv",
+  currentValue: number,
+) {
+  return {
+    kind: "holding",
+    sourceType,
+    sourceDate: "2026-06-16",
+    accountName: "NPS",
+    provider: "NPS",
+    instrumentName: "NPS",
+    assetClass: "nps",
+    currency: "INR",
+    investedAmount: 100,
+    currentValue,
+    metadata: {
+      sourceSheet: "NPS",
+      ...(sourceType === "nps_csv"
+        ? {
+            npsDetails: {
+              schemaVersion: 1,
+              tier: "I",
+              totalContribution: 100,
+              totalWithdrawal: 0,
+              schemes: [
+                {
+                  code: "E",
+                  sourceName: "Scheme E",
+                  currentValue,
+                  units: 1,
+                  nav: currentValue,
+                },
+              ],
+              contributionEvents: [],
+              activities: [],
+            },
+          }
+        : {}),
+    },
+  } as const;
+}
 
 function holdingRow(
   overrides: Partial<{

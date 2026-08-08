@@ -23,9 +23,10 @@ import {
 import {
   aggregateSnapshotTotalsByDate,
   convertToInr,
-  enrichHoldingWithInr,
-  enrichHoldingWithInrAndXirr,
+  toPublicHoldingWithInr,
+  toPublicHoldingWithInrAndXirr,
   getUsdInrRateIfNeeded,
+  npsDetailsFromPayload,
   parseDate,
   roundMoney,
   roundPercent,
@@ -81,7 +82,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
   );
   const portfolioCurrentValue = portfolioSummary.currentValue;
   const portfolioPnl = portfolioSummary.pnlAmount;
-  const enrichedLatest = enrichHoldingWithInr(
+  const enrichedLatest = toPublicHoldingWithInr(
     {
       ...latest,
       instrumentName: selected.instrumentName,
@@ -95,6 +96,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
   const isCurrent = latestHoldings.some((holding) => holding.id === latest.id);
 
   const sourceXirr = sourceXirrFromPayload(latest.sourcePayload);
+  const npsDetails = npsDetailsFromPayload(latest.sourcePayload);
   const holdingValuations = history.map((point) =>
     toPerformanceValuation(point, usdInrRate?.rate),
   );
@@ -116,8 +118,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
 
   return {
     holding: {
-      ...selected,
-      ...latest,
+      ...enrichedLatest,
       accountName: selected.accountName,
       provider: selected.provider,
       instrumentName: selected.instrumentName,
@@ -144,7 +145,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
           : roundPercent((latestPnlInInr / portfolioPnl) * 100),
     },
     history: history.map((point) => {
-      const enriched = enrichHoldingWithInr(
+      const enriched = toPublicHoldingWithInr(
         {
           ...point,
           instrumentName: selected.instrumentName,
@@ -155,12 +156,11 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
       );
 
       return {
-        ...point,
-        currentValueInInr: enriched.currentValueInInr,
-        investedAmountInInr: enriched.investedAmountInInr,
+        ...enriched,
         pnlAmountInInr: enriched.pnlAmountInInr ?? 0,
       };
     }),
+    npsDetails,
     transactions: transactionsForHolding.map((transaction) => ({
       ...transaction,
       amount: Number(transaction.amount).toString(),
@@ -192,10 +192,10 @@ export async function buildAssetClassDetail(
     ctx.db,
   );
   const assetHoldings = assetHoldingsRaw
-    .map((holding) => enrichHoldingWithInrAndXirr(holding, usdInrRate?.rate))
+    .map((holding) => toPublicHoldingWithInrAndXirr(holding, usdInrRate?.rate))
     .sort((a, b) => b.currentValueInInr - a.currentValueInInr);
   const assetExitedHoldings = assetExitedRaw
-    .map((holding) => enrichHoldingWithInrAndXirr(holding, usdInrRate?.rate))
+    .map((holding) => toPublicHoldingWithInrAndXirr(holding, usdInrRate?.rate))
     .sort((a, b) => b.snapshotDate.localeCompare(a.snapshotDate));
   const totalCurrentValue = sum(
     assetHoldings.map((holding) => holding.currentValueInInr),
@@ -273,7 +273,7 @@ export async function buildAssetClassDetail(
 }
 
 function resolvePositionXirr(
-  holding: ReturnType<typeof enrichHoldingWithInrAndXirr>,
+  holding: ReturnType<typeof toPublicHoldingWithInrAndXirr>,
   historyByHolding: Map<string, SnapshotValuationRow[]>,
   transactionsByHolding: Map<string, InstrumentTransactionRow[]>,
   usdInrRate?: number,

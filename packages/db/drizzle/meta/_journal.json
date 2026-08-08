@@ -57,6 +57,27 @@
       "when": 1785600000000,
       "tag": "0007_committed_import_dedupe",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786194126873,
+      "tag": "0008_add_nps_csv_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786194134257,
+      "tag": "0009_normalize_nps_provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786198143482,
+      "tag": "0010_track_holding_snapshot_source",
+      "breakpoints": true
     }
   ]
 }
