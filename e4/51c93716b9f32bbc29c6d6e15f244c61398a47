@@ -1,0 +1,161 @@
+packages/importers/src/nps.test.ts
+  s_a0a451f84241c2::t_097759b4367ee1 155-168
+  s_a0a451f84241c2::t_baa26893b7ace8 1,3-27,31-34,38-47,49,51-56,60-68,70-110,114,116-117,294-411
+  s_a0a451f84241c2::t_c6d13b7bad5404 35-36,57-59,69
+  s_a0a451f84241c2::t_8b5cf5266ee5a6 169-197,201-205,235-264
+  s_a0a451f84241c2::t_94edff9c0ab746 198-200
+  s_a0a451f84241c2::t_3c491ae572f6a5 28-30,111-113,118-134,136-154,265-293
+  s_a0a451f84241c2::t_7387bebc2b2a88 48,50,115,135
+  s_a0a451f84241c2::t_d38c4967146383 206-207,217-234
+  s_a0a451f84241c2::t_1a8bed3b09cb04 208-216
+  s_a0a451f84241c2::t_6e8f15aaa4690a 2
+  s_a0a451f84241c2::t_b338537a8c433e 37
+apps/web/src/app/uploads/uploads-client.tsx
+  s_a0a451f84241c2::t_b9ba5d95dea99a 59-63
+  s_a0a451f84241c2::t_3765295af64cac 58
+apps/web/src/lib/format.ts
+  s_a0a451f84241c2::t_b9ba5d95dea99a 79
+  s_a0a451f84241c2::t_34e9d484f0fd58 90-99
+packages/api/src/services/portfolio/detail.ts
+  s_a0a451f84241c2::t_8c33c8e852226f 29,99,163
+  s_a0a451f84241c2::t_982340c94b40e2 26-27,85,148,195,198,276
+  s_a0a451f84241c2::t_e3448cd09b03f6 121,159
+packages/importers/src/utils.ts
+  s_a0a451f84241c2::t_3d08e17537d912 32,147-151,166-182,184-185,286-288
+  s_a0a451f84241c2::t_59ee270b0c83b6 152-165,183
+  s_02edfb4a257439::t_0c80c16d9fc75a 282
+  s_a0a451f84241c2::t_ca8b43a47ff10f 283-285,289
+  s_a0a451f84241c2::t_6e8f15aaa4690a 4
+packages/db/drizzle/0008_add_nps_csv_source.sql
+  s_a0a451f84241c2::t_0aad4829ea021a 1
+apps/web/src/app/dashboard/holdings/[id]/holding-detail-client.tsx
+  s_a0a451f84241c2::t_f10e7b97efe8da 273-276,278-280
+  s_a0a451f84241c2::t_1328f84834e14e 25,277,289-290
+  s_a0a451f84241c2::t_94edff9c0ab746 139,141-151
+  s_a0a451f84241c2::t_7387bebc2b2a88 134-138,140
+packages/api/src/services/portfolio/utils.test.ts
+  s_a0a451f84241c2::t_b338537a8c433e 44
+  s_a0a451f84241c2::t_3857b827970ed1 63-66
+  s_a0a451f84241c2::t_982340c94b40e2 11,16
+  s_a0a451f84241c2::t_8c33c8e852226f 2-5,13,41-43,45-56,58-62,67-74
+  s_a0a451f84241c2::t_7387bebc2b2a88 57
+  s_a0a451f84241c2::t_79115e7e77d2c5 7,17-37,39-40
+  s_a0a451f84241c2::t_94edff9c0ab746 38
+  s_a0a451f84241c2::t_7159f3fa4072dd 75
+packages/importers/src/types.ts
+  s_a0a451f84241c2::t_ca8b43a47ff10f 6,113
+  s_a0a451f84241c2::t_2702f31e5ec921 136
+packages/importers/src/utils.test.ts
+  s_a0a451f84241c2::t_baa26893b7ace8 36-40,43
+  s_a0a451f84241c2::t_ff4a49450770e2 41-42
+packages/importers/src/nps.ts
+  s_a0a451f84241c2::t_b338537a8c433e 59
+  s_a0a451f84241c2::t_ca8f9025673308 365-369,375-379,653-654,661
+  s_a0a451f84241c2::t_94edff9c0ab746 591-592
+  s_a0a451f84241c2::t_2702f31e5ec921 53,69,157-161,163,183-187,189-191,302,305,347-351,363-364,380-383,388,397,461-476,571-580,583-590,593-595,649-652,655-660,662
+  s_02edfb4a257439::t_0c80c16d9fc75a 61,72,254-257,308-312,411-417,428-433,494,553-555
+  s_a0a451f84241c2::t_ca8b43a47ff10f 2-4,7-9,11-16,19-47,49-50,52,55-58,60,62-68,70-71,73-117,119-120,152-156,162,164-182,188,192,202-232,295-301,303-304,306-307,313,327-328,354-356,386-387,389-393,395-396,398-400,405-407,409-410,418-421,423-427,434,448-450,455-456,477-484,488-493,495-534,536-552,556-558,560-566,568-570,581-582,596-606,671-675
+  s_a0a451f84241c2::t_ff7ae92f73e8e2 138,143
+  s_a0a451f84241c2::t_8b5cf5266ee5a6 394
+  s_a0a451f84241c2::t_6e8f15aaa4690a 1,6,17-18,535,607-611
+  s_a0a451f84241c2::t_6586cae51a17cc 370-374
+  s_a0a451f84241c2::t_59ee270b0c83b6 5,644
+  s_a0a451f84241c2::t_8282c06f8f0e94 10,48,51,54,118,121-137,139-142,144-151,193-194,199-201,233-253,258-269,294,314-326,329-346,352-353,357-362,384-385,401-404,408,422,435-447,451-454,457-460,485-487,559,567,612-619,623-643,645-648,663-670
+  s_a0a451f84241c2::t_d38e921cd741fc 195-198,270-293,620-622
+apps/web/src/components/nps-details-sections.tsx
+  s_a0a451f84241c2::t_cfecc37c03842a 1-83,85-94,96-107,110,112-113,116-118,120,122-124,128,130-133,135-138,140-143,145-212
+  s_a0a451f84241c2::t_d38e921cd741fc 84,95
+  s_a0a451f84241c2::t_7387bebc2b2a88 108-109,111,114-115,119,121,125-127,129,134,139,144
+packages/importers/src/xlsx.ts
+  s_a0a451f84241c2::t_8c38bb07f627a1 463
+  s_a0a451f84241c2::t_6e8f15aaa4690a 14,137,475
+packages/db/src/schema.ts
+  s_a0a451f84241c2::t_8c38bb07f627a1 47
+  s_a0a451f84241c2::t_6e8f15aaa4690a 321
+packages/importers/src/importers.test.ts
+  s_a0a451f84241c2::t_09fd20c7c7f468 217
+  s_a0a451f84241c2::t_c6d13b7bad5404 252-257
+  s_a0a451f84241c2::t_61fdc23f100be5 240-243
+  s_a0a451f84241c2::t_dffc6e57e285a1 238-239
+packages/api/src/services/import-service.integration.test.ts
+  s_a0a451f84241c2::t_a7c50d54ef39de 88-90
+  s_a0a451f84241c2::t_2c480f6bf11a55 254-258,261-262,265-268,270-277,283-288,290,292-294,298,300,302,317-319,640-644,646-648,651-652,668
+  s_a0a451f84241c2::t_f0d95a31030604 14,259-260,263-264,269,278-282,291,299,301,312-316
+  s_a0a451f84241c2::t_05933c814ae7f5 289,303-311
+  s_02edfb4a257439::t_0c80c16d9fc75a 295-297
+  s_a0a451f84241c2::t_941f142d25f8fe 320-362
+  s_a0a451f84241c2::t_1b8ae18070dee4 672-704,706-713
+  s_a0a451f84241c2::t_b8d89ae48ad5b3 602,626-638,645,653
+  s_a0a451f84241c2::t_7387bebc2b2a88 705
+  s_a0a451f84241c2::t_965538fcf52372 639
+packages/db/drizzle/0010_track_holding_snapshot_source.sql
+  s_a0a451f84241c2::t_5e758728313f42 1-6
+packages/db/src/nps-migration.integration.test.ts
+  s_a0a451f84241c2::t_a1a5ca30575d05 51-52,54,60-68,73,86,88-90,104,106,110,140,144-148,150,166,169-170
+  s_a0a451f84241c2::t_d78b1afb64d79e 1-50,53,55-59,69-72,74-85,87,91-103,105,107-109,111-139,141-143,149,151-165,167-168,171-172
+apps/web/src/lib/format.test.ts
+  s_a0a451f84241c2::t_34e9d484f0fd58 2-7,20-23
+  s_a0a451f84241c2::t_b9ba5d95dea99a 17
+  s_a0a451f84241c2::t_d07e32b286d139 24
+packages/api/src/services/portfolio/utils.ts
+  s_a0a451f84241c2::t_635d75a0db3a75 58,61,66
+  s_a0a451f84241c2::t_8c33c8e852226f 158-162
+  s_02edfb4a257439::t_0c80c16d9fc75a 2
+  s_a0a451f84241c2::t_982340c94b40e2 57,84,89
+  s_a0a451f84241c2::t_2a9cdeaa540088 163-164
+packages/api/src/services/portfolio/data.ts
+  s_a0a451f84241c2::t_44425e18ca9b5c 151,196
+packages/api/src/services/membership.ts
+  s_a0a451f84241c2::t_075815733ddd53 46-47
+packages/db/drizzle/0009_normalize_nps_provider.sql
+  s_a0a451f84241c2::t_b797bc3a0963b9 73,76,78-82,85,87,89,91,94,97
+  s_a0a451f84241c2::t_0aad4829ea021a 93,107
+  s_a0a451f84241c2::t_075815733ddd53 1-15,18-26,52-53,83,103-106,108-109,123
+  s_a0a451f84241c2::t_5e758728313f42 16-17,27-44,46-51,54-72,74-75,77,84,86,88,90,92,95-96,98-102,110-122
+  s_a0a451f84241c2::t_43c1d924c20871 45
+packages/importers/src/index.ts
+  s_a0a451f84241c2::t_ca8b43a47ff10f 2,18
+  s_a0a451f84241c2::t_6e8f15aaa4690a 15
+packages/api/src/services/import-service.ts
+  s_a0a451f84241c2::t_6e8f15aaa4690a 217,245,253-254,256-257
+  s_a0a451f84241c2::t_8c38bb07f627a1 255,258
+  s_a0a451f84241c2::t_075815733ddd53 112,114
+  s_a0a451f84241c2::t_941f142d25f8fe 110-111,113
+packages/importers/src/nps-details.ts
+  s_a0a451f84241c2::t_2702f31e5ec921 2,13-15,23,39
+  s_a0a451f84241c2::t_6e8f15aaa4690a 1,3-12,16-22,24-38,40-43
+packages/api/src/services/portfolio/from-snapshot.ts
+  s_a0a451f84241c2::t_982340c94b40e2 9,25
+packages/db/drizzle/meta/0008_snapshot.json
+  s_a0a451f84241c2::t_045de4c523600d 1-1687
+packages/db/drizzle/meta/0009_snapshot.json
+  s_a0a451f84241c2::t_a1ce0985660f98 1-1687
+packages/db/drizzle/meta/0010_snapshot.json
+  s_a0a451f84241c2::t_9bbf9fdb494883 1-1695
+packages/db/drizzle/meta/_journal.json
+  s_a0a451f84241c2::t_afd3003b9d831b 60-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e451c93716b9f32bbc29c6d6e15f244c61398a47",
+  "prompts": {},
+  "sessions": {
+    "s_02edfb4a257439": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe127-0d73-7910-af30-689917d98894",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    },
+    "s_a0a451f84241c2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe147-eb88-7c31-90aa-c89d64f2aca3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
