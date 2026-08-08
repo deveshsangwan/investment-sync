@@ -1,0 +1,33 @@
+docs/effect-phase-1.md
+  s_1a6f99d355ad84::t_1a1652fc659147 1-8,14-63,66-81,83-123
+  s_1a6f99d355ad84::t_84156c0392f173 9-13,64-65,82
+docs/effect-migration-sequence.md
+  s_1a6f99d355ad84::t_f281d6622c19ae 1-11,21-149
+  s_1a6f99d355ad84::t_dc1e5b0a2f4541 12-20
+docs/handoff-effect-backend.md
+  s_b371449cdd8d2e::t_e40922d59f86ef 1-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d4e1915ea498d35cf55201a22cfdf5d7c3e5c49a",
+  "prompts": {},
+  "sessions": {
+    "s_1a6f99d355ad84": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b454736-ed74-431c-8b7e-01abad381efe",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    },
+    "s_b371449cdd8d2e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7a7c-9171-7f53-bfde-9301ebdfa60a",
+        "model": "unknown"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
