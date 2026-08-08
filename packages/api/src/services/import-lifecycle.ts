@@ -5,12 +5,15 @@ import {
   parseImportFile,
 } from "@investment-sync/importers";
 import { and, desc, eq, inArray, isNotNull, lte } from "drizzle-orm";
+import { Clock, Effect } from "effect";
 import { getImportBucketName, validateImportFile } from "../config";
 import { logger } from "../logger";
 import {
   duplicateImportError,
+  importEffect,
   ImportConflictError,
   type ImportDependencies,
+  type ImportError,
   ImportPersistenceError,
   ImportStorageError,
   ImportValidationError,
@@ -185,48 +188,86 @@ export async function uploadAndProcessImportPromise(
   };
 }
 
-export async function cleanupExpiredImportFilesPromise(
+export function cleanupExpiredImportFiles(
   ctx: ImportDependencies,
-  now: Date,
-) {
-  const expired = await ctx.db
-    .select({ id: importBatches.id, storagePath: importBatches.storagePath })
-    .from(importBatches)
-    .where(
-      and(
-        isNotNull(importBatches.storagePath),
-        lte(importBatches.expiresAt, now),
-      ),
-    )
-    .limit(CLEANUP_BATCH_SIZE);
-  const toDelete = expired.filter(
-    (batch): batch is { id: string; storagePath: string } =>
-      typeof batch.storagePath === "string" && batch.storagePath.length > 0,
-  );
-  if (toDelete.length === 0) return { deleted: 0 };
+): Effect.Effect<{ deleted: number }, ImportError> {
+  return Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) => expiredStoredFiles(ctx, new Date(now))),
+    Effect.flatMap((toDelete) => {
+      if (toDelete.length === 0) return Effect.succeed({ deleted: 0 });
 
-  const removed = await ctx.supabase.storage
-    .from(getImportBucketName())
-    .remove(toDelete.map((batch) => batch.storagePath));
-  if (removed.error) {
-    throw new ImportStorageError({
-      message: "Expired Source Files could not be deleted",
-      cause: removed.error,
-    });
-  }
-  await ctx.db
-    .update(importBatches)
-    .set({ storagePath: null })
-    .where(
-      inArray(
-        importBatches.id,
-        toDelete.map((batch) => batch.id),
-      ),
-    );
-  return { deleted: toDelete.length };
+      return removeExpiredFiles(
+        ctx,
+        toDelete.map((batch) => batch.storagePath),
+      ).pipe(
+        // Only clear the paths once storage confirms the delete, so a failed
+        // sweep leaves rows pointing at files that still exist.
+        Effect.andThen(
+          importEffect(() =>
+            ctx.db
+              .update(importBatches)
+              .set({ storagePath: null })
+              .where(
+                inArray(
+                  importBatches.id,
+                  toDelete.map((batch) => batch.id),
+                ),
+              ),
+          ),
+        ),
+        Effect.as({ deleted: toDelete.length }),
+      );
+    }),
+  );
 }
 
-export async function listImportsPromise(
+function expiredStoredFiles(ctx: ImportDependencies, now: Date) {
+  return importEffect(() =>
+    ctx.db
+      .select({ id: importBatches.id, storagePath: importBatches.storagePath })
+      .from(importBatches)
+      .where(
+        and(
+          isNotNull(importBatches.storagePath),
+          lte(importBatches.expiresAt, now),
+        ),
+      )
+      .limit(CLEANUP_BATCH_SIZE),
+  ).pipe(
+    Effect.map((expired) =>
+      expired.filter(
+        (batch): batch is { id: string; storagePath: string } =>
+          typeof batch.storagePath === "string" && batch.storagePath.length > 0,
+      ),
+    ),
+  );
+}
+
+function removeExpiredFiles(ctx: ImportDependencies, storagePaths: string[]) {
+  return importEffect(() =>
+    ctx.supabase.storage.from(getImportBucketName()).remove(storagePaths),
+  ).pipe(
+    Effect.flatMap((removed) =>
+      removed.error
+        ? Effect.fail(
+            new ImportStorageError({
+              message: "Expired Source Files could not be deleted",
+              cause: removed.error,
+            }),
+          )
+        : Effect.void,
+    ),
+  );
+}
+
+export function listImports(
+  ctx: ImportDependencies,
+  membership: MembershipContext,
+) {
+  return importEffect(() => listImportsQuery(ctx, membership));
+}
+
+async function listImportsQuery(
   ctx: ImportDependencies,
   membership: MembershipContext,
 ) {

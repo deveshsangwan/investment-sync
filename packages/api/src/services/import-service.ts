@@ -23,11 +23,7 @@ import {
   ImportNotFoundError,
   ImportPersistenceError,
 } from "./import-errors";
-import {
-  cleanupExpiredImportFilesPromise,
-  listImportsPromise,
-  uploadAndProcessImportPromise,
-} from "./import-lifecycle";
+import { uploadAndProcessImportPromise } from "./import-lifecycle";
 import type { MembershipContext } from "./membership";
 import { clearHouseholdPortfolioCache } from "./portfolio-cache";
 import {
@@ -43,6 +39,7 @@ type ImportDatabase = Pick<
 >;
 
 export * from "./import-errors";
+export { cleanupExpiredImportFiles, listImports } from "./import-lifecycle";
 
 export function uploadAndProcessImport(
   dependencies: ImportDependencies,
@@ -77,23 +74,6 @@ export function commitImport(
           importBatchId,
           new Date(now),
         ),
-      ),
-    ),
-  );
-}
-
-export function listImports(
-  dependencies: ImportDependencies,
-  membership: MembershipContext,
-) {
-  return importEffect(() => listImportsPromise(dependencies, membership));
-}
-
-export function cleanupExpiredImportFiles(dependencies: ImportDependencies) {
-  return Clock.currentTimeMillis.pipe(
-    Effect.flatMap((now) =>
-      importEffect(() =>
-        cleanupExpiredImportFilesPromise(dependencies, new Date(now)),
       ),
     ),
   );
