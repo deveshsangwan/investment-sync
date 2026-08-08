@@ -53,9 +53,10 @@ export function uploadAndProcessImport(
     });
 
     /**
-     * From here on every failure is recorded on the batch row before it
-     * propagates. `markImportFailed` cannot fail, so the original error is
-     * always what reaches the caller.
+     * Records a typed failure on the batch row before letting it propagate.
+     * `markImportFailed` has no typed error channel, so the original error is
+     * what reaches the caller. Defects and interruption bypass this, as they
+     * bypassed the try/catch blocks it replaced.
      */
     const failBatch =
       (metadata: FailedImportMetadata = {}) =>
@@ -108,6 +109,10 @@ export function uploadAndProcessImport(
         // The stored file has to go, and how the failure is recorded depends on
         // whether it went: a file that could not be deleted keeps its path and
         // expires now, so the cleanup cron retries instead of orphaning it.
+        //
+        // The path is written back explicitly rather than left alone. The step
+        // that persists it is inside the effect that just failed, so it may
+        // never have run -- and the cron only sees rows with a non-null path.
         removeStoredFile(ctx, storagePath).pipe(
           Effect.flatMap((removed) =>
             markImportFailed(
@@ -116,7 +121,7 @@ export function uploadAndProcessImport(
               importBatchId,
               error.message,
               now,
-              removed ? { storagePath: null } : { expiresAt: now },
+              removed ? { storagePath: null } : { storagePath, expiresAt: now },
             ),
           ),
           Effect.flatMap(() => Effect.fail(error)),
@@ -498,8 +503,9 @@ type FailedImportMetadata = Partial<
 >;
 
 /**
- * Best effort by design: recording the failure must never replace the failure
- * being recorded, so this effect cannot fail.
+ * Best effort by design: recording the failure must not replace the failure
+ * being recorded, so this has no typed error channel. A defect here would still
+ * escape, but the only work left after the update is a log call.
  */
 function markImportFailed(
   ctx: ImportDependencies,
