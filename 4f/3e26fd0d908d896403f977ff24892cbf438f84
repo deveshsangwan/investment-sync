@@ -1,0 +1,24 @@
+packages/api/src/services/portfolio/overview.test.ts
+  s_02edfb4a257439::t_a0565abfc654c0 3-12,16-18,20-23,25-26,33,55,64,73-81,115,117-118
+  s_02edfb4a257439::t_4cb6eca9dc86ad 1-2,13-15,19,24,27-32,34-54,56-63,65-72,82-114,116
+packages/api/src/services/portfolio/overview.ts
+  s_02edfb4a257439::t_7e1cd1ccac8d22 38-42,49-52,55-61,67,74
+  s_02edfb4a257439::t_2bd3afbf51c7c3 43,47-48,53-54,63-66
+  s_02edfb4a257439::t_72ff9a0becca9f 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4f3e26fd0d908d896403f977ff24892cbf438f84",
+  "prompts": {},
+  "sessions": {
+    "s_02edfb4a257439": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe127-0d73-7910-af30-689917d98894",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
