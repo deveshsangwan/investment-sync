@@ -189,13 +189,13 @@ function parseSummary(rows: string[][], warnings: string[]): Summary {
     chargesIndex === undefined
       ? undefined
       : parseOptionalNumber(values[chargesIndex], "charges", warnings);
-  const xirr =
+  const xirrCell =
     xirrIndex === undefined
       ? undefined
       : headers
           .slice(xirrIndex + 1)
-          .map(parseNumber)
-          .find(isDefined);
+          .find((cell) => toStringValue(cell).trim().length > 0);
+  const xirr = parseNumber(xirrCell);
   if (xirrIndex !== undefined && xirr === undefined) {
     warnings.push("NPS Investment Summary is missing its XIRR value");
   }
@@ -346,7 +346,7 @@ function parseContributionEvents(
     ["total(rs)"],
     "NPS Contribution Details",
   );
-  const particularsIndex = requireColumnIndex(
+  const particularsIndex = findColumnIndex(
     headers,
     ["particulars"],
     "NPS Contribution Details",
@@ -373,7 +373,7 @@ function parseContributionEvents(
       warnings,
     );
     const type = contributionEventType(
-      row[particularsIndex],
+      particularsIndex === undefined ? undefined : row[particularsIndex],
       employeeAmount,
       employerAmount,
     );
@@ -664,10 +664,6 @@ function contributionEventType(
 
 function hasContent(rows: string[][]) {
   return rows.some((row) => row.some((cell) => toStringValue(cell).trim()));
-}
-
-function isDefined<T>(value: T | undefined): value is T {
-  return value !== undefined;
 }
 
 function normalizeText(value: string) {

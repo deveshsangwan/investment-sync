@@ -85,6 +85,7 @@ WITH affected_accounts AS (
   FROM "transactions" tx_row
   JOIN affected_accounts affected
     ON affected."account_id" = tx_row."account_id"
+  WHERE tx_row."instrument_id" IS NOT NULL
 )
 DELETE FROM "transactions" tx_row
 USING ranked

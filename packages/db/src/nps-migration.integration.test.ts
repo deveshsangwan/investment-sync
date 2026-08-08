@@ -95,7 +95,9 @@ describeDb("NPS account normalization migration", () => {
         ) values
           (${randomUUID()}, ${ids.householdA}, ${ids.targetAccount}, ${ids.instrument}, 'contribution', '2026-08-01', 10, 'INR'),
           (${randomUUID()}, ${ids.householdA}, ${ids.legacyAccount}, ${ids.instrument}, 'contribution', '2026-08-01', 10, 'INR'),
-          (${randomUUID()}, ${ids.householdA}, ${ids.legacyAccount}, ${ids.instrument}, 'contribution', '2026-07-01', 20, 'INR')
+          (${randomUUID()}, ${ids.householdA}, ${ids.legacyAccount}, ${ids.instrument}, 'contribution', '2026-07-01', 20, 'INR'),
+          (${randomUUID()}, ${ids.householdA}, ${ids.targetAccount}, null, 'contribution', '2026-06-01', 30, 'INR'),
+          (${randomUUID()}, ${ids.householdA}, ${ids.legacyAccount}, null, 'contribution', '2026-06-01', 30, 'INR')
       `;
 
       for (const statement of statements) await tx.unsafe(statement);
@@ -127,9 +129,21 @@ describeDb("NPS account normalization migration", () => {
         select account_id::text as "accountId"
         from transactions
         where household_id = ${ids.householdA}
+          and instrument_id is not null
         order by trade_date
       `;
       expect(transactionAccounts).toEqual([
+        { accountId: ids.targetAccount },
+        { accountId: ids.targetAccount },
+      ]);
+
+      const nullInstrumentTransactions = await tx<Array<{ accountId: string }>>`
+        select account_id::text as "accountId"
+        from transactions
+        where household_id = ${ids.householdA}
+          and instrument_id is null
+      `;
+      expect(nullInstrumentTransactions).toEqual([
         { accountId: ids.targetAccount },
         { accountId: ids.targetAccount },
       ]);

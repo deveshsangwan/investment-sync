@@ -107,8 +107,8 @@ async function commitImportPromise(
 ) {
   const committed = await ctx.db.transaction(async (tx) => {
     const db: ImportDatabase = tx;
-    // ponytail: one import lock prevents identity races; shard by normalized
-    // account/instrument keys if commit throughput ever becomes measurable.
+    // ponytail: the constant key serializes every import commit to prevent
+    // identity races; scope by normalized identities when throughput requires it.
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtext('investment-sync-import-commit'))`,
     );

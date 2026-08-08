@@ -57,9 +57,7 @@ export function NpsDetailsSections({
                   </TableCell>
                   <TableCell className="number">
                     {formatPercent(
-                      totalValue > 0
-                        ? (scheme.currentValue / totalValue) * 100
-                        : 0,
+                      schemeWeight(scheme.currentValue, totalValue),
                     )}
                   </TableCell>
                   <TableCell className="number">
@@ -91,9 +89,7 @@ export function NpsDetailsSections({
                 </p>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                {formatPercent(
-                  totalValue > 0 ? (scheme.currentValue / totalValue) * 100 : 0,
-                )}
+                {formatPercent(schemeWeight(scheme.currentValue, totalValue))}
                 {" / "}
                 {formatQuantity(scheme.units)} units / NAV{" "}
                 {formatCurrency(scheme.nav, currency)}
@@ -190,6 +186,12 @@ export function NpsDetailsSections({
       </section>
     </>
   );
+}
+
+function schemeWeight(value: number, totalValue: number) {
+  return Number.isFinite(totalValue) && totalValue > 0
+    ? (value / totalValue) * 100
+    : undefined;
 }
 
 function NpsAmount({

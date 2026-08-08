@@ -152,6 +152,55 @@ describe("NPS portal CSV importer", () => {
     );
   });
 
+  it("infers contributions when the optional particulars column is absent", () => {
+    const content = npsCsv()
+      .replace(
+        "Date,Particulars,Uploaded By,Employee Contribution(Rs)",
+        "Date,Uploaded By,Employee Contribution(Rs)",
+      )
+      .replace("01/08/2026,Contribution,Portal,100", "01/08/2026,Portal,100");
+    const result = parseImportFile({
+      fileName: "nps.csv",
+      content: Buffer.from(content),
+    });
+    const holding = result.rows[0];
+    if (!holding || holding.kind !== "holding") {
+      throw new Error("Expected one normalized NPS holding");
+    }
+
+    expect(
+      npsDetailsSchema.parse(holding.metadata.npsDetails).contributionEvents,
+    ).toEqual([
+      {
+        type: "contribution",
+        date: "2026-08-01",
+        employeeAmount: 100,
+        employerAmount: 0,
+        totalAmount: 100,
+      },
+    ]);
+  });
+
+  it("does not read XIRR from a later summary header cell", () => {
+    const content = npsCsv().replace(
+      "Return on Investment(XIRR),10%,",
+      "Return on Investment(XIRR),invalid,42%,",
+    );
+    const result = parseImportFile({
+      fileName: "nps.csv",
+      content: Buffer.from(content),
+    });
+    const holding = result.rows[0];
+    if (!holding || holding.kind !== "holding") {
+      throw new Error("Expected one normalized NPS holding");
+    }
+
+    expect(holding.metadata).not.toHaveProperty("xirr");
+    expect(result.warnings).toContain(
+      "NPS Investment Summary is missing its XIRR value",
+    );
+  });
+
   it("normalizes typographic apostrophes and warns on malformed data rows", () => {
     const content = npsCsv()
       .replace("Employer's Contribution(Rs)", "Employer’s Contribution(Rs)")

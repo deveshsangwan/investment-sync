@@ -284,7 +284,7 @@ describeDb("import service integration", () => {
         commitImport(ctx, fixture.membership, secondBatchId),
       );
 
-      const [snapshot] = await db
+      const snapshots = await db
         .select({
           id: holdingSnapshots.id,
           currentValue: holdingSnapshots.currentValue,
@@ -295,12 +295,14 @@ describeDb("import service integration", () => {
         .where(
           eq(holdingSnapshots.householdId, fixture.membership.householdId),
         );
-      expect(snapshot?.currentValue).toBe("200.0000");
-      expect(snapshot?.sourceType).toBe("nps_csv");
-      expect(snapshot?.sourcePayload).toMatchObject({
+      expect(snapshots).toHaveLength(1);
+      const [snapshot] = snapshots;
+      if (!snapshot) throw new Error("Expected one NPS snapshot");
+      expect(snapshot.currentValue).toBe("200.0000");
+      expect(snapshot.sourceType).toBe("nps_csv");
+      expect(snapshot.sourcePayload).toMatchObject({
         npsDetails: { schemaVersion: 1, tier: "I" },
       });
-      if (!snapshot) throw new Error("Expected one NPS snapshot");
       const detail = await appRouter
         .createCaller(ctx)
         .portfolio.holdingDetail({ id: snapshot.id });
