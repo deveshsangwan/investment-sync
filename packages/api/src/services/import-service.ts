@@ -569,6 +569,10 @@ function requiredMapValue(
   label: string,
 ): string {
   const value = values.get(key);
-  if (!value) throw new Error(`Failed to resolve ${label} for import row`);
+  if (!value) {
+    throw new ImportPersistenceError({
+      message: `Failed to resolve ${label} for import row`,
+    });
+  }
   return value;
 }
