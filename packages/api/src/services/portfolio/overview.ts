@@ -35,21 +35,43 @@ async function buildPortfolioOverviewUncached(ctx: PortfolioContext) {
     ],
     ctx.db,
   );
-  const timeline =
+  const summary = buildPortfolioSummaryFromSnapshot(
+    latestHoldings,
+    usdInrRate?.rate,
+    usdInrRate ? [usdInrRate] : [],
+  );
+  const historicalTimeline =
     valuations.length > 0
       ? buildPortfolioTimelineFromValuations(valuations, usdInrRate?.rate)
       : await holdingSnapshotTimelineRows(ctx);
+  const lastTimelinePoint = historicalTimeline.at(-1);
+  let timeline = historicalTimeline;
+  if (
+    summary.asOfDate &&
+    (!lastTimelinePoint || summary.asOfDate >= lastTimelinePoint.snapshotDate)
+  ) {
+    // ponytail: current carries older account snapshots forward; use synchronized
+    // valuations if point-in-time precision becomes necessary.
+    const currentPoint = {
+      snapshotDate: summary.asOfDate,
+      investedAmount: summary.investedAmount,
+      currentValue: summary.currentValue,
+      pnlAmount: summary.pnlAmount,
+      currency: "INR" as const,
+    };
+
+    timeline =
+      lastTimelinePoint?.snapshotDate === summary.asOfDate
+        ? [...historicalTimeline.slice(0, -1), currentPoint]
+        : [...historicalTimeline, currentPoint];
+  }
 
   return {
     holdings: buildPortfolioHoldingsFromSnapshot(
       latestHoldings,
       usdInrRate?.rate,
     ),
-    summary: buildPortfolioSummaryFromSnapshot(
-      latestHoldings,
-      usdInrRate?.rate,
-      usdInrRate ? [usdInrRate] : [],
-    ),
+    summary,
     performance: buildPortfolioPerformanceFromSnapshot(
       latestHoldings,
       valuations,
