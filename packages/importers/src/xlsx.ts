@@ -11,6 +11,7 @@ import type {
 import {
   findHeaderRow,
   INVESTMENT_PORTFOLIO_SUMMARY_SHEET,
+  NPS_SOURCE_SHEET,
   objectFromRow,
   parseNumber,
   parseRequiredNumber,
@@ -133,7 +134,7 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
 
 export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
   sourceType: "investment_portfolio_xlsx",
-  parserVersion: "investment-portfolio-workbook-v4",
+  parserVersion: "investment-portfolio-workbook-v5",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -459,7 +460,7 @@ function parseNps(
       sourceType: "investment_portfolio_xlsx",
       sourceDate,
       accountName: "NPS",
-      provider: "Manual Workbook",
+      provider: "NPS",
       instrumentName: "NPS",
       assetClass: "nps",
       currency: "INR",
@@ -471,7 +472,7 @@ function parseNps(
           ? undefined
           : (pnlAmount / investedAmount) * 100,
       metadata: {
-        sourceSheet: "NPS",
+        sourceSheet: NPS_SOURCE_SHEET,
         contributions: parseNumber(pick(record, ["count", "contributions"])),
         withdrawals: parseNumber(pick(record, ["withdrawals", "withdrawal"])),
         charges: parseNumber(pick(record, ["charges"])),

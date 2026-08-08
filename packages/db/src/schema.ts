@@ -44,6 +44,7 @@ export const importStatusEnum = pgEnum("import_status", [
 
 export const importSourceEnum = pgEnum("import_source", [
   "investment_portfolio_xlsx",
+  "nps_csv",
   "tickertape_stock_csv",
   "tickertape_mutual_fund_csv",
   "vested_drivewealth_xlsx",
@@ -317,6 +318,7 @@ export const holdingSnapshots = pgTable(
     importBatchId: uuid("import_batch_id").references(() => importBatches.id, {
       onDelete: "set null",
     }),
+    sourceType: importSourceEnum("source_type").notNull().default("unknown"),
     snapshotDate: date("snapshot_date").notNull(),
     quantity: numeric("quantity", { precision: 28, scale: 10 }),
     investedAmount: numeric("invested_amount", {

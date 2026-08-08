@@ -1,4 +1,5 @@
 import type { Database } from "@investment-sync/db";
+import { npsDetailsSchema, type NpsDetails } from "@investment-sync/importers";
 import { getUsdInrRate } from "../currency-rates";
 import { isAggregateHolding } from "./aggregates";
 import type { Currency, CurrentHoldingRow } from "./types";
@@ -53,15 +54,16 @@ export function convertToInr(
   return 0;
 }
 
-export function enrichHoldingWithInr(
-  holding: CurrentHoldingRow,
+export function toPublicHoldingWithInr<T extends CurrentHoldingRow>(
+  holding: T,
   usdInrRate?: number,
 ) {
+  const { sourcePayload: _sourcePayload, ...publicHolding } = holding;
   const pnlAmount =
     holding.pnlAmount === null ? null : Number(holding.pnlAmount);
 
   return {
-    ...holding,
+    ...publicHolding,
     currentValueInInr: convertToInr(
       Number(holding.currentValue),
       holding.currency,
@@ -79,12 +81,12 @@ export function enrichHoldingWithInr(
   };
 }
 
-export function enrichHoldingWithInrAndXirr(
+export function toPublicHoldingWithInrAndXirr(
   holding: CurrentHoldingRow,
   usdInrRate?: number,
 ) {
   return {
-    ...enrichHoldingWithInr(holding, usdInrRate),
+    ...toPublicHoldingWithInr(holding, usdInrRate),
     sourceXirr: sourceXirrFromPayload(holding.sourcePayload),
   };
 }
@@ -151,6 +153,13 @@ export function sourceXirrFromPayload(payload?: Record<string, unknown>) {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+export function npsDetailsFromPayload(
+  payload?: Record<string, unknown>,
+): NpsDetails | null {
+  const parsed = npsDetailsSchema.safeParse(payload?.npsDetails);
+  return parsed.success ? parsed.data : null;
 }
 
 export type HoldingPositionIdentity = {

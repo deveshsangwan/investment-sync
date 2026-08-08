@@ -148,7 +148,7 @@ export async function assetClassSnapshotRows(
 
 export async function historyByHoldingPositions(
   ctx: PortfolioContext,
-  holdings: CurrentHoldingRow[],
+  holdings: Array<Pick<CurrentHoldingRow, "instrumentId">>,
 ): Promise<Map<string, SnapshotValuationRow[]>> {
   const instrumentIds = [
     ...new Set(holdings.map((holding) => holding.instrumentId)),
@@ -193,7 +193,7 @@ export async function historyByHoldingPositions(
 
 export async function transactionsByHoldingPositions(
   ctx: PortfolioContext,
-  holdings: CurrentHoldingRow[],
+  holdings: Array<Pick<CurrentHoldingRow, "instrumentId">>,
 ): Promise<Map<string, InstrumentTransactionRow[]>> {
   const instrumentIds = [
     ...new Set(holdings.map((holding) => holding.instrumentId)),

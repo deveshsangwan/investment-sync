@@ -1,4 +1,5 @@
 import type { ImportFile, ParseResult, PortfolioImporter } from "./types";
+import { npsPortalCsvImporter } from "./nps";
 import {
   tickertapeMutualFundImporter,
   tickertapeStockImporter,
@@ -11,8 +12,10 @@ import {
 export * from "./types";
 export * from "./utils";
 export * from "./import-validation";
+export * from "./nps-details";
 
 export const importers: PortfolioImporter[] = [
+  npsPortalCsvImporter,
   tickertapeStockImporter,
   tickertapeMutualFundImporter,
   vestedDrivewealthImporter,

@@ -43,8 +43,8 @@ const defaultAccounts = [
   },
   {
     name: "NPS",
-    provider: "Manual",
-    accountType: "retirement",
+    provider: "NPS",
+    accountType: "nps",
     currency: "INR" as const,
   },
   {

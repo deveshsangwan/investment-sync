@@ -1,6 +1,7 @@
 import { parse } from "csv-parse/sync";
 
 export const INVESTMENT_PORTFOLIO_SUMMARY_SHEET = "Investment Portfolio";
+export const NPS_SOURCE_SHEET = "NPS";
 
 export function parseCsv(content: Buffer): string[][] {
   return parse(content.toString("utf8"), {
@@ -28,6 +29,7 @@ export function toStringValue(value: unknown): string {
 export function normalizeHeader(value: unknown): string {
   return toStringValue(value)
     .replace(/\u20b9/g, "rs")
+    .replace(/[‘’]/g, "'")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -142,6 +144,45 @@ export function findHeaderRow(
   });
 }
 
+export function requireColumnIndex(
+  headers: unknown[],
+  aliases: string[],
+  sectionName: string,
+): number {
+  const index = findColumnIndex(headers, aliases, sectionName);
+  if (index === undefined) {
+    throw new Error(
+      `${sectionName} is missing required field: ${aliases[0] ?? "unknown"}`,
+    );
+  }
+  return index;
+}
+
+export function findColumnIndex(
+  headers: unknown[],
+  aliases: string[],
+  sectionName: string,
+): number | undefined {
+  const normalizedAliases = aliases.map(normalizeHeader);
+  const matches = headers.flatMap((header, index) => {
+    const candidate = normalizeHeader(header);
+    const matchesAlias = normalizedAliases.some(
+      (alias) =>
+        candidate === alias ||
+        candidate.startsWith(`${alias} `) ||
+        candidate.startsWith(`${alias}(`),
+    );
+    return matchesAlias ? [index] : [];
+  });
+
+  if (matches.length > 1) {
+    throw new Error(
+      `${sectionName} has duplicate field: ${aliases[0] ?? "unknown"}`,
+    );
+  }
+  return matches[0];
+}
+
 /**
  * Same as `findHeaderRow`, but for a sheet that is known to have rows and so
  * must have a header. Renaming an anchor column is a schema change, not an
@@ -238,9 +279,14 @@ export function requireColumns(
 }
 
 export function sourceDateFromText(text: string): string | undefined {
-  const match = text.match(/(\d{1,2})[-\s]([A-Za-z]{3,})[-\s](\d{2,4})/);
-  if (!match) return undefined;
-  const [, day = "", month = "", year = ""] = match;
+  const dayFirst = text.match(/(\d{1,2})[-\s]([A-Za-z]{3,})[-\s](\d{2,4})/);
+  const monthFirst = text.match(
+    /([A-Za-z]{3,})[-\s]+(\d{1,2})[-\s,]+(\d{2,4})/,
+  );
+  const [day, month, year] = dayFirst
+    ? [dayFirst[1], dayFirst[2], dayFirst[3]]
+    : [monthFirst?.[2], monthFirst?.[1], monthFirst?.[3]];
+  if (!day || !month || !year) return undefined;
   const monthNumber = monthNumberFromName(month);
   if (!monthNumber) return undefined;
   return validDateParts(normalizeCalendarYear(year), monthNumber, Number(day));

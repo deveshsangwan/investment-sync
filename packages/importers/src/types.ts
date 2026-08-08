@@ -3,6 +3,7 @@ import { isValidCalendarDateParts } from "./utils";
 
 export type ImportSourceType =
   | "investment_portfolio_xlsx"
+  | "nps_csv"
   | "tickertape_stock_csv"
   | "tickertape_mutual_fund_csv"
   | "vested_drivewealth_xlsx"
@@ -109,6 +110,7 @@ export interface PortfolioImporter {
 
 export const importSourceTypeSchema = z.enum([
   "investment_portfolio_xlsx",
+  "nps_csv",
   "tickertape_stock_csv",
   "tickertape_mutual_fund_csv",
   "vested_drivewealth_xlsx",
@@ -131,7 +133,7 @@ export const assetClassSchema = z.enum([
 export const currencySchema = z.enum(["INR", "USD", "BTC", "ETH", "OTHER"]);
 
 const metadataSchema = z.record(z.unknown());
-const isoDateSchema = z
+export const isoDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((value) => {
