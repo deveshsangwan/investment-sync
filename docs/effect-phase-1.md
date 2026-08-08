@@ -2,6 +2,24 @@
 
 Companion to `effect-migration-sequence.md`. Read that first for why this phase goes first.
 
+**Status: done.** Branch `refactor/effect-import-lifecycle`, on top of the safety net in
+`test/import-coverage-pre-effect`. `import-lifecycle.ts` is native Effect; 154 workspace
+tests, `typecheck`, `lint` and a full `build` all pass. No adapter changed — the Next
+routes and tRPC router call the same exported names, which is the parity result that
+matters.
+
+Outcome notes, where reality differed from the plan below:
+
+- PRs landed 1.3 → 1.2 → 1.1; they are independent, and the order does not matter.
+- `markImportFailed` and `removeStoredFile` gained `never` error channels. That is what
+  makes `failBatch` safe rather than just tidy: recording a failure can no longer replace
+  the failure being recorded.
+- One real edge case fixed rather than preserved: if the storage delete call itself
+  rejected, the old code propagated _that_ error instead of the original and never
+  recorded the failure at all. `removeStoredFile` now reports `false`.
+- `writeParsedRowsInTransaction` stays Promise-shaped alongside `commitImportPromise`, for
+  the same reason. Both convert in Phase 2 behind a Database service.
+
 ## PR 1.0 — Safety net (done)
 
 The suite that has to stay green through every PR below.
