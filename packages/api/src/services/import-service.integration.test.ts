@@ -90,6 +90,56 @@ describeDb("import service integration", () => {
     );
   });
 
+  it("carries a workbook-only holding through later partial imports", async () => {
+    if (!db) throw new Error("TEST_DATABASE_URL is required");
+    const fixture = await createFixture(
+      [
+        {
+          kind: "holding",
+          sourceType: "investment_portfolio_xlsx",
+          sourceDate: "2026-05-15",
+          accountName: "EPF",
+          provider: "Manual Workbook",
+          instrumentName: "EPF Summary",
+          assetClass: "other",
+          currency: "INR",
+          investedAmount: 172_800,
+          currentValue: 182_816,
+          metadata: {
+            isAggregate: true,
+            sourceSheet: "Investment Portfolio",
+          },
+        },
+      ],
+      "investment_portfolio_xlsx",
+    );
+    const ctx = createApiContext({
+      auth: { userId: fixture.clerkUserId, email: fixture.email },
+      db,
+      supabase: {} as ApiContext["supabase"],
+    });
+    await runImportEffect(
+      commitImport(ctx, fixture.membership, fixture.batchId),
+    );
+    const stockBatchId = await createBatch(
+      fixture.membership,
+      [holdingRow({ sourceDate: "2026-08-08" })],
+      "tickertape_stock_csv",
+    );
+    await runImportEffect(commitImport(ctx, fixture.membership, stockBatchId));
+
+    const overview = await appRouter.createCaller(ctx).portfolio.overview();
+
+    expect(
+      overview.holdings.map((holding) => holding.instrumentName).sort(),
+    ).toEqual(["ABC", "EPF Summary"]);
+    expect(overview.summary).toMatchObject({
+      investedAmount: 172_900,
+      currentValue: 182_941,
+      asOfDate: "2026-08-08",
+    });
+  });
+
   it("keeps dashboard and asset-class holdings aligned for aggregate edges", async () => {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const fixture = await createFixture([
