@@ -1,0 +1,21 @@
+packages/api/src/services/import-errors.test.ts
+  s_1a6f99d355ad84::t_2549f4d3b5e31b 1-103,107-111,115-124,126-152
+  s_1a6f99d355ad84::t_990bfe38398f49 112-114
+  s_1a6f99d355ad84::t_c50185bad81314 104-106,125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a9c885c4f3a02c175c9badd5225ba7ec57b8a5f3",
+  "prompts": {},
+  "sessions": {
+    "s_1a6f99d355ad84": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b454736-ed74-431c-8b7e-01abad381efe",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
