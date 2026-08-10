@@ -1,0 +1,24 @@
+packages/api/src/services/import-lifecycle.ts
+  s_1a6f99d355ad84::t_62e72333f8f45e 56-59
+  s_1a6f99d355ad84::t_449f28223a4c49 112-115,124
+  s_1a6f99d355ad84::t_4b8c0d117c3ab1 506-508
+packages/api/src/services/import-lifecycle.integration.test.ts
+  s_1a6f99d355ad84::t_9cca65b159f3ad 350-352
+  s_1a6f99d355ad84::t_ed0e2cce50f4cd 340-349,353-379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6679d24ac4577c1283904d687b210f424d34bc5b",
+  "prompts": {},
+  "sessions": {
+    "s_1a6f99d355ad84": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b454736-ed74-431c-8b7e-01abad381efe",
+        "model": "claude-opus-5"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
