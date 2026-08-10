@@ -116,11 +116,15 @@ const failBatch =
 Then each step is `parseFile(input).pipe(failBatch())`, the duplicate check is
 `failBatch({ sourceType, parserVersion, rowCount, warnings })`, and so on.
 
-**Do not reach for `Effect.acquireRelease` on the uploaded file.** The failure record
-depends on whether the release _succeeded_ (`storagePath: null` vs `expiresAt: now`), and
-`acquireRelease` deliberately hides the release outcome from the caller. Use an explicit
-compensation effect on the persistence step — the branch is real domain behavior, not
-boilerplate to abstract away.
+**On the uploaded file, use an explicit compensation effect rather than
+`Effect.acquireRelease`.** The failure record branches on whether the delete succeeded
+(`storagePath: null` vs keeping the path and expiring now), and a plain `acquireRelease`
+finalizer discards its own result.
+
+That reasoning was too strong, and the review corrected it: `acquireUseRelease` passes the
+`Exit` to the release function, which can observe its own cleanup internally before
+choosing the metadata. See "Carried into Phase 2" above — the switch is deferred, not
+rejected.
 
 `markImportFailed` swallows its own errors today (logs and continues). Keep that: it is a
 best-effort record, and letting it fail would mask the original error. In Effect that is
