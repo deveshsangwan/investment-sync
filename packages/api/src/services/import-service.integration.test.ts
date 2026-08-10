@@ -921,8 +921,11 @@ describeDb("import service integration", () => {
         commitImport(ctx, fixture.membership, secondBatchId),
       );
 
-      // A cross-request cache lives for 30s; the commit must invalidate it or
-      // the dashboard shows stale totals right after an import.
+      // The module-global householdPortfolioCache lives for 30s across
+      // contexts, and the commit must invalidate it or the dashboard shows
+      // stale totals right after an import. A fresh context is required to
+      // reach it: ctx.cache is request-scoped and deliberately never cleared,
+      // so reusing ctx would test the wrong cache and read 125 forever.
       const freshCtx = contextOf(fixture);
       expect(
         (await appRouter.createCaller(freshCtx).portfolio.summary())
