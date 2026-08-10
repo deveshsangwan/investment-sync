@@ -1,15 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
-  createDatabase,
   accounts,
   holdingSnapshots,
-  households,
-  householdMembers,
   importBatches,
   importRows,
   instruments,
-  users,
+  portfolioValuations,
+  transactions,
+  type Database,
 } from "@investment-sync/db";
 import type { ImportSourceType } from "@investment-sync/importers";
 import { eq } from "drizzle-orm";
@@ -22,29 +21,31 @@ import {
   runImportEffect,
   uploadAndProcessImport,
 } from "./import-service";
+import {
+  createBatch as createBatchIn,
+  createFixture as createFixtureIn,
+  createHousehold,
+  fakeSupabase,
+  holdingRow,
+  npsHoldingRow,
+  requireTestDatabaseUrlInCi,
+  resetDatabase,
+  testDatabase,
+  testDatabaseUrl,
+  tickertapeCsv,
+  transactionRow,
+  valuationRow,
+} from "./import-test-support";
 
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-
-// Skipping locally is fine; skipping in CI is how this suite silently stopped
-// running before. Fail loudly instead so a renamed or dropped env var breaks
-// the build rather than turning the database tests back off unnoticed.
-if (process.env.CI && !testDatabaseUrl) {
-  throw new Error(
-    "TEST_DATABASE_URL must be set in CI so the import integration suite runs",
-  );
-}
+requireTestDatabaseUrlInCi();
 
 const describeDb = testDatabaseUrl ? describe : describe.skip;
 
 describeDb("import service integration", () => {
-  const db = testDatabaseUrl ? createDatabase(testDatabaseUrl) : undefined;
-  const householdIds: string[] = [];
+  const db = testDatabase() as Database;
 
-  afterEach(async () => {
-    if (!db) return;
-    for (const householdId of householdIds.splice(0)) {
-      await db.delete(households).where(eq(households.id, householdId));
-    }
+  beforeEach(async () => {
+    await resetDatabase(db);
   });
 
   it("commits rows transactionally and exposes matching overview data", async () => {
@@ -649,186 +650,325 @@ describeDb("import service integration", () => {
     expect(supabase.remove).toHaveBeenCalledWith(["test/source.csv"]);
   });
 
-  async function createFixture(
+  describe("commit rejections", () => {
+    it("hides another Household's Import Batch behind not-found", async () => {
+      const fixture = await createFixture();
+      const intruder = await createHousehold(db);
+      const ctx = createApiContext({
+        auth: { userId: intruder.userId, email: null },
+        db,
+        supabase: {} as ApiContext["supabase"],
+      });
+
+      // Not "forbidden": a cross-Household id must not be confirmed to exist.
+      await expect(
+        runImportEffect(commitImport(ctx, intruder, fixture.batchId)),
+      ).rejects.toThrow("Import Batch was not found");
+
+      const [batch] = await db
+        .select({ status: importBatches.status })
+        .from(importBatches)
+        .where(eq(importBatches.id, fixture.batchId));
+      expect(batch?.status).toBe("parsed");
+    });
+
+    it("rejects an unknown Import Batch id", async () => {
+      const fixture = await createFixture();
+      const ctx = contextOf(fixture);
+
+      await expect(
+        runImportEffect(commitImport(ctx, fixture.membership, randomUUID())),
+      ).rejects.toThrow("Import Batch was not found");
+    });
+
+    it("rejects a batch whose stored rows do not match its row count", async () => {
+      const fixture = await createFixture([holdingRow()]);
+      await db
+        .update(importBatches)
+        .set({ rowCount: 2 })
+        .where(eq(importBatches.id, fixture.batchId));
+      const ctx = contextOf(fixture);
+
+      await expect(
+        runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
+      ).rejects.toThrow("Import Batch rows are incomplete");
+    });
+
+    it("rejects a parsed batch that has no rows at all", async () => {
+      const fixture = await createFixture([]);
+      const ctx = contextOf(fixture);
+
+      await expect(
+        runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
+      ).rejects.toThrow("Import Batch rows are incomplete");
+    });
+
+    it("rejects a row whose stored payload no longer validates", async () => {
+      const fixture = await createFixture([
+        holdingRow(),
+        { kind: "holding", instrumentName: "" },
+      ]);
+      const ctx = contextOf(fixture);
+
+      await expect(
+        runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
+      ).rejects.toThrow("Import Batch row 2 is invalid");
+    });
+
+    it("writes nothing when a commit fails part way through", async () => {
+      const fixture = await createFixture([
+        holdingRow(),
+        { kind: "holding", instrumentName: "" },
+      ]);
+      const ctx = contextOf(fixture);
+
+      await expect(
+        runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
+      ).rejects.toThrow("Import Batch row 2 is invalid");
+
+      // The whole commit is one transaction: no accounts, instruments or
+      // snapshots may survive a partial failure.
+      expect(await countIn(accounts, fixture.membership.householdId)).toBe(0);
+      expect(
+        await countIn(holdingSnapshots, fixture.membership.householdId),
+      ).toBe(0);
+      const remainingInstruments = await db
+        .select({ id: instruments.id })
+        .from(instruments);
+      expect(remainingInstruments).toHaveLength(0);
+      const [batch] = await db
+        .select({
+          status: importBatches.status,
+          committedAt: importBatches.committedAt,
+        })
+        .from(importBatches)
+        .where(eq(importBatches.id, fixture.batchId));
+      expect(batch).toMatchObject({ status: "parsed", committedAt: null });
+      const [row] = await db
+        .select({ isCommitted: importRows.isCommitted })
+        .from(importRows)
+        .where(eq(importRows.importBatchId, fixture.batchId));
+      expect(row?.isCommitted).toBe(false);
+    });
+  });
+
+  describe("commit bookkeeping", () => {
+    it("flags every row committed and stamps committedAt", async () => {
+      const fixture = await createFixture([
+        holdingRow({ symbol: "AAA", instrumentName: "AAA" }),
+        holdingRow({ symbol: "BBB", instrumentName: "BBB" }),
+      ]);
+      const ctx = contextOf(fixture);
+      const before = Date.now();
+
+      await runImportEffect(
+        commitImport(ctx, fixture.membership, fixture.batchId),
+      );
+
+      const rows = await db
+        .select({ isCommitted: importRows.isCommitted })
+        .from(importRows)
+        .where(eq(importRows.importBatchId, fixture.batchId));
+      expect(rows).toHaveLength(2);
+      expect(rows.every((row) => row.isCommitted)).toBe(true);
+
+      const [batch] = await db
+        .select({ committedAt: importBatches.committedAt })
+        .from(importBatches)
+        .where(eq(importBatches.id, fixture.batchId));
+      expect(batch?.committedAt?.getTime()).toBeGreaterThanOrEqual(
+        before - 5_000,
+      );
+    });
+
+    it("commits transaction rows and dedupes a re-import of the same trade", async () => {
+      const fixture = await createFixture([
+        transactionRow({ amount: 100, tradeDate: "2026-06-16" }),
+        transactionRow({
+          amount: 250,
+          tradeDate: "2026-06-17",
+          type: "sell",
+        }),
+      ]);
+      const ctx = contextOf(fixture);
+
+      const result = await runImportEffect(
+        commitImport(ctx, fixture.membership, fixture.batchId),
+      );
+      expect(result.committed).toBe(2);
+
+      const committed = await db
+        .select({
+          type: transactions.type,
+          amount: transactions.amount,
+          tradeDate: transactions.tradeDate,
+          quantity: transactions.quantity,
+        })
+        .from(transactions)
+        .where(eq(transactions.householdId, fixture.membership.householdId))
+        .orderBy(transactions.tradeDate);
+      expect(committed).toEqual([
+        {
+          type: "buy",
+          amount: "100.0000",
+          tradeDate: "2026-06-16",
+          quantity: "1.0000000000",
+        },
+        {
+          type: "sell",
+          amount: "250.0000",
+          tradeDate: "2026-06-17",
+          quantity: "1.0000000000",
+        },
+      ]);
+
+      // Same identity tuple in a second batch updates rather than duplicates.
+      const repeatBatchId = await createBatch(fixture.membership, [
+        transactionRow({ amount: 100, tradeDate: "2026-06-16", quantity: 7 }),
+      ]);
+      await runImportEffect(
+        commitImport(ctx, fixture.membership, repeatBatchId),
+      );
+      const afterRepeat = await db
+        .select({ quantity: transactions.quantity })
+        .from(transactions)
+        .where(eq(transactions.householdId, fixture.membership.householdId))
+        .orderBy(transactions.tradeDate);
+      expect(afterRepeat).toHaveLength(2);
+      expect(afterRepeat[0]?.quantity).toBe("7.0000000000");
+    });
+
+    it("commits valuation rows and derives a missing pnl amount", async () => {
+      const fixture = await createFixture(
+        [
+          valuationRow({
+            valuationDate: "2026-06-16",
+            investedAmount: 100,
+            currentValue: 125,
+          }),
+          valuationRow({
+            valuationDate: "2026-06-17",
+            investedAmount: 100,
+            currentValue: 90,
+            pnlAmount: -25,
+          }),
+        ],
+        "investment_portfolio_xlsx",
+      );
+      const ctx = contextOf(fixture);
+
+      const result = await runImportEffect(
+        commitImport(ctx, fixture.membership, fixture.batchId),
+      );
+      expect(result.committed).toBe(2);
+
+      const valuations = await db
+        .select({
+          valuationDate: portfolioValuations.valuationDate,
+          pnlAmount: portfolioValuations.pnlAmount,
+        })
+        .from(portfolioValuations)
+        .where(
+          eq(portfolioValuations.householdId, fixture.membership.householdId),
+        )
+        .orderBy(portfolioValuations.valuationDate);
+      expect(valuations).toEqual([
+        // Derived as currentValue - investedAmount when the row omits it.
+        { valuationDate: "2026-06-16", pnlAmount: "25.0000" },
+        // An explicit value is kept even when it disagrees with the subtraction.
+        { valuationDate: "2026-06-17", pnlAmount: "-25.0000" },
+      ]);
+    });
+
+    it("commits a mixed batch of holdings, transactions and valuations", async () => {
+      const fixture = await createFixture([
+        holdingRow(),
+        transactionRow(),
+        valuationRow(),
+      ]);
+      const ctx = contextOf(fixture);
+
+      const result = await runImportEffect(
+        commitImport(ctx, fixture.membership, fixture.batchId),
+      );
+
+      expect(result.committed).toBe(3);
+      expect(
+        await countIn(holdingSnapshots, fixture.membership.householdId),
+      ).toBe(1);
+      expect(await countIn(transactions, fixture.membership.householdId)).toBe(
+        1,
+      );
+      expect(
+        await countIn(portfolioValuations, fixture.membership.householdId),
+      ).toBe(1);
+    });
+
+    it("serves fresh portfolio reads after a later commit", async () => {
+      const fixture = await createFixture([holdingRow({ currentValue: 125 })]);
+      const ctx = contextOf(fixture);
+      await runImportEffect(
+        commitImport(ctx, fixture.membership, fixture.batchId),
+      );
+      expect(
+        (await appRouter.createCaller(ctx).portfolio.summary()).currentValue,
+      ).toBe(125);
+
+      const secondBatchId = await createBatch(fixture.membership, [
+        holdingRow({ currentValue: 500, sourceDate: "2026-06-17" }),
+      ]);
+      await runImportEffect(
+        commitImport(ctx, fixture.membership, secondBatchId),
+      );
+
+      // The module-global householdPortfolioCache lives for 30s across
+      // contexts, and the commit must invalidate it or the dashboard shows
+      // stale totals right after an import. A fresh context is required to
+      // reach it: ctx.cache is request-scoped and deliberately never cleared,
+      // so reusing ctx would test the wrong cache and read 125 forever.
+      const freshCtx = contextOf(fixture);
+      expect(
+        (await appRouter.createCaller(freshCtx).portfolio.summary())
+          .currentValue,
+      ).toBe(500);
+    });
+  });
+
+  function contextOf(fixture: { clerkUserId: string; email?: string | null }) {
+    return createApiContext({
+      auth: { userId: fixture.clerkUserId, email: fixture.email ?? null },
+      db,
+      supabase: {} as ApiContext["supabase"],
+    });
+  }
+
+  async function countIn(
+    table:
+      | typeof accounts
+      | typeof holdingSnapshots
+      | typeof transactions
+      | typeof portfolioValuations,
+    householdId: string,
+  ) {
+    const rows = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(eq(table.householdId, householdId));
+    return rows.length;
+  }
+
+  function createFixture(
     rows: Record<string, unknown>[] = [holdingRow()],
     sourceType: ImportSourceType = "unknown",
   ) {
-    if (!db) throw new Error("TEST_DATABASE_URL is required");
-    const appUserId = randomUUID();
-    const householdId = randomUUID();
-    const clerkUserId = `test_${randomUUID()}`;
-    const email = `${clerkUserId}@example.com`;
-    householdIds.push(householdId);
-
-    await db.insert(users).values({
-      id: appUserId,
-      clerkUserId,
-      email,
-    });
-    await db.insert(households).values({
-      id: householdId,
-      name: "Test Household",
-      ownerUserId: appUserId,
-    });
-    await db.insert(householdMembers).values({
-      householdId,
-      userId: appUserId,
-      role: "owner",
-    });
-    const membership = {
-      userId: clerkUserId,
-      appUserId,
-      householdId,
-      role: "owner",
-    } as const;
-    const batchId = await createBatch(membership, rows, sourceType);
-
-    return {
-      batchId,
-      clerkUserId,
-      email,
-      membership,
-    };
+    return createFixtureIn(db, rows, sourceType);
   }
 
-  async function createBatch(
+  function createBatch(
     membership: { householdId: string; appUserId: string },
     rows: Record<string, unknown>[],
     sourceType: ImportSourceType = "unknown",
   ) {
-    if (!db) throw new Error("TEST_DATABASE_URL is required");
-    const batchId = randomUUID();
-    await db.insert(importBatches).values({
-      id: batchId,
-      householdId: membership.householdId,
-      uploadedByUserId: membership.appUserId,
-      sourceType,
-      originalFileName: "holdings.csv",
-      expiresAt: new Date(Date.now() + 86_400_000),
-      status: "parsed",
-      rowCount: rows.length,
-    });
-    if (rows.length > 0) {
-      await db.insert(importRows).values(
-        rows.map((normalizedPayload, index) => ({
-          importBatchId: batchId,
-          rowNumber: index + 1,
-          normalizedPayload,
-        })),
-      );
-    }
-    return batchId;
+    return createBatchIn(db, membership, rows, sourceType);
   }
 });
-
-function npsHoldingRow(
-  sourceType: "investment_portfolio_xlsx" | "nps_csv",
-  currentValue: number,
-) {
-  return {
-    kind: "holding",
-    sourceType,
-    sourceDate: "2026-06-16",
-    accountName: "NPS",
-    provider: "NPS",
-    instrumentName: "NPS",
-    assetClass: "nps",
-    currency: "INR",
-    investedAmount: 100,
-    currentValue,
-    metadata: {
-      sourceSheet: "NPS",
-      ...(sourceType === "nps_csv"
-        ? {
-            npsDetails: {
-              schemaVersion: 1,
-              tier: "I",
-              totalContribution: 100,
-              totalWithdrawal: 0,
-              schemes: [
-                {
-                  code: "E",
-                  sourceName: "Scheme E",
-                  currentValue,
-                  units: 1,
-                  nav: currentValue,
-                },
-              ],
-              contributionEvents: [],
-              activities: [],
-            },
-          }
-        : {}),
-    },
-  } as const;
-}
-
-function holdingRow(
-  overrides: Partial<{
-    accountName: string;
-    provider: string;
-    instrumentName: string;
-    symbol: string;
-    investedAmount: number;
-    currentValue: number;
-    metadata: Record<string, unknown>;
-    sourceDate: string;
-    omitSourceDate: boolean;
-  }> = {},
-) {
-  return {
-    kind: "holding",
-    sourceType: "tickertape_stock_csv",
-    sourceDate: overrides.omitSourceDate
-      ? undefined
-      : (overrides.sourceDate ?? "2026-06-16"),
-    accountName: overrides.accountName ?? "Indian Stocks",
-    provider: overrides.provider ?? "Tickertape",
-    instrumentName: overrides.instrumentName ?? "ABC",
-    symbol: overrides.symbol ?? "ABC",
-    assetClass: "indian_stock",
-    currency: "INR",
-    quantity: 1,
-    investedAmount: overrides.investedAmount ?? 100,
-    currentValue: overrides.currentValue ?? 125,
-    metadata: overrides.metadata ?? {},
-  };
-}
-
-function fakeSupabase() {
-  const upload = vi.fn().mockResolvedValue({ error: null });
-  const remove = vi.fn().mockResolvedValue({ error: null });
-  return {
-    upload,
-    remove,
-    client: {
-      storage: {
-        getBucket: vi.fn().mockResolvedValue({ error: null }),
-        createBucket: vi.fn().mockResolvedValue({ error: null }),
-        from: vi.fn().mockReturnValue({
-          createSignedUploadUrl: vi.fn().mockResolvedValue({
-            error: null,
-            data: { token: "token", signedUrl: "https://example.com" },
-          }),
-          upload,
-          remove,
-        }),
-      },
-    },
-  };
-}
-
-function tickertapeCsv(rowCount: number) {
-  const rows = Array.from(
-    { length: rowCount },
-    (_, index) => `STOCK${index},0,1,100,10,120,100,120,20,20,1,1`,
-  );
-  return `,,,Holdings - 16-May-26 IST
-Visit: https://tickertape.in/portfolio?tab=holdings
-
-Security,No. of Smallcases,Quantity,Average Cost ₹,Portfolio Weight %,LTP ₹,Invested Value ₹,Current Value ₹,P & L ₹,Net Change %,Daily Change ₹,Daily Change %
-
-Stocks/ETFs
-
-${rows.join("\n")}`;
-}
