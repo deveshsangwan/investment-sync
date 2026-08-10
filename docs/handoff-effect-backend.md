@@ -2,6 +2,17 @@
 
 Generated: 2026-07-19 (Asia/Kolkata)
 
+> **Archived.** Kept for the decision record in "Decisions already made" and "Risks to keep
+> visible", both of which still hold. For current scope and sequencing, read
+> `effect-migration-sequence.md` and `effect-phase-1.md` instead — they were written
+> against the code as it actually stands, and they supersede the six-phase sequence
+> referenced below.
+>
+> The `$HOME/.html-inbox/...` artifacts below are **machine-local to the session that
+> produced this handoff**. They are not in the repository and cannot be opened from a fresh
+> checkout or in CI. Everything load-bearing from them has been carried into the two
+> documents named above; the paths are retained only as provenance.
+
 ## Objective
 
 Continue the architecture-to-implementation discussion for rewriting the Investment Sync backend incrementally with Effect. The user has not yet selected a candidate or authorized implementation.

@@ -26,7 +26,10 @@ composition. That threshold is reached at the end of Phase 1, not before.
 
 ## Phase 1 — Finish the import interior
 
-**Files:** `services/import-lifecycle.ts`, `commitImportPromise` in `services/import-service.ts`
+**Files:** `services/import-lifecycle.ts`. `commitImportPromise` in
+`services/import-service.ts` gets its throws typed at the boundary, but its transaction
+interior stays Promise-shaped until Phase 2 — see `effect-phase-1.md` for why, and treat
+that document as authoritative on Phase 1 scope.
 
 Go first because this is the only code in the repo where Effect replaces something
 genuinely ugly, and it is the best-tested code you own — `import-service.integration.test.ts`
@@ -42,7 +45,9 @@ the pattern "wrap a Promise and hope the right tagged error gets thrown." Every 
 will copy whatever pattern is in place when it starts.
 
 - Keep `ImportDependencies` as a plain argument. **No Layers yet.**
-- Delete each `*Promise` function as its Effect version lands. No side-by-side.
+- Delete each `*Promise` function as its Effect version lands. No side-by-side. This
+  applies to the functions Phase 1 migrates; the ones wrapping a Drizzle transaction stay
+  and are named for what they are, not left as migration leftovers.
 - Gate: run the integration suite with `TEST_DATABASE_URL` set, before and after.
   Import statuses, parser versions, storage paths and cleanup ordering must be identical.
 

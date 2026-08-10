@@ -25,9 +25,10 @@ Two fixes were needed to make the suite mean anything:
 
 - **Isolation.** `instruments` and `users` are not Household-scoped, so the old
   `afterEach` (delete Households) leaked them. 109 orphaned users and 17 instruments had
-  accumulated, and a stale `ABC ` instrument from 2026-07-01 — whitespace-different from
-  `ABC` — was winning identity resolution and failing a test on `main` that has nothing to
-  do with whitespace. `resetDatabase` now truncates. Suites are serialized with
+  accumulated. A stale instrument from 2026-07-01 named `ABC` **followed by one trailing
+  space** was winning identity resolution over the real `ABC`, and failing a test on `main`
+  that has nothing to do with whitespace — the kind of difference rendered Markdown and a
+  terminal both hide. `resetDatabase` now truncates. Suites are serialized with
   `--no-file-parallelism` because they share one database.
 - **A dedicated `investment_sync_test` database.** `cleanupExpiredImportFiles` has no
   Household filter by design; pointing it at the dev database would null real storage paths.
