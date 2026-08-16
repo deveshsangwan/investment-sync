@@ -1,27 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useId } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  type TooltipContentProps,
-  type TooltipValueType,
-} from "recharts";
-import { formatDate, formatInr, formatPercent, labelize } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { useMemo } from "react";
+import { areaY, defineChart, lineY } from "@tanstack/charts";
+import { decorative } from "@tanstack/charts/mark/decorative";
+import { pie, polar, radialArc } from "@tanstack/charts/polar";
+import { Chart } from "@tanstack/charts/react";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { scalePoint } from "@tanstack/charts/scales/point";
+import { tooltip } from "@tanstack/charts/tooltip";
+import { formatDate, formatInr, formatPercent, labelize } from "../lib/format";
+import { cn } from "../lib/utils";
 
 type ChartValue = string | number | null | undefined;
-type TooltipNameType = string | number;
 
 type TimelinePoint = {
   snapshotDate: string | Date;
@@ -35,19 +26,27 @@ type AllocationPoint = {
   weight: ChartValue;
 };
 
-type TimelineChartPoint = {
+/** One timeline datum that survived filtering, keyed by its snapshot date. */
+export type TimelineRow = {
+  key: string;
   label: string;
   currentValue: number;
   investedAmount?: number;
+  origin: TimelinePoint;
 };
 
-type AllocationChartPoint = {
+/** One allocation slice that survived filtering, keyed by its asset class. */
+export type AllocationRow = {
   assetClass: string;
   label: string;
   currentValue: number;
   weight?: number;
   color: string;
+  origin: AllocationPoint;
 };
+
+const currentColor = "hsl(var(--chart-1))";
+const investedColor = "hsl(var(--chart-6))";
 
 const allocationColors = [
   "hsl(var(--chart-1))",
@@ -57,6 +56,12 @@ const allocationColors = [
   "hsl(var(--chart-5))",
   "hsl(var(--chart-6))",
 ];
+
+// 264px surface plus the 24px legend row is the original 288px footprint.
+const timelineChartHeight = 264;
+const allocationChartHeight = 208;
+// Recharts drew a 2 degree wedge gap; radians here.
+const allocationGapAngle = (2 * Math.PI) / 180;
 
 export function PortfolioTimelineChart({
   data,
@@ -71,28 +76,22 @@ export function PortfolioTimelineChart({
   investedLabel?: string;
   showInvested?: boolean;
 }) {
-  const gradientId = useId().replaceAll(":", "");
-  const chartData: TimelineChartPoint[] = data.flatMap((point) => {
-    const currentValue = numberValue(point.currentValue);
-    if (currentValue === undefined) return [];
-    return [
-      {
-        label: formatDate(point.snapshotDate),
-        currentValue,
-        investedAmount: numberValue(point.investedAmount),
-      },
-    ];
-  });
+  const rows = useMemo(() => prepareTimeline(data), [data]);
   const hasInvested =
-    showInvested &&
-    chartData.some((point) => point.investedAmount !== undefined);
+    showInvested && rows.some((row) => row.investedAmount !== undefined);
+
+  const definition = useMemo(
+    () =>
+      buildTimelineDefinition(rows, {
+        currentLabel,
+        investedLabel,
+        hasInvested,
+      }),
+    [rows, hasInvested, currentLabel, investedLabel],
+  );
 
   return (
-    <div
-      className={cn("flex h-72 w-full flex-col", className)}
-      role="img"
-      aria-label={`${currentLabel}${hasInvested ? ` and ${investedLabel.toLowerCase()}` : ""} over time`}
-    >
+    <div className={cn("flex w-full flex-col", className)}>
       <div
         className="mb-2 flex flex-wrap justify-end gap-4 text-xs text-muted-foreground"
         aria-hidden="true"
@@ -100,7 +99,7 @@ export function PortfolioTimelineChart({
         <span className="inline-flex items-center gap-2">
           <span
             className="h-0.5 w-5"
-            style={{ backgroundColor: "hsl(var(--chart-1))" }}
+            style={{ backgroundColor: currentColor }}
           />
           {currentLabel}
         </span>
@@ -108,136 +107,36 @@ export function PortfolioTimelineChart({
           <span className="inline-flex items-center gap-2">
             <span
               className="w-5 border-t-2 border-dashed"
-              style={{ borderColor: "hsl(var(--chart-6))" }}
+              style={{ borderColor: investedColor }}
             />
             {investedLabel}
           </span>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={chartData}
-            margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-          >
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="hsl(var(--chart-1))"
-                  stopOpacity={0.28}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="hsl(var(--chart-1))"
-                  stopOpacity={0.02}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              stroke="hsl(var(--border))"
-              strokeDasharray="3 3"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="label"
-              axisLine={false}
-              tickLine={false}
-              minTickGap={28}
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              width={72}
-              tickFormatter={compactInr}
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-            />
-            <Tooltip
-              cursor={{ stroke: "hsl(var(--chart-1))", strokeOpacity: 0.22 }}
-              content={(props) => (
-                <TimelineTooltip
-                  {...props}
-                  currentLabel={currentLabel}
-                  investedLabel={investedLabel}
-                  hasInvested={hasInvested}
-                />
-              )}
-            />
-            <Area
-              type="monotone"
-              dataKey="currentValue"
-              name={currentLabel}
-              stroke="hsl(var(--chart-1))"
-              strokeWidth={2.5}
-              fill={`url(#${gradientId})`}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-            {hasInvested ? (
-              <Line
-                type="monotone"
-                dataKey="investedAmount"
-                name={investedLabel}
-                stroke="hsl(var(--chart-6))"
-                strokeDasharray="5 5"
-                strokeWidth={1.8}
-                dot={false}
-              />
-            ) : null}
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      <Chart
+        definition={definition}
+        height={timelineChartHeight}
+        ariaLabel={`${currentLabel}${hasInvested ? ` and ${investedLabel.toLowerCase()}` : ""} over time`}
+      />
     </div>
   );
 }
 
 export function AllocationDonutChart({ data }: { data: AllocationPoint[] }) {
-  const chartData: AllocationChartPoint[] = data.flatMap((item, index) => {
-    const currentValue = numberValue(item.currentValue);
-    if (currentValue === undefined || currentValue <= 0) return [];
-    return [
-      {
-        assetClass: item.assetClass,
-        label: labelize(item.assetClass),
-        currentValue,
-        weight: numberValue(item.weight),
-        color:
-          allocationColors[index % allocationColors.length] ??
-          "hsl(var(--chart-1))",
-      },
-    ];
-  });
+  const rows = useMemo(() => prepareAllocation(data), [data]);
+
+  const definition = useMemo(() => buildAllocationDefinition(rows), [rows]);
 
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(160px,220px)_1fr] md:items-center">
-      <div
-        className="h-52 w-full"
-        role="img"
-        aria-label="Portfolio allocation by asset class"
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={chartData}
-              dataKey="currentValue"
-              nameKey="label"
-              innerRadius="62%"
-              outerRadius="86%"
-              paddingAngle={2}
-              stroke="hsl(var(--card))"
-              strokeWidth={3}
-            >
-              {chartData.map((item) => (
-                <Cell key={item.assetClass} fill={item.color} />
-              ))}
-            </Pie>
-            <Tooltip content={(props) => <AllocationTooltip {...props} />} />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
+      <Chart
+        definition={definition}
+        height={allocationChartHeight}
+        className="w-full"
+        ariaLabel="Portfolio allocation by asset class"
+      />
       <div className="space-y-3">
-        {chartData.map((item) => (
+        {rows.map((item) => (
           <Link
             key={item.assetClass}
             href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
@@ -266,62 +165,164 @@ export function AllocationDonutChart({ data }: { data: AllocationPoint[] }) {
   );
 }
 
-function TimelineTooltip({
-  active,
-  payload,
-  label,
-  currentLabel,
-  investedLabel,
-  hasInvested,
-}: TooltipContentProps<TooltipValueType, TooltipNameType> & {
-  currentLabel: string;
-  investedLabel: string;
-  hasInvested: boolean;
-}) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0]?.payload as TimelineChartPoint | undefined;
-  if (!point) return null;
-
-  return (
-    <div className="rounded-lg border bg-card p-3 text-sm shadow-sm">
-      <p className="number mb-2 font-semibold">{String(label ?? "")}</p>
-      <TooltipRow label={currentLabel} value={formatInr(point.currentValue)} />
-      {hasInvested && point.investedAmount !== undefined ? (
-        <TooltipRow
-          label={investedLabel}
-          value={formatInr(point.investedAmount)}
-        />
-      ) : null}
-    </div>
-  );
+/** Drops points with no usable current value, keeping input order and lineage. */
+export function prepareTimeline(data: TimelinePoint[]): TimelineRow[] {
+  return data.flatMap((point) => {
+    const currentValue = numberValue(point.currentValue);
+    if (currentValue === undefined) return [];
+    return [
+      {
+        key: timelineKey(point.snapshotDate),
+        label: formatDate(point.snapshotDate),
+        currentValue,
+        investedAmount: numberValue(point.investedAmount),
+        origin: point,
+      },
+    ];
+  });
 }
 
-function AllocationTooltip({
-  active,
-  payload,
-}: TooltipContentProps<TooltipValueType, TooltipNameType>) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0]?.payload as AllocationChartPoint | undefined;
-  if (!point) return null;
-
-  return (
-    <div className="rounded-lg border bg-card p-3 text-sm shadow-sm">
-      <p className="font-semibold">{point.label}</p>
-      <div className="mt-1 flex items-center justify-between gap-6 text-muted-foreground">
-        <span className="number">{formatInr(point.currentValue)}</span>
-        <span className="number">{formatPercent(point.weight)}</span>
-      </div>
-    </div>
-  );
+/** Drops slices with no positive current value, keeping input order and lineage. */
+export function prepareAllocation(data: AllocationPoint[]): AllocationRow[] {
+  return data.flatMap((item, index) => {
+    const currentValue = numberValue(item.currentValue);
+    if (currentValue === undefined || currentValue <= 0) return [];
+    return [
+      {
+        assetClass: item.assetClass,
+        label: labelize(item.assetClass),
+        currentValue,
+        weight: numberValue(item.weight),
+        // Keyed to the source index so filtering cannot shift palette colors.
+        color:
+          allocationColors[index % allocationColors.length] ?? currentColor,
+        origin: item,
+      },
+    ];
+  });
 }
 
-function TooltipRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-6">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="number font-semibold">{value}</span>
-    </div>
-  );
+/** Complete timeline definition; memoize it against exactly these arguments. */
+export function buildTimelineDefinition(
+  rows: TimelineRow[],
+  {
+    currentLabel,
+    investedLabel,
+    hasInvested,
+  }: { currentLabel: string; investedLabel: string; hasInvested: boolean },
+) {
+  // Empty invested rows render no second series; populated rows keep null gaps.
+  const investedRows = hasInvested ? rows : [];
+  return defineChart({
+    marks: [
+      decorative(
+        areaY(rows, {
+          x: "label",
+          y: "currentValue",
+          key: "key",
+          color: () => currentLabel,
+          fill: "url(#timeline-area)",
+          fillOpacity: 1,
+        }),
+      ),
+      lineY(rows, {
+        x: "label",
+        y: "currentValue",
+        key: "key",
+        color: () => currentLabel,
+        strokeWidth: 2.5,
+      }),
+      lineY(investedRows, {
+        x: "label",
+        y: "investedAmount",
+        key: "key",
+        color: () => investedLabel,
+        strokeWidth: 1.8,
+        strokeDasharray: "5 5",
+      }),
+    ],
+    x: {
+      scale: () => scalePoint<string>(),
+      axis: { line: false, ticks: { size: 0 }, tickLabels: { thin: true } },
+    },
+    y: {
+      scale: scaleLinear,
+      nice: true,
+      grid: true,
+      axis: { line: false, ticks: { size: 0, format: compactInr } },
+    },
+    color: {
+      domain: [currentLabel, investedLabel],
+      range: [currentColor, investedColor],
+    },
+    gradients: [
+      {
+        id: "timeline-area",
+        x1: 0,
+        y1: 0,
+        x2: 0,
+        y2: 1,
+        stops: [
+          { offset: 0.05, color: currentColor, opacity: 0.28 },
+          { offset: 0.95, color: currentColor, opacity: 0.02 },
+        ],
+      },
+    ],
+    focus: "group-x",
+    tooltip: {
+      use: tooltip,
+      items: [
+        "x",
+        { channel: "y", text: (point) => formatInr(point.yValue) },
+        "group",
+      ],
+    },
+  });
+}
+
+/** Complete donut definition; memoize it against exactly these rows. */
+export function buildAllocationDefinition(rows: AllocationRow[]) {
+  const slices = pie(rows, {
+    value: "currentValue",
+    gapAngle: allocationGapAngle,
+  });
+  return defineChart({
+    marks: [
+      polar({
+        inset: 4,
+        radiusRatio: 0.86,
+        marks: [
+          radialArc(slices, {
+            key: "assetClass",
+            // `z` is what populates point.group; without it the tooltip drops
+            // its automatic asset-class title even though color is set.
+            z: "label",
+            color: "label",
+            // 62% / 86% of the Recharts outer radius.
+            innerRadius: ({ radius }) => radius * 0.72,
+            stroke: "hsl(var(--card))",
+            strokeWidth: 3,
+          }),
+        ],
+      }),
+    ],
+    color: {
+      domain: rows.map((row) => row.label),
+      range: rows.map((row) => row.color),
+    },
+    tooltip: {
+      use: tooltip,
+      items: [
+        { id: "value", text: (point) => formatInr(point.datum.currentValue) },
+        { id: "weight", text: (point) => formatPercent(point.datum.weight) },
+      ],
+    },
+  });
+}
+
+/** Stable across filtering because it never reads a filtered-array index. */
+function timelineKey(value: string | Date): string {
+  return value instanceof Date ? value.toISOString() : String(value);
 }
 
 function numberValue(value: ChartValue): number | undefined {
@@ -330,7 +331,7 @@ function numberValue(value: ChartValue): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function compactInr(value: number): string {
+export function compactInr(value: number): string {
   if (Math.abs(value) >= 10000000)
     return `Rs ${Math.round(value / 10000000)}Cr`;
   if (Math.abs(value) >= 100000) return `Rs ${Math.round(value / 100000)}L`;
