@@ -178,10 +178,7 @@ export function DashboardClient({
                   description="Add another dated snapshot to see value and invested capital over time."
                 />
               ) : (
-                <PortfolioTimelineChart
-                  data={timeline}
-                  className="h-64 sm:h-72"
-                />
+                <PortfolioTimelineChart data={timeline} />
               )}
             </div>
           </SectionCard>

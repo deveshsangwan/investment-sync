@@ -104,6 +104,21 @@
   --chart-6: 31 58% 61%;
 }
 
+/*
+ * Theme the TanStack Charts tooltip from the app palette. `.dark` sits on the
+ * same element as `:root`, so the winning `--card`/`--border`/`--foreground` is
+ * substituted here in both themes and one block covers light and dark. Series
+ * colors need no bridge: both chart definitions pass explicit ranges.
+ */
+:root {
+  --ts-chart-tooltip-background: hsl(var(--card));
+  --ts-chart-tooltip-color: hsl(var(--card-foreground));
+  --ts-chart-tooltip-border: 1px solid hsl(var(--border));
+  --ts-chart-tooltip-border-radius: var(--radius);
+  --ts-chart-tooltip-shadow: 0 1px 2px 0 hsl(var(--foreground) / 0.05);
+  --ts-chart-tooltip-padding: 0.75rem;
+}
+
 * {
   border-color: hsl(var(--border));
   box-sizing: border-box;
