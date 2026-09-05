@@ -1,0 +1,131 @@
+.gitignore
+  s_59b91dee14d4f1::t_ebf177dfd3314b 16
+eslint.config.mjs
+  s_59b91dee14d4f1::t_b2aef8510af7c1 28
+packages/backend/convex/model/users.ts
+  s_59b91dee14d4f1::t_72529aaadbca2a 1-3,10-12,17,22,25-26,28,31,33-45,47-61,64-67,69-70,75-79,81
+  s_59b91dee14d4f1::t_3fc14c767eafce 21,62-63,71-74
+  s_59b91dee14d4f1::t_1bdc56dd3d068c 20
+  s_59b91dee14d4f1::t_5db442d997b73b 4-9,13-16,18-19,23-24,27,29-30,32,46,68,80,82
+apps/web/src/app/layout.tsx
+  s_59b91dee14d4f1::t_8a7c88340e2b0a 5,49-51
+apps/web/src/app/convex-provider.tsx
+  s_59b91dee14d4f1::t_8a7c88340e2b0a 1-3,7-9,14,30-34,36-38,40-42
+  s_59b91dee14d4f1::t_6e77616fd619f0 4-5,15,17-19,21,26-29,39
+  s_59b91dee14d4f1::t_1c578f80189965 6,10-13,16,20,22-25,35
+packages/backend/vitest.config.ts
+  s_59b91dee14d4f1::t_400448517a1e40 1-7
+packages/backend/convex/_generated/api.d.ts
+  s_59b91dee14d4f1::t_3a6b68ef05e58c 1-10
+  s_59b91dee14d4f1::t_6e3baec3575ee1 12,24
+  s_59b91dee14d4f1::t_5712f9f1e7e875 11,13-23,25-55
+packages/backend/src/api.ts
+  s_59b91dee14d4f1::t_400448517a1e40 1
+  s_59b91dee14d4f1::t_b2aef8510af7c1 2
+packages/backend/convex/users.test.ts
+  s_59b91dee14d4f1::t_5b415821d48253 2,22-23,108-110,119,138,140,150,183,194,227,230,233-236
+  s_59b91dee14d4f1::t_3fc14c767eafce 36,151-152,163,166-182
+  s_59b91dee14d4f1::t_db762c8ca3cf82 1,5-14,24,26-35,37-47,54-55,57,252
+  s_59b91dee14d4f1::t_6e77616fd619f0 86-91,96-98,106-107,123,126,132,136-137,139,141-146
+  s_59b91dee14d4f1::t_14d8d5395205e9 4,25,48-53,99-105
+  s_59b91dee14d4f1::t_8a36cf0663d469 67-83,92-95,111-112,120-122,124-125,127-131,133-135,148-149,153-162,164-165,184-193,195-226,228-229,231-232,237-251
+  s_59b91dee14d4f1::t_5db442d997b73b 3,15-21,56,58-66,84-85,113-118,147
+packages/backend/.env.example
+  s_59b91dee14d4f1::t_97eb1c845c1001 1-2
+  s_59b91dee14d4f1::t_8a7c88340e2b0a 3
+packages/backend/package.json
+  s_59b91dee14d4f1::t_7830c251974cb2 14-16
+  s_59b91dee14d4f1::t_567eb428d3edb0 21,24
+  s_59b91dee14d4f1::t_400448517a1e40 1-13,25-26
+  s_59b91dee14d4f1::t_b2aef8510af7c1 20,22-23
+  s_59b91dee14d4f1::t_90af5e7fb5dae1 17-19
+packages/backend/convex/test.setup.ts
+  s_59b91dee14d4f1::t_400448517a1e40 1-3
+packages/backend/convex.json
+  s_59b91dee14d4f1::t_400448517a1e40 1-4
+apps/web/package.json
+  s_59b91dee14d4f1::t_52cc16c33ac210 26
+  s_59b91dee14d4f1::t_6e77616fd619f0 15
+packages/backend/convex/testing/seed.ts
+  s_59b91dee14d4f1::t_1bdc56dd3d068c 18
+  s_59b91dee14d4f1::t_46bc55b26cbd61 7-10
+  s_59b91dee14d4f1::t_6e77616fd619f0 6,15-17
+  s_59b91dee14d4f1::t_72529aaadbca2a 2,14,19
+  s_59b91dee14d4f1::t_b2aef8510af7c1 1,4
+  s_59b91dee14d4f1::t_400448517a1e40 3,5,11-13,20-21
+packages/backend/convex/auth.config.test.ts
+  s_59b91dee14d4f1::t_3fc14c767eafce 1-32
+packages/backend/convex/_generated/api.js
+  s_59b91dee14d4f1::t_3a6b68ef05e58c 1-23
+packages/backend/convex/model/auth.ts
+  s_59b91dee14d4f1::t_400448517a1e40 4,6,11-14,16,21,24,26-27,29,34-36
+  s_59b91dee14d4f1::t_72529aaadbca2a 1-3,5,7-10,15,17-20,22-23,25,28,30-33
+packages/backend/convex/auth.config.ts
+  s_59b91dee14d4f1::t_8a36cf0663d469 4
+  s_59b91dee14d4f1::t_400448517a1e40 1-3,10-11,13
+  s_59b91dee14d4f1::t_b2aef8510af7c1 5-9,12
+packages/backend/convex/schema.ts
+  s_59b91dee14d4f1::t_3fc14c767eafce 11
+  s_59b91dee14d4f1::t_400448517a1e40 1-10,12-20
+docs/local-development.md
+  s_59b91dee14d4f1::t_3fc14c767eafce 83-84
+  s_59b91dee14d4f1::t_8a36cf0663d469 85,88,103-106
+  s_59b91dee14d4f1::t_1c578f80189965 96-101
+  s_59b91dee14d4f1::t_b2aef8510af7c1 75-82,86,89-95,102,107
+  s_59b91dee14d4f1::t_4c0088c7ece394 87
+docs/convex-migration-implementation-plan.md
+  s_59b91dee14d4f1::t_11a9fe1f33ce55 3-5,149
+  s_59b91dee14d4f1::t_1bdc56dd3d068c 66,102,223,709
+  s_59b91dee14d4f1::t_4984730c1cf2a3 115,193,196,268,511,577,672,684-686,802
+  s_59b91dee14d4f1::t_20f7658fc78d8a 675,930-941
+  s_59b91dee14d4f1::t_120b4ba3e9af2c 58,67,104,257,323-324,354-355,371-372,405-408,438,833
+  s_59b91dee14d4f1::t_c1ac68513376fd 598-599,609-611,658,677,683,717,835,861
+  s_59b91dee14d4f1::t_d265bb4aa63ac0 103
+  s_59b91dee14d4f1::t_a4817e90bc5f7e 258
+  s_59b91dee14d4f1::t_4e1ebda9a56e35 439
+  s_59b91dee14d4f1::t_a242fea2e8875c 676
+packages/backend/convex/_generated/server.js
+  s_59b91dee14d4f1::t_5712f9f1e7e875 95-100
+  s_59b91dee14d4f1::t_3a6b68ef05e58c 1-94,101
+package.json
+  s_59b91dee14d4f1::t_e5802c5f18ad33 10-11
+packages/backend/tsconfig.json
+  s_59b91dee14d4f1::t_400448517a1e40 1-8
+packages/backend/convex/_generated/server.d.ts
+  s_59b91dee14d4f1::t_5712f9f1e7e875 25-35,109-115
+  s_59b91dee14d4f1::t_3a6b68ef05e58c 1-24,36-108,116-162
+packages/backend/convex/users.ts
+  s_59b91dee14d4f1::t_72529aaadbca2a 3,9-10
+  s_59b91dee14d4f1::t_400448517a1e40 1-2,4-8,11-19,21-25,27-30
+  s_59b91dee14d4f1::t_3fc14c767eafce 20,26
+packages/backend/.gitignore
+  s_59b91dee14d4f1::t_3a6b68ef05e58c 1-2
+apps/web/.env.example
+  s_59b91dee14d4f1::t_6e77616fd619f0 1-3
+apps/web/next.config.mjs
+  s_59b91dee14d4f1::t_6e77616fd619f0 5
+docs/convex-phase-1-review.md
+  s_59b91dee14d4f1::t_d326d53244ca51 30,32-34,40,51-60
+  s_59b91dee14d4f1::t_11a9fe1f33ce55 45,61
+  s_59b91dee14d4f1::t_ac83eb604d6b09 1-29,31,35-39,41-44,46-50,62-70
+packages/backend/convex/_generated/dataModel.d.ts
+  s_59b91dee14d4f1::t_3a6b68ef05e58c 1-60
+pnpm-lock.yaml
+  s_59b91dee14d4f1::t_1e458d59e51b22 49,128,138-140,171-173,222,231,268-293,315,334,945-952,1020-1025,1050-1055,1080-1085,1110-1115,1140-1145,1170-1175,1200-1205,1230-1235,1260-1265,1290-1295,1320-1325,1350-1355,1380-1385,1410-1415,1440-1445,1470-1475,1500-1505,1518-1523,1548-1553,1566-1571,1596-1601,1614-1619,1644-1649,1674-1679,1704-1709,1734-1739,3380,3385,3891-3914,4373-4377,7757-7762,7850-7852,7865-7867,7880-7882,7895-7897,7910-7912,7925-7927,7940-7942,7955-7957,7970-7972,7985-7987,8000-8002,8015-8017,8030-8032,8045-8047,8060-8062,8075-8077,8090-8092,8099-8101,8114-8116,8123-8125,8138-8140,8147-8149,8162-8164,8177-8179,8192-8194,8207-8209,8738,8745,8779,9849,9872,10546,10555,10665-10680,11158-11186,12025,12035,12062,12070,12087,13659-13660,13815,13838,13851,13874
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d838924acdb0c0bfb3dd6698d223f788023ebabf",
+  "prompts": {},
+  "sessions": {
+    "s_59b91dee14d4f1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04e00-935a-7f31-ac7f-826c2a11e662",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
