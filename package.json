@@ -7,6 +7,8 @@
     "dev": "turbo dev --parallel",
     "dev:web": "pnpm --filter @investment-sync/web dev",
     "dev:mobile": "pnpm --filter @investment-sync/mobile dev",
+    "dev:backend": "pnpm --filter @investment-sync/backend exec convex dev",
+    "backend:codegen": "pnpm --filter @investment-sync/backend codegen",
     "lint": "turbo lint",
     "test": "turbo test",
     "typecheck": "turbo typecheck",

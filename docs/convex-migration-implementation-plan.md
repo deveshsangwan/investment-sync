@@ -1,6 +1,8 @@
 # Convex migration implementation plan
 
-Status: implementation handoff
+Status: Phase 0 committed; Phase 1 repository milestone verified and Opus 5 approved; external gates pending
+
+Review findings, fixes, verification, and pending gates: [`convex-phase-1-review.md`](convex-phase-1-review.md).
 
 Decision: migrate the web application fully to a Convex-native backend on a separate branch, prove behavior against the current Postgres and Supabase production system, then perform a one-shot production cutover.
 
@@ -53,7 +55,7 @@ The current mobile source should not force the old backend to remain. Preserve i
 
 1. Work continues on `feat/convex-native-backend`, branched from base commit `aacb583`. Commit Phase 0 before starting Phase 1.
 2. Read this plan, the two linked architecture notes, repository instructions, and the current schema and import integration tests before editing code.
-3. Execute one phase at a time. Meet its completion criteria before starting the next phase.
+3. Execute in dependency order. Report repository verification and external deployment verification separately. While the owner completes cloud setup, Phase 2 pure-domain work may proceed after Phase 1 repository checks and review pass. Do not claim Phase 1 complete or advance dependent deployment work until its external gates pass.
 4. Keep the current backend runnable until the production rollback window closes.
 5. Treat current Postgres outputs as the behavioral reference, not as the target code structure.
 6. Keep production credentials out of committed files and command output.
@@ -61,6 +63,8 @@ The current mobile source should not force the old backend to remain. Preserve i
 8. Stop before the first production Convex write unless the user has authorized the production migration phase in that context.
 9. Preserve unrelated working-tree changes.
 10. Record any deliberate behavior difference in this document before implementing it.
+11. After each phase or separately tracked repository milestone passes its local completion checks, run a read-only Claude Code review with Claude Opus 5 against the complete diff and its completion criteria. Verify and resolve every blocking finding, rerun affected checks, and obtain an Opus 5 follow-up approval before committing or starting dependent work. The Phase 1 repository milestone may be committed with its external gates explicitly pending, as allowed by rule 3.
+12. Review approvals are evidence, not proof. Record the reviewed revision, actual checks, accepted findings, and outstanding deployment gates. Never describe checked-in generated bindings as proof that codegen or real Clerk sign-in has succeeded on a clean deployment.
 
 ## 4. Target dependency structure
 
@@ -95,7 +99,9 @@ This puts the most difficult behavior behind one deep interface:
 buildPortfolioPublication(input): PortfolioPublication
 ```
 
-Callers provide validated existing facts, the parsed Import Batch, and the applicable currency-rate state. The module returns facts to persist, a complete versioned read model, exact reconciliation totals, and a digest. Source grouping, aggregate fallback, NPS priority, omission-as-exit, identity normalization, dedupe fingerprints, and analytics stay inside the implementation.
+Callers provide validated existing facts and the parsed Import Batch. The module returns facts to persist, versioned native-currency projections, exact reconciliation totals, and a digest. Source grouping, aggregate fallback, NPS priority, omission-as-exit, identity normalization, and dedupe fingerprints stay inside the implementation. Rate-independent analytics may be precomputed; currency-dependent analytics use the valuation function described below.
+
+Keep source selection and exact native-currency aggregates independent of the current FX quote. A separate pure valuation function applies a supplied quote and freshness state to those bounded projections. Both Convex reads and parity tests use it. It may reuse analytics but must not reload or regroup raw source history.
 
 Tests use the same interface as the Convex Commit mutation. They should not reach through it to test private helper state.
 
@@ -106,6 +112,7 @@ apps/web/
   src/
     app/
       providers.tsx
+      convex-provider.tsx
       dashboard/**
       holdings/**
       uploads/**
@@ -139,6 +146,7 @@ packages/backend/
       maintenance.ts
     model/
       auth.ts
+      users.ts
       importWorkflow.ts
       portfolioStore.ts
       logicalKeys.ts
@@ -182,10 +190,10 @@ scripts/convex-migration/
   runtime.cjs
   inventory-postgres.cjs
   inventory-storage.cjs
-  parser-worker.cjs
+  parse-source-file.ts
   capacity-evidence.cjs
   generate-capacity-note.cjs
-  migration-tools.test.cjs
+  capacity-evidence.test.cjs
   export-postgres.ts
   export-storage.ts
   transform.ts
@@ -212,6 +220,7 @@ Phase 0 tools are CommonJS and run under `node --test`. New extract, transform, 
 `@investment-sync/portfolio-domain` exports:
 
 - `buildPortfolioPublication`;
+- the pure valuation function for native-currency projections and a supplied quote/freshness state;
 - its input and output contracts;
 - public portfolio view types;
 - numeric conversion functions that web formatting or migration reconciliation genuinely shares.
@@ -245,6 +254,8 @@ Required safeguards:
 
 Use a seven-day rollback window, bounded by verified backup retention. Before creating the external project relationship in Phase 1, record the selected Convex tier and verify that it supports the required preview deployments, backups, and concurrency class.
 
+The current recommendation is Starter in US East, not a confirmed purchase or deployment. Verify the selected plan and region in the account before recording them as provisioned. Manual backups are acceptable for rehearsal and cutover if downloaded with files and retained securely through the entire rollback window; scheduled backups are not a prerequisite for local implementation. Code, environment configuration, and scheduled-work recovery instructions must be archived separately from data backups.
+
 Clerk development and production keys remain separate. Convex authentication configuration uses the issuer for its deployment. A development Clerk subject may never resolve to a production user document unless the same human signs into production through the production Clerk instance.
 
 ## 7. Convex data model
@@ -254,7 +265,7 @@ The exact validators belong in `packages/backend/convex/schema.ts`. Use these co
 | Table                 | Purpose                                                                     | Required logical indexes                                              |
 | --------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `users`               | Clerk subject and profile metadata                                          | Clerk subject                                                         |
-| `households`          | Owner, active portfolio version, publication sequence                       | Owner                                                                 |
+| `households`          | Owner, display name, active portfolio version, publication sequence         | Owner                                                                 |
 | `householdMembers`    | Role and Household membership                                               | User and Household, Household and user                                |
 | `accounts`            | Household-scoped normalized account identity                                | Household and identity key                                            |
 | `instruments`         | Household-scoped canonical instrument identity                              | Household and identity key, optional ISIN                             |
@@ -309,6 +320,8 @@ Do not pass production Postgres numerics through an untracked `Number` conversio
 
 This preserves source values without forcing BigInt serialization through the web UI.
 
+Existing normalized JSON already contains Float64 values. Converting those values to strings cannot recover precision lost by the old parser. Preserve their recorded meaning and provenance; use persisted Postgres decimal facts as the migration authority. New parser versions should preserve decimal text before numeric conversion where the source format supports it. Define scale, rounding, finite-number checks, and analytic comparison tolerances per field. Keep the old numeric parser contract available through a tested adapter until the Postgres path is retired; changing the shared importer type must not silently break the live backend.
+
 ## 8. Import and publication workflow
 
 ### State model
@@ -338,6 +351,8 @@ Deleting an expired Source File does not change a parsed or committed batch. A p
 
 An action failure leaves the batch failed or parsing with persisted receipts. `imports.retryParse` starts a new attempt or resumes safe chunks. No portfolio query reads staging data.
 
+Attach must be owner-scoped, idempotent for the same batch/storage ID, and reject reassignment or a storage ID already claimed by another batch. Metadata alone does not prove uploader identity. Treat the returned storage ID as an upload capability and never expose other users' storage IDs or bearer file URLs. A bounded orphan sweep may delete unattached objects only after the upload URL lifetime and an attach grace period have elapsed, rechecking the attachment index in the deletion mutation. Expire abandoned reservations and obsolete parse attempts separately. Every worker write checks the current attempt and expected state so late workers cannot finish a superseded parse.
+
 ### Realistic capacity gate
 
 The code's current 25,000-row allowance is not a product requirement. Phase 0 measures every available production Source File and records:
@@ -352,6 +367,8 @@ The code's current 25,000-row allowance is not a product requirement. Phase 0 me
 Set the row, normalized-byte, account, and instrument ceilings from the largest persisted batch with documented headroom. Its Source File is past retention, so its compressed size cannot be measured. Set the compressed-file ceiling independently from the largest available Source File with documented headroom, bounded by the current application limit, and record it as an engineering limit rather than a coherent production measurement.
 
 Phase 0 specifies two twice-largest fixtures: a normalized publication fixture based on the largest persisted batch and an upload-transport fixture based on the largest available Source File. Phase 3 runs upload and parsing on a real development deployment. Phase 4 begins with the default single-mutation Commit and runs the publication fixture through it. If Commit reads, writes, bytes, or user-code time exceed half of the documented limit, stop and implement the staged builder. This is the capacity go/no-go point; do not build the fallback speculatively.
+
+Capacity is a Household budget, not just a batch budget. Test each candidate import against accumulated synthetic committed history, including at least twice the inventoried largest Household, and measure document size, index ranges, read/write bytes, scans, and user-code time. Define bounded reads that detect overflow and return an explicit capacity error before publication; never silently truncate history with `take(limit)`. Exercise the 1348-row stress fixture through an internal test path because it intentionally exceeds the candidate 1100-row public limit. Separately test acceptance at each public ceiling and rejection just above it. Candidate ceilings remain provisional until the runtime measurements pass.
 
 ### Default Commit design
 
@@ -385,6 +402,10 @@ The web behavior remains the same, but Commit becomes an asynchronous publishing
 
 If Phase 4 selects this fallback, add `publicationReceipts` indexed by version, stage, and chunk, plus a publishing-slot field on `households`. Add them only through Convex expand-migrate-contract sequencing.
 
+Candidate facts must be invisible to every history and account query as well as the main portfolio query. Fence them by candidate version or a publication watermark. A staged builder cannot invoke the same unbounded whole-history publication function inside one final step; source reduction and analytics must have their own measured bounded execution strategy. Do not select this fallback until its strategy passes the same capacity and failure tests.
+
+Both designs need bounded cleanup of obsolete projection versions and abandoned staging after a recorded retention period. Preserve immutable committed facts and normalized provenance. Cleanup must never delete the active version, an in-progress build's base, or history referenced by a retained version.
+
 ## 9. Public Convex interface
 
 Keep the public interface small. Match current web view models where that avoids unnecessary UI changes.
@@ -413,6 +434,8 @@ Every public function authenticates through one shared module and resolves House
 The current `portfolio.holdings` and `portfolio.summary` procedures have no Convex successor because their only caller is the mobile app removed in Phase 8. A migrated Household keeps an indexed legacy alias from every old holding-snapshot UUID to its Household-local position key. `portfolio.holdingDetail` accepts either form until the rollback window closes and the owner confirms the aliases can be removed.
 
 Public queries read the Household's active version, then use indexes scoped to that exact version. They do no source grouping or portfolio-wide history reconstruction. The Commit publication module performs that work once.
+
+FX-sensitive reads also depend on the persisted currency-rate document. Store exact totals and bounded dated analytics inputs by native currency so refreshing a quote updates totals, allocation, timeline, and currency-dependent performance without a new import. Persist fresh/stale/unavailable transitions through scheduled mutations; wall-clock passage alone does not invalidate a subscription. Test quote changes and expiry with no Commit in between, including old expiry jobs racing a newer quote. If the bounded valuation function cannot meet query budgets, record and test an atomic valuation-revision design before proceeding.
 
 The web app should call generated functions directly with `useQuery`, `useMutation`, and `useAction`. Do not create wrappers that only rename those hooks. The import workflow merits one web module because it coordinates upload URL creation, direct file transfer, attach, parse status, preview, Commit, and retry.
 
@@ -485,6 +508,7 @@ Use a real Convex development or preview deployment for:
 - transaction metrics and limit headroom;
 - scheduler and cron behavior;
 - concurrent Commit calls;
+- concurrent first-use provisioning for the same identity, proving one user, Household, and membership after transaction retries;
 - reactive update behavior in the browser;
 - Clerk authentication;
 - production-like migration rehearsal.
@@ -550,6 +574,7 @@ Export UUIDs and numerics as text, civil dates as `YYYY-MM-DD`, timestamps in UT
 - Preserve old UUIDs as `legacyId` during the rollback window.
 - Maintain checksummed old-ID to Convex-ID maps.
 - Load parents before children.
+- Preserve saved user emails and Household display names. New Households use the legacy default `My Portfolio`; an absent email claim on later sign-in must not erase a saved email.
 - Map legacy Import Batch statuses explicitly. `created` becomes `awaiting_upload`; `uploaded`, `parsed`, `committed`, and `failed` retain their meaning. A legacy `expired` batch retains `legacyStatus: "expired"` and unavailable Source File metadata, but `expired` is not a target workflow state. An expired batch with normalized rows becomes `parsed`; one with no rows and no available Source File becomes `failed` with typed reason `source_expired_no_rows`.
 - Convert Normalized Rows into bounded import chunks without changing their meaning.
 - Add explicit source-group, completeness, granularity, priority, position-key, and transaction-occurrence metadata through the tested target rules.
@@ -570,8 +595,8 @@ The source-aware transaction occurrence key intentionally preserves identical sa
 
 ### Cutover
 
-1. Confirm a fresh Supabase backup and Convex backup or export.
-2. Enable maintenance mode for upload and Commit in the current web deployment.
+1. Confirm restorable Postgres and Source File backups, a Convex backup or export, and archived application build/configuration. Download retained backups so provider expiry cannot end the rollback window early.
+2. Freeze every source writer: upload, Commit, first-use provisioning, lazy FX persistence, and Source File cleanup. Drain or cancel in-flight work, suspend cron deletion, and enforce read-only source database access before the final consistent snapshot. On the inactive Convex target, keep application writes and cleanup disabled while operator migration writes run.
 3. Run the final repeatable export, transform, and load.
 4. Reconcile production Postgres against production Convex.
 5. Smoke-test the Convex production web build with the production Clerk account.
@@ -581,7 +606,9 @@ The source-aware transaction occurrence key intentionally preserves identical sa
 9. Enable Convex upload and Commit.
 10. Keep Postgres and Supabase unchanged and read-only through the rollback window.
 
-The first new import committed only in Convex is the point of no return for an instant rollback. Before that event, rollback means restoring the old Vercel configuration. After it, preserve the new Source File and re-import it into the old application before switching back.
+Before any Convex-only application write, rollback redeploys the exact recorded Postgres-serving application commit with its matching configuration. Changing only the Convex URL cannot restore tRPC code removed from the new web build. Preserve the new build separately so the operation is reversible.
+
+After Convex-only writes, instant rollback is no longer safe. Freeze Convex writes and replay every new user, account, and committed batch in original publication order through a tested reverse adapter. Preserve normalized inputs, parser/projector versions, exact values, provenance, and commit receipts through the rollback window. Source Files alone are insufficient: an already-parsed batch can Commit after its file expires. Reconcile the replay before restoring the old build. Phase 6 must rehearse this case with synthetic expired-file batches; if reverse replay cannot preserve an approved behavior correction, keep production writes disabled until the owner explicitly chooses a recovery policy.
 
 ## 13. PR-sized implementation phases
 
@@ -628,7 +655,7 @@ These are source-state dispositions, not production corrections. Phase 0 and mig
 
 ### Phase 1: backend package and environment isolation
 
-Goal: establish a typed Convex package with isolated development data and Clerk authorization.
+Goal: establish a typed Convex package with isolated development data and Clerk authorization. Track repository and cloud verification independently so account setup can happen in parallel.
 
 Major areas:
 
@@ -642,19 +669,21 @@ Work:
 - Create the Convex development and production project relationship.
 - Configure the package-local `convex/` directory and generated interface export.
 - Add `ConvexProviderWithClerk` to the web provider tree without switching data reads.
-- Provision one Household and an owner membership per user. Shared Households and multiple memberships are not part of the current product scope; enforce the one-Household rule instead of preserving "oldest membership wins." Do not create six eager default accounts. Create accounts from published source data, while migrating every existing account unchanged. These are recorded behavior corrections.
+- Provision one Household and an owner membership per user. Preserve saved emails when Clerk omits the claim, and retain Household names in `users.current` with the legacy `My Portfolio` default for new Households. Shared Households and multiple memberships are not part of the current product scope; enforce the one-Household rule instead of preserving "oldest membership wins." Do not create six eager default accounts. Create accounts from published source data, while migrating every existing account unchanged. The membership rule and default-account removal are recorded behavior corrections; email and Household-name behavior remains unchanged.
 - Implement `users.ensureCurrent`, `users.current`, membership resolution, and owner authorization.
 - Create generated fake-data seeds that cannot run in production.
-- Add Convex code generation and backend package tests to `.github/workflows/ci.yml`; confirm the web build succeeds without a live Convex connection.
+- Ensure ordinary CI includes backend lint, typecheck, and tests through the workspace tasks; confirm the web build succeeds without a live Convex connection. As part of the external gate, configure a trusted integration job for development codegen once that deployment exists.
+
+Codegen note: Convex 1.45 codegen requires deployment selection. Committed bindings allow ordinary CI lint, typecheck, and tests without deployment credentials. Regenerate bindings against an explicitly selected local or personal development backend whenever function modules change. In a trusted integration job, regenerate and check both tracked diffs and untracked generated files; do not expose deployment credentials to untrusted pull requests. Cloud credentials are not a prerequisite for local backend testing or pure-domain work. This is separate from the required cloud smoke test.
 
 Behavior unchanged: all production reads and writes still use Postgres.
 
 Completion criteria:
 
-- A clean checkout can run codegen, typecheck, and test the backend package.
-- Local sign-in creates only development documents.
-- Unauthenticated and cross-Household tests pass.
-- Production seed execution fails before writing.
+- Repository gate: a clean checkout can typecheck and test from committed bindings; codegen runs against an explicitly selected local/development backend. No production credentials are needed.
+- Repository gate: provisioning and seeds are idempotent, inconsistent identity/membership state fails closed, and separate identities resolve only their own Household. The owner-authorization helper rejects viewers in tests; Phase 3 must enforce it on actual upload writes. Full foreign-resource ID and viewer-write endpoint tests belong to Phases 3–4 when those endpoints exist.
+- Repository gate: production, unset, and unknown seed environments fail before writing; development/test seeds create consistent fixtures through the same model functions as normal provisioning. Test-only authorization adapters are not deployed functions; the operational fake seed remains a guarded internal function.
+- External gate: the owner-selected plan/region and project relationship are recorded, real Clerk sign-in creates only personal-development documents, concurrent first-use calls leave one user/Household/membership, and cloud integration/codegen checks pass. Confirm the actual profile claim shape and displayed email/name as part of sign-in. Project creation does not authorize deploying code or data to production.
 
 Old code deleted: none.
 
@@ -677,7 +706,7 @@ Work:
 - Implement `buildPortfolioPublication`.
 - Port current and exited rules, source priority, aggregate fallback, histories, valuations, and summary construction into the module.
 - Use existing analytics for allocation, performance, and XIRR.
-- Add a temporary adapter that runs Postgres committed facts through `buildPortfolioPublication`, making the existing integration suite the executable publication oracle. Delete it in Phase 8.
+- Add a test adapter that feeds Postgres committed facts into `buildPortfolioPublication` and compares its result with independently executed legacy portfolio queries under the same quote/time inputs. Do not replace those legacy queries. Delete the temporary adapter in Phase 8.
 
 Behavior unchanged: parser support, previews, warnings, portfolio output, and import dedupe semantics.
 
@@ -685,7 +714,7 @@ Completion criteria:
 
 - All parser and analytics tests pass.
 - Golden publication outputs match the current Postgres implementation.
-- Source rules exist in one implementation, not duplicated SQL and TypeScript.
+- All new Convex and migration source rules use the same pure implementation. The frozen Postgres SQL remains an independent parity oracle until Phase 8; do not replace it with the new projector and then compare that projector with itself.
 - The module's tests use its public interface.
 
 Old code deleted: duplicated pure source and aggregate helpers only after the old path no longer needs them.
@@ -770,6 +799,7 @@ Major areas:
 Work:
 
 - Replace tRPC and React Query calls with direct Convex hooks.
+- Replace the temporary `NODE_ENV=development` provider gate with deployment-specific Convex configuration so production-mode preview builds connect to isolated preview backends. Surface provisioning failures in the UI before any page depends on Convex data; the Phase 1 adapter only logs them while pages still use Postgres.
 - Preserve current view-model shapes where possible.
 - Replace manual query invalidation with subscriptions.
 - Switch upload from the Next proxy to direct Convex Storage.
@@ -800,9 +830,9 @@ Major areas:
 Work:
 
 - Implement consistent extraction, ID mapping, transforms, file copying, load, and reconciliation.
-- Rehearse against a non-production Convex deployment using an authorized production snapshot or an equivalent protected copy.
+- Rehearse against a non-production Convex deployment using generated production-shaped fixtures only. Real-data reconciliation runs against the inactive production target in Phase 7 after explicit production authorization. A protected production snapshot is still production data and must not enter development or preview.
 - Run the migration twice from the same input.
-- Rehearse rollback before any Convex-only Commit.
+- Rehearse rollback both before the first Convex-only write and after multiple synthetic Convex-only commits, including an expired-file batch and a new identity.
 
 Behavior unchanged: Postgres remains production.
 
@@ -828,7 +858,7 @@ Major areas:
 
 Work:
 
-- Land maintenance mode for upload and Commit on the current Postgres stack and deploy it before any cutover write. Record the exact last Postgres-serving production commit as a verified redeployable rollback target.
+- Land maintenance mode for every source writer listed in section 12 and deploy it before the final snapshot. Record the exact last Postgres-serving production commit and configuration as a verified redeployable rollback target.
 - Follow the cutover sequence in section 12.
 - Complete read-only production validation before enabling new imports.
 - Record the final reconciliation digest and cutover commit.
@@ -897,18 +927,18 @@ Port the current currency-rate behavior to a Node action with explicit timeout, 
 
 ## 15. Risks and required responses
 
-| Risk                                                      | Response                                                                                          |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Production data accidentally enters development           | Separate deployments and credentials, guarded seed functions, ignored migration directory         |
-| Actual import exceeds a mutation budget                   | Measure first, test twice-largest data, use versioned builder only when required                  |
-| Numeric drift                                             | Canonical decimal source strings, one decimal implementation, exact reconciliation before cutover |
-| Duplicate logical records                                 | Indexed read and insert through shared mutation helpers, concurrency tests                        |
-| Current and exited behavior changes                       | Explicit source contracts and golden comparison with current SQL results                          |
-| Parser action fails after partial staging                 | Attempt IDs, chunk digests, idempotent retry, no active read access to staging                    |
-| Production cutover reveals a mismatch                     | Read-only validation period and environment rollback before first Convex-only Commit              |
-| Rollback after a new Convex import                        | Preserve its Source File and re-import it into the old application before switching back          |
-| Old architecture survives as a hidden compatibility layer | Delete it after the rollback window and remove mobile rather than keeping tRPC for unused code    |
-| A future projection change corrupts history               | Immutable normalized source chunks, batch provenance, versioned read models, rebuild tests        |
+| Risk                                                      | Response                                                                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Production data accidentally enters development           | Separate deployments and credentials, guarded seed functions, ignored migration directory                     |
+| Actual import exceeds a mutation budget                   | Measure first, test twice-largest data, use versioned builder only when required                              |
+| Numeric drift                                             | Canonical decimal source strings, one decimal implementation, exact reconciliation before cutover             |
+| Duplicate logical records                                 | Indexed read and insert through shared mutation helpers, concurrency tests                                    |
+| Current and exited behavior changes                       | Explicit source contracts and golden comparison with current SQL results                                      |
+| Parser action fails after partial staging                 | Attempt IDs, chunk digests, idempotent retry, no active read access to staging                                |
+| Production cutover reveals a mismatch                     | Read-only validation period and environment rollback before first Convex-only Commit                          |
+| Rollback after Convex-only writes                         | Freeze writes, replay retained normalized inputs and identity changes, reconcile, then redeploy the old build |
+| Old architecture survives as a hidden compatibility layer | Delete it after the rollback window and remove mobile rather than keeping tRPC for unused code                |
+| A future projection change corrupts history               | Immutable normalized source chunks, batch provenance, versioned read models, rebuild tests                    |
 
 ## 16. Definition of done
 

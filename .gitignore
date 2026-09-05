@@ -13,6 +13,7 @@ web-build
 *.local
 /uploads/
 .migration/
+.convex/
 *.tsbuildinfo
 # Agent worktrees / local tooling scratch
 .claude/worktrees/

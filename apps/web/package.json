@@ -12,6 +12,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.9.9",
     "@investment-sync/api": "workspace:*",
+    "@investment-sync/backend": "workspace:*",
     "@investment-sync/db": "workspace:*",
     "@investment-sync/importers": "workspace:*",
     "@radix-ui/react-slot": "^1.2.4",
@@ -22,6 +23,7 @@
     "@trpc/server": "^10.45.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "convex": "^1.45.0",
     "lucide-react": "^0.468.0",
     "next": "^15.1.4",
     "next-themes": "^0.4.6",
