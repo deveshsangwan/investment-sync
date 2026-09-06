@@ -1,5 +1,7 @@
 "use client";
 
+import { SelectField as FilterSelect } from "@/components/ui/select-field";
+
 import { Money, useAmountFormatters } from "@/components/amounts";
 
 import { InstrumentIdentity } from "@/components/instrument-identity";
@@ -51,7 +53,7 @@ type PositionStatus = "current" | "exited" | "all";
 type SortKey = "value" | "pnl" | "return" | "name";
 
 const controlClass =
-  "h-11 rounded-lg border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
+  "h-11 rounded-[8px] border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
 
 export function HoldingsClient({
   isDataConfigured,
@@ -229,7 +231,7 @@ export function HoldingsClient({
                     onChange={setAssetClass}
                     options={[
                       ["all", "All asset classes"],
-                      ...filters.assetClasses.map((value) => [
+                      ...filters.assetClasses.map<[string, string]>((value) => [
                         value,
                         labelize(value),
                       ]),
@@ -241,7 +243,7 @@ export function HoldingsClient({
                     onChange={setAccount}
                     options={[
                       ["all", "All accounts"],
-                      ...filters.accounts.map((value) => [value, value]),
+                      ...filters.accounts.map<[string, string]>((value) => [value, value]),
                     ]}
                   />
                   <FilterSelect
@@ -250,7 +252,7 @@ export function HoldingsClient({
                     onChange={setCurrency}
                     options={[
                       ["all", "All currencies"],
-                      ...filters.currencies.map((value) => [value, value]),
+                      ...filters.currencies.map<[string, string]>((value) => [value, value]),
                     ]}
                   />
                 </div>
@@ -327,35 +329,6 @@ function Summary({
         {value}
       </p>
     </div>
-  );
-}
-
-function FilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[][];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="grid gap-1.5">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <select
-        className={`${controlClass} w-full`}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
