@@ -278,7 +278,7 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
                         {formatQuantity(transaction.quantity)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {transaction.price ? (
+                        {transaction.price != null ? (
                           <Money
                             value={Number(transaction.price)}
                             currency={transaction.currency}

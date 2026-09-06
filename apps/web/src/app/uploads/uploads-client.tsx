@@ -107,7 +107,8 @@ export function UploadsClient({
   });
 
   const isBusy = status === "uploading" || commit.isLoading;
-  const hasUploadPermission = me.data?.permissions.canUpload === true;
+  const hasUploadPermission =
+    !me.isError && me.data?.permissions.canUpload === true;
   const canUpload = Boolean(
     hasUploadPermission && file && !fileError && !isBusy,
   );
