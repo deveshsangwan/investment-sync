@@ -23,11 +23,6 @@ import {
   ImportNotFoundError,
   ImportPersistenceError,
 } from "./import-errors";
-import {
-  cleanupExpiredImportFilesPromise,
-  listImportsPromise,
-  uploadAndProcessImportPromise,
-} from "./import-lifecycle";
 import type { MembershipContext } from "./membership";
 import { clearHouseholdPortfolioCache } from "./portfolio-cache";
 import {
@@ -43,25 +38,11 @@ type ImportDatabase = Pick<
 >;
 
 export * from "./import-errors";
-
-export function uploadAndProcessImport(
-  dependencies: ImportDependencies,
-  membership: MembershipContext,
-  input: { fileName: string; mimeType?: string; content: Buffer },
-) {
-  return Clock.currentTimeMillis.pipe(
-    Effect.flatMap((now) =>
-      importEffect(() =>
-        uploadAndProcessImportPromise(
-          dependencies,
-          membership,
-          input,
-          new Date(now),
-        ),
-      ),
-    ),
-  );
-}
+export {
+  cleanupExpiredImportFiles,
+  listImports,
+  uploadAndProcessImport,
+} from "./import-lifecycle";
 
 export function commitImport(
   dependencies: ImportDependencies,
@@ -77,23 +58,6 @@ export function commitImport(
           importBatchId,
           new Date(now),
         ),
-      ),
-    ),
-  );
-}
-
-export function listImports(
-  dependencies: ImportDependencies,
-  membership: MembershipContext,
-) {
-  return importEffect(() => listImportsPromise(dependencies, membership));
-}
-
-export function cleanupExpiredImportFiles(dependencies: ImportDependencies) {
-  return Clock.currentTimeMillis.pipe(
-    Effect.flatMap((now) =>
-      importEffect(() =>
-        cleanupExpiredImportFilesPromise(dependencies, new Date(now)),
       ),
     ),
   );
@@ -569,6 +533,10 @@ function requiredMapValue(
   label: string,
 ): string {
   const value = values.get(key);
-  if (!value) throw new Error(`Failed to resolve ${label} for import row`);
+  if (!value) {
+    throw new ImportPersistenceError({
+      message: `Failed to resolve ${label} for import row`,
+    });
+  }
   return value;
 }

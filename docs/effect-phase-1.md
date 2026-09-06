@@ -2,6 +2,43 @@
 
 Companion to `effect-migration-sequence.md`. Read that first for why this phase goes first.
 
+**Status: done.** Branch `refactor/effect-import-lifecycle`, on top of the safety net in
+`test/import-coverage-pre-effect`. `import-lifecycle.ts` is native Effect; 154 workspace
+tests, `typecheck`, `lint` and a full `build` all pass. No adapter changed — the Next
+routes and tRPC router call the same exported names, which is the parity result that
+matters.
+
+Outcome notes, where reality differed from the plan below:
+
+- PRs landed 1.3 → 1.2 → 1.1; they are independent, and the order does not matter.
+- `markImportFailed` and `removeStoredFile` gained `never` error channels. That is what
+  makes `failBatch` safe rather than just tidy: recording a failure can no longer replace
+  the failure being recorded.
+- One real edge case fixed rather than preserved: if the storage delete call itself
+  rejected, the old code propagated _that_ error instead of the original and never
+  recorded the failure at all. `removeStoredFile` now reports `false`.
+- `writeParsedRowsInTransaction` stays Promise-shaped alongside `commitImportPromise`, for
+  the same reason. Both convert in Phase 2 behind a Database service.
+
+### Carried into Phase 2
+
+A Codex review of the migration diff found one real bug (fixed in `0fc7515`: the
+compensation path could orphan an uploaded file forever) and one deferred item worth
+recording rather than acting on now.
+
+**Use `Effect.acquireUseRelease` for the uploaded file.** The explicit compensation used
+here is behaviorally identical today, but there is an interruption window between the
+upload succeeding and `catchAll` registering; `acquireUseRelease` closes it and runs its
+release uninterruptibly. It is deferred because nothing in this codebase can interrupt a
+fiber today — no `timeout`, no `race`, one `runPromise` per request. Phase 2 introduces
+`ManagedRuntime` and is the first point where that stops being true, so the change belongs
+in the same diff as the interruption source.
+
+Related, for the same phase: the zero-argument `Effect.tryPromise` wrappers do not cancel
+Drizzle or Supabase work, so an interrupted fiber leaves the underlying Promise running.
+The upload-through-persist section should be explicitly uninterruptible, or the drivers
+must honour an `AbortSignal`, before any interruption source is added.
+
 ## PR 1.0 — Safety net (done)
 
 The suite that has to stay green through every PR below.
@@ -79,11 +116,15 @@ const failBatch =
 Then each step is `parseFile(input).pipe(failBatch())`, the duplicate check is
 `failBatch({ sourceType, parserVersion, rowCount, warnings })`, and so on.
 
-**Do not reach for `Effect.acquireRelease` on the uploaded file.** The failure record
-depends on whether the release _succeeded_ (`storagePath: null` vs `expiresAt: now`), and
-`acquireRelease` deliberately hides the release outcome from the caller. Use an explicit
-compensation effect on the persistence step — the branch is real domain behavior, not
-boilerplate to abstract away.
+**On the uploaded file, use an explicit compensation effect rather than
+`Effect.acquireRelease`.** The failure record branches on whether the delete succeeded
+(`storagePath: null` vs keeping the path and expiring now), and a plain `acquireRelease`
+finalizer discards its own result.
+
+That reasoning was too strong, and the review corrected it: `acquireUseRelease` passes the
+`Exit` to the release function, which can observe its own cleanup internally before
+choosing the metadata. See "Carried into Phase 2" above — the switch is deferred, not
+rejected.
 
 `markImportFailed` swallows its own errors today (logs and continues). Keep that: it is a
 best-effort record, and letting it fail would mask the original error. In Effect that is
