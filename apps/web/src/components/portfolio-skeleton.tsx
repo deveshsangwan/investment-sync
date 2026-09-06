@@ -79,18 +79,33 @@ export function PortfolioContentSkeleton({
             </div>
             <div className="min-w-0 rounded-2xl border bg-card p-5">
               <Skeleton className="mb-7 h-4 w-28" />
-              {[72, 55, 42, 30].map((width) => (
-                <div key={width} className="mt-6">
-                  <div className="flex items-center justify-between gap-4">
-                    <Skeleton className="h-3 w-28" />
-                    <Skeleton className="h-3 w-12" />
-                  </div>
-                  <Skeleton
-                    className="mt-3 h-1"
-                    style={{ width: `${width}%` }}
-                  />
-                </div>
-              ))}
+              {variant === "holding"
+                ? Array.from({ length: 7 }, (_, row) => (
+                    <div
+                      key={row}
+                      className="flex justify-between gap-4 border-b py-3"
+                    >
+                      <Skeleton className="h-3 w-28" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  ))
+                : [72, 55, 42, 30].map((width) => (
+                    <div key={width} className="mt-6">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                          {variant === "asset" && (
+                            <Skeleton className="size-7 shrink-0" />
+                          )}
+                          <Skeleton className="h-3 w-28" />
+                        </div>
+                        <Skeleton className="h-3 w-12" />
+                      </div>
+                      <Skeleton
+                        className="mt-3 h-1"
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                  ))}
             </div>
           </div>
           {isOverview && (
@@ -123,7 +138,20 @@ export function PortfolioContentSkeleton({
               </div>
             </div>
           )}
-          <HoldingRows />
+          {variant === "holding" ? (
+            <div>
+              <Skeleton className="mb-5 h-4 w-32" />
+              <div className="flex items-center gap-4 rounded-xl border border-dashed p-6">
+                <Skeleton className="size-9 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="mt-3 h-3 w-80" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <HoldingRows />
+          )}
         </>
       )}
     </div>
