@@ -348,6 +348,8 @@ function PositionTableRow({ position }: { position: Position }) {
             <InstrumentIdentity
               name={position.instrumentName}
               symbol={position.symbol}
+              isin={position.isin}
+              exchange={position.exchange}
               assetClass={position.assetClass}
             />
           </Link>
@@ -397,6 +399,8 @@ function PositionCard({ position }: { position: Position }) {
         <InstrumentIdentity
           name={position.instrumentName}
           symbol={position.symbol}
+          isin={position.isin}
+          exchange={position.exchange}
           assetClass={position.assetClass}
         />
         <p className="number shrink-0 font-semibold">

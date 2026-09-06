@@ -295,6 +295,8 @@ export function DashboardClient({
                   <InstrumentIdentity
                     name={holding.instrumentName}
                     symbol={holding.symbol}
+                    isin={holding.isin}
+                    exchange={holding.exchange}
                     assetClass={holding.assetClass}
                   />
                   <div className="shrink-0 text-right">

@@ -1,3 +1,4 @@
+import { LogoAttribution } from "@/components/logo-attribution";
 import { BrandMark } from "@/components/brand-mark";
 import { HomeMotion } from "@/components/home-motion";
 import { PortfolioIllustration } from "@/components/portfolio-illustration";
@@ -281,6 +282,7 @@ export default async function HomePage() {
       </section>
       <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-5 border-t px-5 py-7 text-xs text-muted-foreground sm:px-8">
         <p>Investment Sync</p>
+        <LogoAttribution />
         <nav aria-label="Legal" className="flex gap-6">
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>

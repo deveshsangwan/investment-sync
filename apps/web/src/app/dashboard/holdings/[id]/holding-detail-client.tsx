@@ -73,6 +73,8 @@ export function HoldingDetailClient({
         <header className="mb-8 flex items-start gap-4">
           <InstrumentMark
             symbol={holding.symbol}
+            isin={holding.isin}
+            exchange={holding.exchange}
             name={holding.instrumentName}
             assetClass={holding.assetClass}
             size="detail"

@@ -183,6 +183,8 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
                       <span className="flex min-w-0 items-center gap-3">
                         <InstrumentMark
                           symbol={holding.symbol}
+                          isin={holding.isin}
+                          exchange={holding.exchange}
                           name={holding.instrumentName}
                           assetClass={holding.assetClass}
                         />
@@ -307,6 +309,8 @@ function PositionRow({
         >
           <InstrumentMark
             symbol={holding.symbol}
+            isin={holding.isin}
+            exchange={holding.exchange}
             name={holding.instrumentName}
             assetClass={holding.assetClass}
           />
@@ -385,6 +389,8 @@ function PositionCard({
     >
       <InstrumentMark
         symbol={holding.symbol}
+        isin={holding.isin}
+        exchange={holding.exchange}
         name={holding.instrumentName}
         assetClass={holding.assetClass}
         className="row-span-3 mt-0.5"
