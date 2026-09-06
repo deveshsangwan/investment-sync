@@ -31,6 +31,8 @@ const currentHoldingRowSchema = z.object({
   provider: z.string(),
   instrumentName: z.string(),
   symbol: z.string().nullable(),
+  isin: z.string().nullable(),
+  exchange: z.string().nullable(),
   assetClass: z.enum(assetClassEnum.enumValues),
 });
 
@@ -176,6 +178,8 @@ async function latestCurrentHoldingRows(
         a.provider as "provider",
         i.name as "instrumentName",
         i.symbol as "symbol",
+        i.isin as "isin",
+        i.exchange as "exchange",
         i.asset_class as "assetClass",
         (${aggregateExpression}) as "isAggregate",
         coalesce(nullif(upper(trim(i.symbol)), ''), upper(trim(i.name))) as "instrumentKey"
@@ -277,6 +281,8 @@ async function latestCurrentHoldingRows(
       "provider",
       "instrumentName",
       "symbol",
+      "isin",
+      "exchange",
       "assetClass"
     from ranked
     where ${modeWhere}
