@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   WalletCards,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -46,6 +47,16 @@ const navItems = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [hasScrolled, setHasScrolled] = useState(false);
+
+  useEffect(() => {
+    const updateScrollState = () => setHasScrolled(window.scrollY > 0);
+
+    updateScrollState();
+    window.addEventListener("scroll", updateScrollState, { passive: true });
+
+    return () => window.removeEventListener("scroll", updateScrollState);
+  }, []);
 
   return (
     <>
@@ -55,7 +66,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Skip to portfolio
           </a>
 
-          <header className="sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur">
+          <header
+            className={cn(
+              "sticky top-0 z-40 transition-[background-color,backdrop-filter] duration-200 motion-reduce:transition-none",
+              hasScrolled
+                ? "bg-background/75 backdrop-blur-xl"
+                : "bg-background",
+            )}
+          >
             <div className="mx-auto flex h-16 max-w-[82rem] items-center gap-8 px-4 sm:px-6 lg:px-10">
               <Brand />
               <nav
@@ -129,21 +147,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Brand({ showLabel = true }: { showLabel?: boolean }) {
+function Brand() {
   return (
     <Link
       href="/dashboard"
       aria-label="Investment Sync overview"
-      className="flex min-w-0 items-center gap-2.5"
+      className="flex size-11 shrink-0 items-center justify-center"
     >
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
         <WalletCards className="size-4" aria-hidden="true" />
       </span>
-      {showLabel && (
-        <span className="truncate text-sm font-semibold tracking-[-0.02em]">
-          Investment Sync
-        </span>
-      )}
     </Link>
   );
 }
