@@ -2,23 +2,16 @@
 
 import { useRef, useState, type DragEvent } from "react";
 import { getImportFileValidationError } from "@investment-sync/importers";
-import {
-  Check,
-  CheckCircle2,
-  FileSpreadsheet,
-  LoaderCircle,
-  ShieldCheck,
-  UploadCloud,
-  X,
-} from "lucide-react";
+import { Check, FileSpreadsheet, LoaderCircle, Upload, X } from "lucide-react";
 import Link from "next/link";
+import { useAmountsVisibility } from "@/components/amounts";
 import { SetupRequired } from "@/components/dashboard-states";
 import {
   EmptyState,
   ErrorState,
   PageHeader,
   PageShell,
-  SectionCard,
+  Panel,
 } from "@/components/portfolio-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -48,8 +41,8 @@ interface ImportPreview {
 }
 
 const flowSteps: Array<{ value: FlowStep; label: string }> = [
-  { value: "select", label: "Select" },
-  { value: "review", label: "Review" },
+  { value: "select", label: "Select file" },
+  { value: "review", label: "Review data" },
   { value: "apply", label: "Apply" },
   { value: "done", label: "Done" },
 ];
@@ -100,20 +93,25 @@ export function UploadsClient({
   const list = trpc.imports.list.useQuery(undefined, {
     enabled: isDataConfigured,
   });
+  const me = trpc.auth.me.useQuery(undefined, {
+    enabled: isDataConfigured,
+  });
   const commit = trpc.imports.commit.useMutation({
     onSuccess: (result) => {
       setAppliedRowCount(result.committed);
       setStep("done");
       void utils.imports.list.invalidate();
-      void utils.portfolio.overview.invalidate();
-      void utils.portfolio.summary.invalidate();
-      void utils.portfolio.holdings.invalidate();
-      void utils.portfolio.positions.invalidate();
+      void utils.portfolio.invalidate();
+      void utils.accounts.list.invalidate();
     },
   });
 
   const isBusy = status === "uploading" || commit.isLoading;
-  const canUpload = Boolean(file && !fileError && !isBusy);
+  const hasUploadPermission =
+    !me.isError && me.data?.permissions.canUpload === true;
+  const canUpload = Boolean(
+    hasUploadPermission && file && !fileError && !isBusy,
+  );
 
   const resetFlow = () => {
     setFile(null);
@@ -159,12 +157,12 @@ export function UploadsClient({
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
-    if (isBusy) return;
+    if (isBusy || !hasUploadPermission) return;
     handleFileChange(event.dataTransfer.files[0] ?? null);
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || !hasUploadPermission || isBusy) return;
     const validationError = getImportFileValidationError({
       fileName: file.name,
       mimeType: file.type,
@@ -242,6 +240,8 @@ export function UploadsClient({
   };
 
   const handleApply = (importBatchId: string, nextPreview?: ImportPreview) => {
+    if (!hasUploadPermission || isBusy) return;
+
     if (nextPreview) setPreview(nextPreview);
     setActiveBatchId(importBatchId);
     setAppliedRowCount(null);
@@ -253,15 +253,13 @@ export function UploadsClient({
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Imports"
-        title="Bring your portfolio up to date"
-        description="Select an export, review the detected data, then apply it to your household portfolio."
+        title="Imports"
+        description="Select a statement, check what was detected, then apply it. Nothing changes in your portfolio until you apply."
         meta={
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
-            Source files are retained for 30 days. Import history remains
-            available after files expire.
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Source files are kept for 30 days. Import history stays available
+            after a file expires.
+          </p>
         }
       />
 
@@ -275,48 +273,68 @@ export function UploadsClient({
             type="file"
             accept=".csv,.xlsx"
             className="sr-only"
-            disabled={isBusy}
+            disabled={isBusy || !hasUploadPermission}
             onChange={(event) =>
               handleFileChange(event.target.files?.[0] ?? null)
             }
           />
 
-          <ImportProgress currentStep={step} />
+          {me.isLoading ? (
+            <Panel title="Select a portfolio export">
+              <Skeleton
+                className="h-56 rounded-2xl"
+                aria-label="Loading import permissions"
+              />
+            </Panel>
+          ) : me.isError ? (
+            <ErrorState
+              title="Import permissions could not be loaded"
+              description="Try loading your permissions again before selecting a file."
+              onRetry={() => void me.refetch()}
+            />
+          ) : !hasUploadPermission ? (
+            <Alert>
+              <AlertTitle>Only household owners can import files</AlertTitle>
+              <AlertDescription>
+                You can view the import history for this household below.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-          {step === "select" ? (
-            <SectionCard
-              title="Select a portfolio export"
-              description="Files are parsed first. Nothing changes in your portfolio until you review and apply the import."
-              contentClassName="space-y-4"
-            >
+          {hasUploadPermission ? <ImportProgress currentStep={step} /> : null}
+
+          {hasUploadPermission && step === "select" ? (
+            <Panel title="Select a portfolio export" bodyClassName="space-y-4">
               <div
                 className={cn(
-                  "rounded-lg border border-dashed bg-muted/20 px-5 py-8 text-center transition-colors sm:px-8 sm:py-10",
-                  isDragging && "border-primary bg-primary/5",
-                  fileError && "border-negative/40 bg-negative/5",
+                  "rounded-2xl border border-dashed border-border/80 px-5 py-10 text-center transition-colors duration-150 motion-reduce:transition-none",
+                  isDragging && "border-foreground/50 bg-secondary/60",
+                  fileError && "border-negative/50",
                 )}
                 onDragEnter={(event) => {
                   event.preventDefault();
-                  if (!isBusy) setIsDragging(true);
+                  if (!isBusy && hasUploadPermission) setIsDragging(true);
                 }}
                 onDragOver={(event) => event.preventDefault()}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
               >
-                <div className="mx-auto grid size-12 place-items-center rounded-lg border bg-card text-primary">
-                  <UploadCloud className="size-5" aria-hidden="true" />
-                </div>
-                <p className="mt-4 font-semibold tracking-[-0.01em]">
+                <Upload
+                  className="mx-auto size-5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <p className="mt-3 text-sm font-medium">
                   Drop a CSV or XLSX file here
                 </p>
                 <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-                  Supported exports are detected automatically. Maximum file
-                  size is 4 MB.
+                  Supported exports are detected automatically. Files up to 4
+                  MB.
                 </p>
                 <Button
                   type="button"
                   variant="outline"
                   className="mt-4"
+                  disabled={isBusy}
                   onClick={() => inputRef.current?.click()}
                 >
                   Browse files
@@ -324,16 +342,17 @@ export function UploadsClient({
               </div>
 
               {file ? (
-                <div className="flex flex-col gap-3 rounded-xl border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 rounded-2xl border border-border/70 p-3.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-primary">
-                      <FileSpreadsheet className="size-5" aria-hidden="true" />
-                    </div>
+                    <FileSpreadsheet
+                      className="size-5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
+                      <p className="truncate text-sm font-medium">
                         {file.name}
                       </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="number mt-0.5 text-xs text-muted-foreground">
                         {formatFileSize(file.size)}
                       </p>
                     </div>
@@ -358,8 +377,8 @@ export function UploadsClient({
               ) : null}
 
               {uploadError ? (
-                <Alert className="border-negative/25 bg-negative/5">
-                  <AlertTitle>We could not prepare this file</AlertTitle>
+                <Alert className="border-negative/40">
+                  <AlertTitle>This file could not be prepared</AlertTitle>
                   <AlertDescription>{uploadError}</AlertDescription>
                 </Alert>
               ) : null}
@@ -375,17 +394,15 @@ export function UploadsClient({
                       aria-hidden="true"
                     />
                   ) : (
-                    <UploadCloud aria-hidden="true" />
+                    <Upload aria-hidden="true" />
                   )}
-                  {status === "uploading"
-                    ? "Preparing review..."
-                    : "Review file"}
+                  {status === "uploading" ? "Preparing review" : "Review file"}
                 </Button>
               </div>
-            </SectionCard>
+            </Panel>
           ) : null}
 
-          {step === "review" && preview ? (
+          {hasUploadPermission && step === "review" && preview ? (
             <ReviewImport
               preview={preview}
               onChooseAnother={chooseAnotherFile}
@@ -393,8 +410,8 @@ export function UploadsClient({
             />
           ) : null}
 
-          {step === "apply" && preview ? (
-            <SectionCard
+          {hasUploadPermission && step === "apply" && preview ? (
+            <Panel
               title={commit.isError ? "Import not applied" : "Applying import"}
               description={
                 commit.isError
@@ -404,47 +421,46 @@ export function UploadsClient({
             >
               {commit.isError ? (
                 <ErrorState
-                  title="We could not apply this import"
+                  title="This import could not be applied"
                   description={
                     commit.error instanceof Error
                       ? commit.error.message
-                      : "The import request failed. Please try again."
+                      : "The import request failed. Try applying it again."
                   }
                   onRetry={() => handleApply(preview.importBatchId)}
                 />
               ) : (
                 <div
                   role="status"
-                  className="flex min-h-36 flex-col items-center justify-center rounded-xl bg-muted/25 p-6 text-center"
+                  className="flex items-center gap-3 rounded-2xl border border-border/70 p-5"
                 >
                   <LoaderCircle
-                    className="size-6 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                  />
-                  <p className="mt-3 font-semibold">
-                    Applying {preview.rowCount.toLocaleString("en-IN")} rows
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Keep this page open until the import is complete.
-                  </p>
-                </div>
-              )}
-            </SectionCard>
-          ) : null}
-
-          {step === "done" && preview ? (
-            <SectionCard
-              title="Import applied"
-              description="Your portfolio is ready to review."
-            >
-              <div className="flex flex-col gap-5 rounded-xl bg-positive/5 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2
-                    className="mt-0.5 size-6 shrink-0 text-positive"
+                    className="size-5 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"
                     aria-hidden="true"
                   />
                   <div>
-                    <p className="font-semibold">
+                    <p className="text-sm font-medium">
+                      Applying {preview.rowCount.toLocaleString("en-IN")} rows
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Keep this page open until the import finishes.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Panel>
+          ) : null}
+
+          {hasUploadPermission && step === "done" && preview ? (
+            <Panel title="Import applied">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <Check
+                    className="mt-0.5 size-5 shrink-0 text-positive"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">
                       {sourceLabel(preview.sourceType)} data is now in your
                       portfolio
                     </p>
@@ -462,129 +478,137 @@ export function UploadsClient({
                     Import another
                   </Button>
                   <Button asChild>
-                    <Link href="/dashboard">View dashboard</Link>
+                    <Link href="/dashboard">View portfolio</Link>
                   </Button>
                 </div>
               </div>
-            </SectionCard>
+            </Panel>
           ) : null}
 
-          <SectionCard
-            title="Supported exports"
-            description="Use the original export without renaming sheets or editing column headings."
-            className="mt-4"
-          >
-            <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr] md:gap-8">
-              <SourceGuide source={sourceGuidance[0]} featured />
-              <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-1">
-                {sourceGuidance.slice(1).map((source) => (
-                  <SourceGuide key={source.title} source={source} />
-                ))}
-              </div>
-            </div>
-          </SectionCard>
+          <section className="mt-8">
+            <h2 className="text-[0.82rem] font-semibold">Supported exports</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Use the original export without renaming sheets or editing column
+              headings.
+            </p>
+            <dl className="mt-3 divide-y divide-border/70 border-y border-border/70">
+              {sourceGuidance.map((source) => (
+                <div
+                  key={source.title}
+                  className="grid gap-1 py-3.5 sm:grid-cols-[12rem_minmax(0,1fr)_auto] sm:items-baseline sm:gap-4"
+                >
+                  <dt className="text-sm font-medium">{source.title}</dt>
+                  <dd className="text-sm leading-6 text-muted-foreground">
+                    {source.description}
+                  </dd>
+                  <dd className="text-xs text-muted-foreground sm:text-right">
+                    {source.format}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
 
-          <SectionCard
-            title="Recent imports"
-            description="Import records remain visible after the original source file reaches its 30-day retention date."
-            className="mt-4"
-          >
-            {list.isLoading ? (
-              <ImportHistorySkeleton />
-            ) : list.isError ? (
-              <ErrorState
-                title="We could not load import history"
-                description="Your existing imports are unchanged. Try loading the history again."
-                onRetry={() => void list.refetch()}
-              />
-            ) : (list.data?.length ?? 0) === 0 ? (
-              <EmptyState
-                icon={FileSpreadsheet}
-                title="No import history yet"
-                description="Select a supported portfolio export to create your first import."
-              />
-            ) : (
-              <div className="grid gap-3">
-                {list.data?.map((batch) => {
-                  const workflow = historyWorkflow(batch);
-                  const retention = historyRetention(batch);
-                  const canApply =
-                    !batch.committedAt &&
-                    batch.errors.length === 0 &&
-                    batch.rowCount > 0 &&
-                    (batch.status === "parsed" ||
-                      (batch.status === "expired" && batch.processedAt));
-                  const historyPreview: ImportPreview = {
-                    importBatchId: batch.id,
-                    originalFileName: batch.originalFileName,
-                    sourceType: batch.sourceType,
-                    rowCount: batch.rowCount,
-                    warnings: batch.warnings,
-                    rows: [],
-                  };
+          <section className="mt-8">
+            <h2 className="text-[0.82rem] font-semibold">Recent imports</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Import records stay visible after the original file reaches its
+              30-day retention date.
+            </p>
 
-                  return (
-                    <article
-                      key={batch.id}
-                      className="rounded-xl border bg-background p-4"
-                    >
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold">
-                            {batch.originalFileName}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            {sourceLabel(batch.sourceType)} / Uploaded{" "}
-                            {formatDate(batch.uploadedAt)} /{" "}
-                            {batch.rowCount.toLocaleString("en-IN")} normalized
-                            rows
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 flex-wrap items-center gap-2">
-                          <Badge variant={workflow.variant}>
-                            {workflow.label}
-                          </Badge>
-                          <Badge variant={retention.variant}>
-                            {retention.label}
-                          </Badge>
-                          {batch.warnings.length > 0 ? (
-                            <Badge variant="warning">
-                              {batch.warnings.length} warning
-                              {batch.warnings.length === 1 ? "" : "s"}
+            <div className="mt-3">
+              {list.isLoading ? (
+                <ImportHistorySkeleton />
+              ) : list.isError ? (
+                <ErrorState
+                  title="Import history could not be loaded"
+                  description="Your existing imports are unchanged. Try loading the history again."
+                  onRetry={() => void list.refetch()}
+                />
+              ) : (list.data?.length ?? 0) === 0 ? (
+                <EmptyState
+                  icon={FileSpreadsheet}
+                  title="No imports yet"
+                  description="Select a supported portfolio export to create your first import."
+                />
+              ) : (
+                <ul className="divide-y divide-border/70 border-y border-border/70">
+                  {list.data?.map((batch) => {
+                    const workflow = historyWorkflow(batch);
+                    const retention = historyRetention(batch);
+                    const canApply =
+                      hasUploadPermission &&
+                      !batch.committedAt &&
+                      batch.errors.length === 0 &&
+                      batch.rowCount > 0 &&
+                      (batch.status === "parsed" ||
+                        (batch.status === "expired" && batch.processedAt));
+                    const historyPreview: ImportPreview = {
+                      importBatchId: batch.id,
+                      originalFileName: batch.originalFileName,
+                      sourceType: batch.sourceType,
+                      rowCount: batch.rowCount,
+                      warnings: batch.warnings,
+                      rows: [],
+                    };
+
+                    return (
+                      <li key={batch.id} className="py-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {batch.originalFileName}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              {sourceLabel(batch.sourceType)} · uploaded{" "}
+                              {formatDate(batch.uploadedAt)} ·{" "}
+                              {batch.rowCount.toLocaleString("en-IN")}{" "}
+                              normalized rows
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {retention.label}
+                              {batch.warnings.length > 0
+                                ? ` · ${batch.warnings.length} warning${
+                                    batch.warnings.length === 1 ? "" : "s"
+                                  }`
+                                : ""}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Badge variant={workflow.variant}>
+                              {workflow.label}
                             </Badge>
-                          ) : null}
+                            {canApply ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={commit.isLoading}
+                                onClick={() =>
+                                  handleApply(batch.id, historyPreview)
+                                }
+                              >
+                                {commit.isLoading && activeBatchId === batch.id
+                                  ? "Applying"
+                                  : "Apply import"}
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                      {batch.errors[0] ? (
-                        <p
-                          role="alert"
-                          className="mt-3 text-xs leading-5 text-negative"
-                        >
-                          {batch.errors[0]}
-                        </p>
-                      ) : null}
-                      {canApply ? (
-                        <div className="mt-3 flex justify-end border-t pt-3">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={commit.isLoading}
-                            onClick={() =>
-                              handleApply(batch.id, historyPreview)
-                            }
+                        {batch.errors[0] ? (
+                          <p
+                            role="alert"
+                            className="mt-2 text-xs leading-5 text-negative"
                           >
-                            {commit.isLoading && activeBatchId === batch.id
-                              ? "Applying..."
-                              : "Apply import"}
-                          </Button>
-                        </div>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </SectionCard>
+                            {batch.errors[0]}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </section>
         </>
       ) : null}
     </PageShell>
@@ -597,36 +621,42 @@ function ImportProgress({ currentStep }: { currentStep: FlowStep }) {
   );
 
   return (
-    <nav
-      aria-label="Import progress"
-      className="mb-4 border-b border-border/70"
-    >
-      <ol className="-mb-px grid grid-cols-4">
+    <nav aria-label="Import progress" className="mb-5">
+      <ol className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
         {flowSteps.map((flowStep, index) => {
-          const complete = index < currentIndex;
-          const current = index === currentIndex;
+          const isComplete = index < currentIndex;
+          const isCurrent = index === currentIndex;
           return (
             <li
               key={flowStep.value}
-              aria-current={current ? "step" : undefined}
-              className={cn(
-                "flex min-w-0 flex-col items-center justify-center gap-1.5 border-b-2 border-transparent px-1 py-3 text-[11px] font-semibold text-muted-foreground sm:flex-row sm:gap-2 sm:px-3 sm:text-sm",
-                current && "border-primary text-foreground",
-                complete && "text-primary",
-              )}
+              aria-current={isCurrent ? "step" : undefined}
+              className="flex items-center gap-3"
             >
               <span
                 className={cn(
-                  "grid size-6 shrink-0 place-items-center rounded-md border text-[11px]",
-                  current &&
-                    "border-primary bg-primary text-primary-foreground",
-                  complete && "border-primary/20 bg-primary/10",
+                  "flex items-center gap-2 rounded-lg px-2.5 py-1 transition-colors duration-150 motion-reduce:transition-none",
+                  isCurrent && "bg-secondary font-medium text-foreground",
+                  !isCurrent && "text-muted-foreground",
                 )}
-                aria-hidden="true"
               >
-                {complete ? <Check className="size-3.5" /> : index + 1}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "grid size-4 place-items-center rounded-full border text-[0.6rem]",
+                    isComplete
+                      ? "border-foreground/50 text-foreground"
+                      : isCurrent
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border",
+                  )}
+                >
+                  {isComplete ? <Check className="size-2.5" /> : index + 1}
+                </span>
+                {flowStep.label}
               </span>
-              <span className="truncate">{flowStep.label}</span>
+              {index < flowSteps.length - 1 ? (
+                <span aria-hidden="true" className="h-px w-4 bg-border" />
+              ) : null}
             </li>
           );
         })}
@@ -644,47 +674,43 @@ function ReviewImport({
   onChooseAnother: () => void;
   onApply: () => void;
 }) {
-  return (
-    <SectionCard
-      title="Review detected data"
-      description="Check the source, row count, warnings, and sample rows before applying this import."
-      contentClassName="space-y-5"
-    >
-      <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="truncate font-semibold">{preview.originalFileName}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Ready to apply</p>
-        </div>
-        <Badge variant="secondary">{sourceLabel(preview.sourceType)}</Badge>
-      </div>
+  const { isHidden } = useAmountsVisibility();
 
-      <dl className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl bg-muted/30 p-4">
-          <dt className="text-xs font-medium text-muted-foreground">
-            Normalized rows
-          </dt>
-          <dd className="number mt-1 text-xl font-semibold">
-            {preview.rowCount.toLocaleString("en-IN")}
+  return (
+    <Panel
+      title="Review detected data"
+      description="Check the source, row count, warnings, and sample rows before applying."
+      bodyClassName="space-y-5"
+    >
+      <dl className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <dt className="text-xs text-muted-foreground">File</dt>
+          <dd className="mt-1 truncate text-sm font-medium">
+            {preview.originalFileName}
           </dd>
         </div>
-        <div className="rounded-xl bg-muted/30 p-4">
-          <dt className="text-xs font-medium text-muted-foreground">
-            Import batch ID
-          </dt>
-          <dd className="mt-1 break-all font-mono text-xs leading-5 text-foreground">
-            {preview.importBatchId}
+        <div>
+          <dt className="text-xs text-muted-foreground">Detected source</dt>
+          <dd className="mt-1 text-sm font-medium">
+            {sourceLabel(preview.sourceType)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Normalized rows</dt>
+          <dd className="number mt-1 text-sm font-medium">
+            {preview.rowCount.toLocaleString("en-IN")}
           </dd>
         </div>
       </dl>
 
       {preview.warnings.length > 0 ? (
-        <Alert className="border-warning/25 bg-warning/5">
+        <Alert className="border-foreground/30">
           <AlertTitle>
             {preview.warnings.length} import warning
             {preview.warnings.length === 1 ? "" : "s"}
           </AlertTitle>
           <AlertDescription>
-            <ul className="mt-1 list-disc space-y-1 pl-4">
+            <ul className="list-disc space-y-1 pl-4">
               {preview.warnings.map((warning, index) => (
                 <li key={`${index}-${warning}`}>{warning}</li>
               ))}
@@ -692,64 +718,58 @@ function ReviewImport({
           </AlertDescription>
         </Alert>
       ) : (
-        <Alert className="border-positive/20 bg-positive/5">
-          <AlertTitle>No import warnings</AlertTitle>
-          <AlertDescription>
-            The parser did not find issues that need your attention.
-          </AlertDescription>
-        </Alert>
+        <p className="text-sm text-muted-foreground">
+          The parser found nothing that needs your attention.
+        </p>
       )}
 
       <div>
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold">Normalized row preview</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Showing up to three rows from the parsed file.
-            </p>
-          </div>
-          <Badge variant="outline">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-sm font-medium">Sample rows</h3>
+          <p className="number text-xs text-muted-foreground">
             {Math.min(preview.rows.length, preview.rowCount)} of{" "}
             {preview.rowCount.toLocaleString("en-IN")}
-          </Badge>
+          </p>
         </div>
         {preview.rows.length > 0 ? (
-          <div className="mt-3 grid gap-2">
+          <ul className="mt-2 divide-y divide-border/70 border-y border-border/70">
             {preview.rows.map((row, index) => {
               const summary = summarizePreviewRow(row);
               return (
-                <div
+                <li
                   key={index}
-                  className="grid gap-2 rounded-xl border bg-background p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+                  className="grid grid-cols-[6rem_minmax(0,1fr)_auto] items-baseline gap-3 py-3"
                 >
-                  <Badge variant="outline">{summary.kind}</Badge>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">
+                  <span className="text-xs text-muted-foreground">
+                    {summary.kind}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">
                       {summary.title}
-                    </p>
+                    </span>
                     {summary.detail ? (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                         {summary.detail}
-                      </p>
+                      </span>
                     ) : null}
-                  </div>
-                  {summary.value ? (
-                    <p className="number text-sm font-semibold">
-                      {summary.value}
-                    </p>
-                  ) : null}
-                </div>
+                  </span>
+                  <span className="number text-sm font-medium">
+                    {isHidden && summary.value
+                      ? "••••••"
+                      : (summary.value ?? "")}
+                  </span>
+                </li>
               );
             })}
-          </div>
+          </ul>
         ) : (
-          <p className="mt-3 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             No normalized rows were returned for preview.
           </p>
         )}
       </div>
 
-      <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
+      <div className="flex flex-col-reverse gap-2 border-t border-border/70 pt-5 sm:flex-row sm:justify-end">
         <Button variant="outline" onClick={onChooseAnother}>
           Choose another file
         </Button>
@@ -757,32 +777,7 @@ function ReviewImport({
           Apply import
         </Button>
       </div>
-    </SectionCard>
-  );
-}
-
-function SourceGuide({
-  source,
-  featured = false,
-}: {
-  source: (typeof sourceGuidance)[number];
-  featured?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border p-4",
-        featured && "bg-secondary/45 sm:p-5",
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold">{source.title}</h3>
-        <Badge variant="outline">{source.format}</Badge>
-      </div>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        {source.description}
-      </p>
-    </div>
+    </Panel>
   );
 }
 
@@ -795,18 +790,9 @@ function ImportHistorySkeleton() {
     >
       <span className="sr-only">Loading import history</span>
       {Array.from({ length: 3 }, (_, index) => (
-        <div
-          key={index}
-          className="flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-44" />
-            <Skeleton className="h-3 w-64 max-w-full" />
-          </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-7 w-20 rounded-lg" />
-            <Skeleton className="h-7 w-32 rounded-lg" />
-          </div>
+        <div key={index} className="space-y-2 py-2">
+          <Skeleton className="h-4 w-44" />
+          <Skeleton className="h-3 w-72 max-w-full" />
         </div>
       ))}
     </div>
@@ -826,7 +812,7 @@ function historyWorkflow(batch: {
     return { label: "Needs attention", variant: "negative" as const };
   }
   if (batch.status === "parsed" || batch.processedAt) {
-    return { label: "Ready to apply", variant: "secondary" as const };
+    return { label: "Ready to apply", variant: "warning" as const };
   }
   if (batch.status === "created" || batch.status === "uploaded") {
     return { label: "Preparing", variant: "secondary" as const };
@@ -840,15 +826,12 @@ function historyRetention(batch: {
   expiresAt: Date | string;
 }) {
   if (batch.status === "failed") {
-    return { label: "Source file unavailable", variant: "negative" as const };
+    return { label: "Source file unavailable" };
   }
   if (!batch.sourceFileAvailable) {
-    return { label: "Source file expired", variant: "warning" as const };
+    return { label: "Source file expired · portfolio data retained" };
   }
-  return {
-    label: `Retained until ${formatDate(batch.expiresAt)}`,
-    variant: "outline" as const,
-  };
+  return { label: `Source file kept until ${formatDate(batch.expiresAt)}` };
 }
 
 function summarizePreviewRow(row: PreviewRow) {
@@ -868,7 +851,7 @@ function summarizePreviewRow(row: PreviewRow) {
           : `${formatQuantity(quantity)} units`,
       ]
         .filter(Boolean)
-        .join(" / "),
+        .join(" · "),
       value: formatPreviewCurrency(row.currentValue, currency),
     };
   }
@@ -883,7 +866,7 @@ function summarizePreviewRow(row: PreviewRow) {
         readString(row.accountName),
       ]
         .filter(Boolean)
-        .join(" / "),
+        .join(" · "),
       value: formatPreviewCurrency(row.amount, currency),
     };
   }

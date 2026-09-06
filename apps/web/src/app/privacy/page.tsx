@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import { Database, FileClock, LockKeyhole, ShieldCheck } from "lucide-react";
-import Link from "next/link";
-import { LegalFooter, LegalHeader } from "@/components/legal-page-chrome";
-import { Button } from "@/components/ui/button";
+import {
+  LegalArticle,
+  LegalFooter,
+  LegalHeader,
+  LegalSection,
+} from "@/components/legal-page-chrome";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -15,125 +17,65 @@ export default function PrivacyPage() {
     <main id="main-content" className="min-h-[100dvh]">
       <LegalHeader />
 
-      <article
-        id="legal-content"
-        className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[0.55fr_1.45fr] lg:px-8 lg:py-20"
+      <LegalArticle
+        title="Privacy"
+        updatedAt="12 July 2026"
+        summary="Investment Sync processes your account identity and the portfolio files you choose to upload. Access is scoped to your signed-in household, and original files expire after 30 days by default."
       >
-        <aside className="lg:sticky lg:top-8 lg:self-start">
-          <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <ShieldCheck className="size-5" aria-hidden="true" />
-          </div>
-          <p className="mt-6 text-xs font-semibold tracking-[0.16em] text-primary">
-            Privacy
+        <LegalSection heading="Account identity">
+          <p>
+            Clerk handles authentication. Investment Sync stores the account
+            email and household membership needed to authorize portfolio access.
           </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">
-            Your portfolio data, explained plainly.
-          </h1>
-          <p className="mt-5 text-sm leading-6 text-muted-foreground">
-            Last updated 12 July 2026
+        </LegalSection>
+
+        <LegalSection heading="Portfolio records">
+          <p>
+            Applied imports create normalized accounts, holdings, transactions,
+            valuations, and import metadata. These records are what the
+            portfolio views are built from.
           </p>
-          <Button asChild variant="outline" className="mt-8">
-            <Link href="/">Return home</Link>
-          </Button>
-        </aside>
+        </LegalSection>
 
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <section className="p-7 sm:p-10">
-            <h2 className="text-2xl font-semibold tracking-[-0.035em]">
-              The short version
-            </h2>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-              Investment Sync processes account identity and the portfolio files
-              you choose to upload. Access is scoped to your signed-in
-              household. Original files expire after 30 days by default.
-            </p>
-          </section>
+        <LegalSection heading="Original files">
+          <p>
+            Uploaded source files are stored privately and retained for 30 days
+            by default. Expired objects are removed during scheduled cleanup.
+          </p>
+        </LegalSection>
 
-          <div className="grid border-t md:grid-cols-2">
-            <PrivacyBlock
-              icon={LockKeyhole}
-              title="Account identity"
-              description="Clerk handles authentication. Investment Sync stores the account email and household membership needed to authorize portfolio access."
-            />
-            <PrivacyBlock
-              icon={Database}
-              title="Portfolio records"
-              description="Applied imports create normalized accounts, holdings, transactions, valuations, and import metadata used to render the portfolio."
-            />
-            <PrivacyBlock
-              icon={FileClock}
-              title="Original files"
-              description="Uploaded source files are stored privately and retained for 30 days by default. Expired objects are removed during scheduled cleanup."
-            />
-            <PrivacyBlock
-              icon={ShieldCheck}
-              title="After file expiry"
-              description="Normalized portfolio records remain after the original file expires so account history and portfolio views continue to work."
-            />
-          </div>
+        <LegalSection heading="After a file expires">
+          <p>
+            The normalized records stay, so account history and portfolio views
+            keep working. The imports list marks which source files are gone.
+          </p>
+        </LegalSection>
 
-          <section className="border-t p-7 sm:p-10">
-            <h2 className="text-2xl font-semibold tracking-[-0.035em]">
-              How the data is used
-            </h2>
-            <ul className="mt-5 grid gap-3 text-sm leading-6 text-muted-foreground">
-              <li className="rounded-lg bg-secondary/55 px-4 py-3">
-                Authenticate your session and identify the correct household.
-              </li>
-              <li className="rounded-lg bg-secondary/55 px-4 py-3">
-                Parse, review, and apply supported portfolio exports.
-              </li>
-              <li className="rounded-lg bg-secondary/55 px-4 py-3">
-                Calculate and display allocation, value, gains, and returns.
-              </li>
-              <li className="rounded-lg bg-secondary/55 px-4 py-3">
-                Preserve import status after an original source file expires.
-              </li>
-            </ul>
-          </section>
+        <LegalSection heading="How the data is used">
+          <ul className="list-disc space-y-2 pl-4">
+            <li>Authenticate your session and identify the household.</li>
+            <li>Parse, review, and apply supported portfolio exports.</li>
+            <li>Calculate value, allocation, gains, and returns.</li>
+            <li>Keep import status visible after a source file expires.</li>
+          </ul>
+        </LegalSection>
 
-          <section className="grid gap-8 border-t p-7 sm:p-10 md:grid-cols-2">
-            <div>
-              <h2 className="text-lg font-semibold">Service providers</h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Clerk provides authentication. Supabase provides the database
-                and private file storage used by this application.
-              </p>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Controls in this build</h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                You can review imports and connected accounts in the app. This
-                build does not expose a self-service portfolio deletion action.
-              </p>
-            </div>
-          </section>
-        </div>
-      </article>
+        <LegalSection heading="Service providers">
+          <p>
+            Clerk provides authentication. Supabase provides the database and
+            the private file storage this application uses.
+          </p>
+        </LegalSection>
+
+        <LegalSection heading="Controls in this build">
+          <p>
+            You can review imports and connected accounts inside the app. This
+            build does not offer a self-service portfolio deletion action.
+          </p>
+        </LegalSection>
+      </LegalArticle>
 
       <LegalFooter current="privacy" />
     </main>
-  );
-}
-
-function PrivacyBlock({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: typeof ShieldCheck;
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="border-b p-7 last:border-b-0 md:border-r md:p-8 md:even:border-r-0 md:[&:nth-last-child(-n+2)]:border-b-0">
-      <div className="grid size-10 place-items-center rounded-xl bg-secondary text-primary">
-        <Icon className="size-4" aria-hidden="true" />
-      </div>
-      <h2 className="mt-6 text-lg font-semibold">{title}</h2>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        {description}
-      </p>
-    </section>
   );
 }

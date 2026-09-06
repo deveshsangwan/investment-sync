@@ -56,6 +56,19 @@ export function numberOrUndefined(value: string | number | null | undefined) {
 }
 
 export function labelize(value: string) {
+  const assetLabels: Record<string, string> = {
+    indian_stock: "Indian stocks",
+    us_stock: "US stocks",
+    mutual_fund: "Mutual funds",
+    nps: "NPS",
+    ulip: "ULIP",
+    crypto: "Crypto",
+    cash: "Cash",
+    other: "Other assets",
+  };
+
+  if (assetLabels[value]) return assetLabels[value];
+
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (match) => match.toUpperCase());
@@ -100,4 +113,48 @@ export function npsSchemeLabel(code: string) {
 export function trendWidth(value: number, values: number[]) {
   const max = Math.max(...values, 1);
   return Math.max(6, Math.round((value / max) * 100));
+}
+
+const inrPrecise = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const usdPrecise = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * Splits an exact amount so a headline can set the rupees large and keep the
+ * paise readable but quiet. The fraction includes its separator.
+ */
+export function formatCurrencyParts(value: number, currency?: string | null) {
+  const text = (currency === "USD" ? usdPrecise : inrPrecise).format(value);
+  const separator = text.lastIndexOf(".");
+  return separator === -1
+    ? { lead: text, fraction: "" }
+    : { lead: text.slice(0, separator), fraction: text.slice(separator) };
+}
+
+/** Signed money for outcomes: the sign is part of the reading, not decoration. */
+export function formatSignedCurrency(value: number, currency?: string | null) {
+  const magnitude = formatCurrency(Math.abs(value), currency);
+  if (value > 0) return `+${magnitude}`;
+  if (value < 0) return `−${magnitude}`;
+  return magnitude;
+}
+
+export function formatSignedPercent(value: number | undefined | null) {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return "N/A";
+  }
+  const magnitude = `${percentage.format(Math.abs(value))}%`;
+  if (value > 0) return `+${magnitude}`;
+  if (value < 0) return `−${magnitude}`;
+  return magnitude;
 }

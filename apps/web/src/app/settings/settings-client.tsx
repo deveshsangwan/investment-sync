@@ -2,26 +2,22 @@
 
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
-import {
-  CheckCircle2,
-  Database,
-  FileClock,
-  LockKeyhole,
-  ShieldCheck,
-  UploadCloud,
-  Users,
-} from "lucide-react";
+import { Check, Database, FileUp, Lock } from "lucide-react";
 import Link from "next/link";
 import {
   EmptyState,
   ErrorState,
   PageHeader,
   PageShell,
-  SectionCard,
+  Panel,
 } from "@/components/portfolio-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ProfileSkeleton,
+  AccountsSkeleton,
+  AccountsFileInformation,
+} from "@/components/accounts-skeleton";
 import {
   Table,
   TableBody,
@@ -40,242 +36,143 @@ export function SettingsClient() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Settings"
-        title="Household and data"
-        description="Review your portfolio identity, connected accounts, access permissions, and source-file retention."
+        title="Accounts"
+        description="Your household, portfolio accounts, and what happens to your files."
         action={
           <Button asChild>
             <Link href="/uploads">
-              <UploadCloud className="size-4" aria-hidden="true" />
-              Import data
+              <FileUp className="size-4" aria-hidden="true" />
+              Import statement
             </Link>
           </Button>
         }
       />
 
-      <section className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {me.isLoading ? (
           <>
             <ProfileSkeleton title="Household" />
-            <ProfileSkeleton title="Access permissions" />
+            <ProfileSkeleton title="What you can do" />
           </>
         ) : me.error ? (
           <div className="lg:col-span-2">
             <ErrorState
-              title="We couldn't load your household profile"
+              title="Your household profile could not be loaded"
               description="Account and permission details are temporarily unavailable. Your portfolio data has not changed."
               onRetry={() => void me.refetch()}
             />
           </div>
         ) : me.data?.user ? (
           <>
-            <SectionCard
-              title="Household"
-              description="The portfolio identity attached to your signed-in account."
-            >
-              <dl className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">
-                    Household name
-                  </dt>
-                  <dd className="mt-2 break-words text-lg font-semibold tracking-[-0.025em]">
-                    {me.data.user.householdName}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">
-                    Sign-in email
-                  </dt>
-                  <dd className="mt-2 break-words text-sm font-semibold">
-                    {me.data.user.email}
-                  </dd>
-                </div>
+            <Panel title="Household">
+              <dl className="divide-y divide-border/70 text-sm">
+                <Detail label="Name" value={me.data.user.householdName} />
+                <Detail
+                  label="Sign-in email"
+                  value={me.data.user.email ?? "Not recorded"}
+                />
               </dl>
-              <div className="mt-6 flex items-start gap-3 rounded-xl bg-secondary/55 p-4">
-                <Users
-                  className="mt-0.5 size-4 shrink-0 text-primary"
-                  aria-hidden="true"
-                />
-                <p className="text-sm leading-6 text-muted-foreground">
-                  All accounts and holdings shown in Investment Sync belong to
-                  this household.
-                </p>
-              </div>
-            </SectionCard>
+              <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                Every account and holding in Investment Sync belongs to this
+                household.
+              </p>
+            </Panel>
 
-            <SectionCard
-              title="Access permissions"
-              description="Capabilities granted to your current household membership."
-            >
-              <div className="grid gap-3">
-                <PermissionRow
+            <Panel title="What you can do">
+              <ul className="divide-y divide-border/70 text-sm">
+                <Permission
                   label="Import portfolio files"
-                  granted={me.data.permissions.canUpload}
+                  isGranted={me.data.permissions.canUpload}
                 />
-                <PermissionRow
+                <Permission
                   label="Manage household settings"
-                  granted={me.data.permissions.canManageHousehold}
+                  isGranted={me.data.permissions.canManageHousehold}
                 />
-                <PermissionRow label="View portfolio data" granted />
-              </div>
-            </SectionCard>
+                <Permission label="View portfolio data" isGranted />
+              </ul>
+            </Panel>
           </>
         ) : (
           <div className="lg:col-span-2">
             <ErrorState
               title="Household profile unavailable"
-              description="We couldn't find the household profile attached to this session. Try loading it again."
+              description="No household profile is attached to this session. Try loading it again."
               onRetry={() => void me.refetch()}
             />
           </div>
         )}
       </section>
 
-      <SectionCard
-        title="Connected accounts"
-        description="Active account records created from applied portfolio imports."
-        className="mt-4"
-      >
-        {accounts.isLoading ? (
-          <AccountsSkeleton />
-        ) : accounts.error ? (
-          <ErrorState
-            title="We couldn't load connected accounts"
-            description="The account inventory is temporarily unavailable. Your saved accounts have not changed."
-            onRetry={() => void accounts.refetch()}
-          />
-        ) : accounts.data.length === 0 ? (
-          <EmptyState
-            icon={Database}
-            title="No connected accounts yet"
-            description="Accounts appear here after you review and apply a supported portfolio import."
-            action={
-              <Button asChild size="sm">
-                <Link href="/uploads">Import data</Link>
-              </Button>
-            }
-          />
-        ) : (
-          <AccountInventory accounts={accounts.data} />
-        )}
-      </SectionCard>
+      <section className="mt-8">
+        <h2 className="text-[0.82rem] font-semibold">Portfolio accounts</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Accounts available to organize your imported holdings.
+        </p>
 
-      <SectionCard
-        title="Data and privacy"
-        description="What Investment Sync keeps after you upload a portfolio file."
-        className="mt-4"
-      >
-        <div className="grid overflow-hidden rounded-lg border border-border/70 md:grid-cols-2 md:divide-x md:divide-border/70">
-          <div className="border-b border-border/70 p-5 md:border-b-0">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-lg bg-accent text-primary">
-                <FileClock className="size-4" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Original source files
-                </p>
-                <p className="mt-1 font-semibold">30 days by default</p>
-              </div>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              Expired upload objects are removed from private storage. Import
-              status can remain visible in your history.
-            </p>
-          </div>
-
-          <div className="p-5">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-lg bg-accent text-primary">
-                <Database className="size-4" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Normalized portfolio data
-                </p>
-                <p className="mt-1 font-semibold">Remains after file expiry</p>
-              </div>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              Parsed holdings, transactions, and valuations remain available so
-              the portfolio continues to work.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-3 rounded-xl bg-muted/35 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <ShieldCheck
-              className="mt-0.5 size-5 shrink-0 text-primary"
-              aria-hidden="true"
+        <div className="mt-3">
+          {accounts.isLoading ? (
+            <AccountsSkeleton />
+          ) : accounts.error ? (
+            <ErrorState
+              title="Portfolio accounts could not be loaded"
+              description="The account inventory is temporarily unavailable. Your saved accounts have not changed."
+              onRetry={() => void accounts.refetch()}
             />
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Authentication is handled by Clerk. Portfolio requests are
-              restricted to your signed-in household.
-            </p>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/privacy">Privacy details</Link>
-          </Button>
+          ) : accounts.data.length === 0 ? (
+            <EmptyState
+              icon={Database}
+              title="No portfolio accounts yet"
+              description="Accounts appear here after you review and apply a supported portfolio import."
+              action={
+                <Button asChild size="sm">
+                  <Link href="/uploads">Import statement</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <AccountInventory accounts={accounts.data} />
+          )}
         </div>
-      </SectionCard>
+      </section>
+
+      <AccountsFileInformation />
     </PageShell>
   );
 }
 
-function ProfileSkeleton({ title }: { title: string }) {
+function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <SectionCard title={title}>
-      <div role="status" aria-label={`Loading ${title.toLowerCase()}`}>
-        <Skeleton className="h-3 w-32" />
-        <Skeleton className="mt-4 h-7 w-52" />
-        <Skeleton className="mt-6 h-20 w-full" />
-      </div>
-    </SectionCard>
+    <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-medium">{value}</dd>
+    </div>
   );
 }
 
-function PermissionRow({
+function Permission({
   label,
-  granted,
+  isGranted,
 }: {
   label: string;
-  granted: boolean;
+  isGranted: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border bg-background/45 px-4 py-3.5">
-      <div className="flex min-w-0 items-center gap-3">
-        {granted ? (
-          <CheckCircle2
-            className="size-4 shrink-0 text-positive"
-            aria-hidden="true"
-          />
+    <li className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <span className="flex min-w-0 items-center gap-2.5">
+        {isGranted ? (
+          <Check className="size-4 shrink-0 text-positive" aria-hidden="true" />
         ) : (
-          <LockKeyhole
+          <Lock
             className="size-4 shrink-0 text-muted-foreground"
             aria-hidden="true"
           />
         )}
-        <span className="text-sm font-medium">{label}</span>
-      </div>
-      <Badge variant={granted ? "positive" : "secondary"}>
-        {granted ? "Granted" : "Not granted"}
-      </Badge>
-    </div>
-  );
-}
-
-function AccountsSkeleton() {
-  return (
-    <div
-      role="status"
-      aria-label="Loading connected accounts"
-      className="space-y-3"
-    >
-      {Array.from({ length: 3 }, (_, index) => (
-        <Skeleton key={index} className="h-14 w-full" />
-      ))}
-    </div>
+        <span className="min-w-0">{label}</span>
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {isGranted ? "Allowed" : "Not allowed"}
+      </span>
+    </li>
   );
 }
 
@@ -297,14 +194,14 @@ function AccountInventory({ accounts }: { accounts: Account[] }) {
           <TableBody>
             {accounts.map((account) => (
               <TableRow key={account.id}>
-                <TableCell className="font-semibold">{account.name}</TableCell>
-                <TableCell>{labelize(account.provider)}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary">
-                    {labelize(account.accountType)}
-                  </Badge>
+                <TableCell className="font-medium">{account.name}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {labelize(account.provider)}
                 </TableCell>
-                <TableCell className="number text-right font-semibold">
+                <TableCell className="text-muted-foreground">
+                  {labelize(account.accountType)}
+                </TableCell>
+                <TableCell className="number text-right">
                   {account.currency}
                 </TableCell>
               </TableRow>
@@ -313,27 +210,21 @@ function AccountInventory({ accounts }: { accounts: Account[] }) {
         </Table>
       </div>
 
-      <div className="grid gap-3 md:hidden">
+      <ul className="divide-y divide-border/70 border-y border-border/70 md:hidden">
         {accounts.map((account) => (
-          <article
-            key={account.id}
-            className="rounded-xl border bg-background/45 p-4"
-          >
+          <li key={account.id} className="py-3.5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h3 className="truncate font-semibold">{account.name}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {labelize(account.provider)}
+                <p className="truncate text-sm font-medium">{account.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {labelize(account.provider)} · {labelize(account.accountType)}
                 </p>
               </div>
-              <Badge variant="secondary">{account.currency}</Badge>
+              <Badge variant="outline">{account.currency}</Badge>
             </div>
-            <p className="mt-4 text-xs font-medium text-muted-foreground">
-              {labelize(account.accountType)}
-            </p>
-          </article>
+          </li>
         ))}
-      </div>
+      </ul>
     </>
   );
 }

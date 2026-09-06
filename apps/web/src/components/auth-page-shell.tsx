@@ -1,4 +1,6 @@
-import { FileClock, LockKeyhole, ShieldCheck, WalletCards } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
+import { PortfolioIllustration } from "@/components/portfolio-illustration";
+import { FileClock, LockKeyhole, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 export const authAppearance = {
@@ -23,7 +25,7 @@ export const authAppearance = {
     colorBorder: "hsl(var(--border))",
     colorRing: "hsl(var(--ring))",
     colorDanger: "hsl(var(--negative))",
-    fontFamily: "var(--font-geist-sans)",
+    fontFamily: "Public Sans, system-ui, sans-serif",
     borderRadius: "0.75rem",
     spacing: "1rem",
   },
@@ -68,7 +70,7 @@ export function AuthPageShell({
       <a className="skip-link" href="#auth-content">
         Skip to sign in
       </a>
-      <header className="mx-auto flex h-[4.5rem] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <header className="mx-auto flex h-[4.5rem] w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <BrandLink />
         <Link
           href="/"
@@ -80,26 +82,29 @@ export function AuthPageShell({
 
       <section
         id="auth-content"
-        className="mx-auto grid min-h-[calc(100dvh-4.5rem)] w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-stretch px-4 pb-6 sm:px-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(26rem,0.68fr)] lg:px-8"
+        className="mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] items-stretch px-4 pb-6 sm:px-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(26rem,0.68fr)] lg:px-8"
       >
-        <aside className="flex flex-col justify-between rounded-t-xl border border-b-0 bg-secondary/55 p-7 sm:p-10 lg:rounded-l-xl lg:rounded-tr-none lg:border-b lg:border-r-0 lg:p-14">
+        <aside className="flex flex-col rounded-t-xl border border-b-0 bg-background p-5 sm:p-10 lg:rounded-l-xl lg:rounded-tr-none lg:border-b lg:border-r-0 lg:p-10">
           <div>
-            <p className="text-xs font-semibold tracking-[0.16em] text-primary">
+            <p className="text-xs font-semibold tracking-normal text-primary">
               {eyebrow}
             </p>
-            <h1 className="mt-5 max-w-lg text-4xl font-semibold leading-[1.02] tracking-[-0.055em] sm:text-5xl">
+            <h1 className="mt-3 max-w-lg text-2xl font-semibold leading-[1.02] tracking-[-0.04em] sm:text-4xl">
               {title}
             </h1>
-            <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
+            <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
               {description}
             </p>
           </div>
 
-          <div className="mt-12 hidden gap-6 lg:grid">
+          <div className="hidden lg:block">
+            <PortfolioIllustration />
+          </div>
+          <div className="mt-6 hidden gap-4 lg:grid">
             <TrustItem
               icon={ShieldCheck}
-              title="Household-scoped access"
-              description="Portfolio requests stay tied to the household attached to your account."
+              title="A private household portfolio"
+              description="Your portfolio is only available to your household."
             />
             <TrustItem
               icon={FileClock}
@@ -119,7 +124,7 @@ export function AuthPageShell({
         </div>
       </section>
 
-      <footer className="mx-auto flex w-full max-w-7xl items-center justify-center gap-5 px-4 py-6 text-xs text-muted-foreground sm:px-6 lg:px-8">
+      <footer className="mx-auto flex w-full max-w-6xl items-center justify-center gap-5 px-4 py-6 text-xs text-muted-foreground sm:px-6 lg:px-8">
         <Link
           className="transition-colors hover:text-foreground"
           href="/privacy"
@@ -141,10 +146,7 @@ function BrandLink() {
       aria-label="Investment Sync home"
       className="flex items-center gap-2.5 font-semibold tracking-[-0.02em]"
     >
-      <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-        <WalletCards className="size-[1.05rem]" aria-hidden="true" />
-      </span>
-      <span>Investment Sync</span>
+      <BrandMark className="size-11" />
     </Link>
   );
 }

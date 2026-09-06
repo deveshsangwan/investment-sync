@@ -1,11 +1,17 @@
 "use client";
 
+import { SelectField as FilterSelect } from "@/components/ui/select-field";
+
+import { Money, useAmountFormatters } from "@/components/amounts";
+
+import { InstrumentIdentity } from "@/components/instrument-identity";
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
 import {
   ArrowDownRight,
   ArrowUpRight,
   BriefcaseBusiness,
+  ChevronDown,
   Search,
   SlidersHorizontal,
   UploadCloud,
@@ -33,7 +39,6 @@ import {
 } from "@/components/ui/table";
 import {
   formatAsOfDate,
-  formatInr,
   formatPercent,
   labelize,
   numberOrUndefined,
@@ -48,13 +53,15 @@ type PositionStatus = "current" | "exited" | "all";
 type SortKey = "value" | "pnl" | "return" | "name";
 
 const controlClass =
-  "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
+  "h-11 rounded-[8px] border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
 
 export function HoldingsClient({
   isDataConfigured,
 }: {
   isDataConfigured: boolean;
 }) {
+  const { formatInr } = useAmountFormatters();
+
   const query = trpc.portfolio.positions.useQuery(undefined, {
     enabled: isDataConfigured,
   });
@@ -110,14 +117,13 @@ export function HoldingsClient({
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Portfolio positions"
         title="Holdings"
-        description="Search every account, compare exposure, and revisit positions that have left the latest snapshot."
+        description="The positions behind your portfolio."
         action={
           <Button asChild>
             <Link href="/uploads">
               <UploadCloud className="size-4" aria-hidden="true" />
-              Import data
+              Import statement
             </Link>
           </Button>
         }
@@ -126,7 +132,7 @@ export function HoldingsClient({
       {!isDataConfigured ? <SetupRequired /> : null}
 
       {isDataConfigured && query.isLoading ? (
-        <PortfolioContentSkeleton metricCount={4} />
+        <PortfolioContentSkeleton variant="holdings" />
       ) : null}
 
       {isDataConfigured && query.isError ? (
@@ -139,7 +145,7 @@ export function HoldingsClient({
 
       {query.isSuccess ? (
         <>
-          <section className="mb-4 grid overflow-hidden rounded-xl border border-border/80 bg-card sm:grid-cols-3 sm:divide-x">
+          <section className="mb-6 grid grid-cols-3 overflow-hidden border-b border-border/80 divide-x">
             <Summary
               label="Current positions"
               value={query.data.current.length}
@@ -160,16 +166,9 @@ export function HoldingsClient({
             />
           </section>
 
-          <Card className="mb-4 shadow-none">
-            <CardContent className="p-4 sm:p-5">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <SlidersHorizontal
-                  className="size-4 text-primary"
-                  aria-hidden="true"
-                />
-                Find a position
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.4fr)_repeat(5,minmax(130px,0.7fr))]">
+          <Card className="mb-5 border-0 bg-transparent shadow-none">
+            <CardContent className="p-0">
+              <div className="grid grid-cols-[minmax(0,1fr)_145px] gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
                 <label className="grid gap-1.5">
                   <span className="text-xs font-medium text-muted-foreground">
                     Search
@@ -182,52 +181,12 @@ export function HoldingsClient({
                     <input
                       className={`${controlClass} w-full pl-9`}
                       type="search"
-                      placeholder="Name, symbol, or provider"
+                      placeholder="Search holdings"
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                     />
                   </span>
                 </label>
-                <FilterSelect
-                  label="Position status"
-                  value={status}
-                  onChange={(value) => setStatus(value as PositionStatus)}
-                  options={[
-                    ["current", "Current"],
-                    ["exited", "Exited"],
-                    ["all", "All positions"],
-                  ]}
-                />
-                <FilterSelect
-                  label="Asset class"
-                  value={assetClass}
-                  onChange={setAssetClass}
-                  options={[
-                    ["all", "All asset classes"],
-                    ...filters.assetClasses.map((value) => [
-                      value,
-                      labelize(value),
-                    ]),
-                  ]}
-                />
-                <FilterSelect
-                  label="Account"
-                  value={account}
-                  onChange={setAccount}
-                  options={[
-                    ["all", "All accounts"],
-                    ...filters.accounts.map((value) => [value, value]),
-                  ]}
-                />
-                <FilterSelect
-                  label="Currency"
-                  value={currency}
-                  onChange={setCurrency}
-                  options={[
-                    ["all", "All currencies"],
-                    ...filters.currencies.map((value) => [value, value]),
-                  ]}
-                />
                 <FilterSelect
                   label="Sort holdings"
                   value={sort}
@@ -240,6 +199,70 @@ export function HoldingsClient({
                   ]}
                 />
               </div>
+              <details className="mono-disclosure mt-3">
+                <summary className="flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium">
+                  <SlidersHorizontal className="size-4" />
+                  Filters
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {[
+                      status !== "current",
+                      assetClass !== "all",
+                      account !== "all",
+                      currency !== "all",
+                    ].filter(Boolean).length || ""}
+                  </span>
+                  <ChevronDown className="ml-auto size-4" />
+                </summary>
+                <div className="grid gap-3 border-t py-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {" "}
+                  <FilterSelect
+                    label="Position status"
+                    value={status}
+                    onChange={(value) => setStatus(value as PositionStatus)}
+                    options={[
+                      ["current", "Current"],
+                      ["exited", "Exited"],
+                      ["all", "All positions"],
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Asset class"
+                    value={assetClass}
+                    onChange={setAssetClass}
+                    options={[
+                      ["all", "All asset classes"],
+                      ...filters.assetClasses.map<[string, string]>((value) => [
+                        value,
+                        labelize(value),
+                      ]),
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Account"
+                    value={account}
+                    onChange={setAccount}
+                    options={[
+                      ["all", "All accounts"],
+                      ...filters.accounts.map<[string, string]>((value) => [
+                        value,
+                        value,
+                      ]),
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Currency"
+                    value={currency}
+                    onChange={setCurrency}
+                    options={[
+                      ["all", "All currencies"],
+                      ...filters.currencies.map<[string, string]>((value) => [
+                        value,
+                        value,
+                      ]),
+                    ]}
+                  />
+                </div>
+              </details>
             </CardContent>
           </Card>
 
@@ -255,9 +278,9 @@ export function HoldingsClient({
               }
             />
           ) : (
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden border-x-0 rounded-none bg-transparent">
               <div className="hidden md:block">
-                <Table>
+                <Table className="mono-table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Holding</TableHead>
@@ -304,45 +327,20 @@ function Summary({
   monetary?: boolean;
 }) {
   return (
-    <div className="border-b border-border/65 px-4 py-3.5 last:border-b-0 sm:border-b-0">
+    <div className="px-2 py-3.5 sm:px-4">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`${monetary ? "number" : ""} mt-1 text-lg font-semibold`}>
+      <p
+        className={`${monetary ? "number" : ""} mt-1 text-sm font-semibold sm:text-lg`}
+      >
         {value}
       </p>
     </div>
   );
 }
 
-function FilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[][];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="grid gap-1.5">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <select
-        className={`${controlClass} w-full`}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 function PositionTableRow({ position }: { position: Position }) {
+  const { formatInr } = useAmountFormatters();
+
   const tone =
     Number(position.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   return (
@@ -350,18 +348,19 @@ function PositionTableRow({ position }: { position: Position }) {
       <TableCell>
         <div className="flex items-center gap-2">
           <Link
-            className="font-semibold tracking-[-0.01em] hover:text-primary"
+            className="min-w-0 max-w-72"
             href={`/dashboard/holdings/${position.id}`}
           >
-            {position.symbol ?? position.instrumentName}
+            <InstrumentIdentity
+              name={position.instrumentName}
+              symbol={position.symbol}
+              isin={position.isin}
+              exchange={position.exchange}
+              assetClass={position.assetClass}
+            />
           </Link>
           {position.isExited ? <Badge variant="secondary">Exited</Badge> : null}
         </div>
-        {position.symbol ? (
-          <p className="mt-1 max-w-72 truncate text-xs text-muted-foreground">
-            {position.instrumentName}
-          </p>
-        ) : null}
       </TableCell>
       <TableCell>
         <p>{position.accountName}</p>
@@ -393,6 +392,8 @@ function PositionTableRow({ position }: { position: Position }) {
 }
 
 function PositionCard({ position }: { position: Position }) {
+  const { formatInr } = useAmountFormatters();
+
   const tone =
     Number(position.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   return (
@@ -400,37 +401,41 @@ function PositionCard({ position }: { position: Position }) {
       href={`/dashboard/holdings/${position.id}`}
       className="block p-4 transition-colors hover:bg-muted/35"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="truncate font-semibold">
-              {position.symbol ?? position.instrumentName}
-            </p>
-            {position.isExited ? (
-              <Badge variant="secondary">Exited</Badge>
-            ) : null}
-          </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {position.accountName} / {labelize(position.assetClass)}
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <InstrumentIdentity
+          name={position.instrumentName}
+          symbol={position.symbol}
+          isin={position.isin}
+          exchange={position.exchange}
+          assetClass={position.assetClass}
+        />
         <p className="number shrink-0 font-semibold">
           {formatInr(position.currentValueInInr)}
         </p>
       </div>
+      {position.isExited ? (
+        <Badge variant="secondary" className="mt-2">
+          Exited
+        </Badge>
+      ) : null}
       <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
+          {position.accountName}
+          <br />
           {formatAsOfDate(position.snapshotDate)}
         </span>
         <span
-          className={`number inline-flex items-center gap-1 font-medium ${tone}`}
+          className={`number grid justify-items-end gap-1 text-xs font-medium ${tone}`}
         >
-          {tone === "positive" ? (
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
-          ) : (
-            <ArrowDownRight className="size-3.5" aria-hidden="true" />
-          )}
-          {formatPercent(numberOrUndefined(position.pnlPercent))}
+          <Money value={position.pnlAmountInInr ?? 0} signed />
+          <span className="inline-flex items-center gap-1">
+            {tone === "positive" ? (
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            ) : (
+              <ArrowDownRight className="size-3.5" aria-hidden="true" />
+            )}
+            {formatPercent(numberOrUndefined(position.pnlPercent))}
+          </span>
         </span>
       </div>
     </Link>

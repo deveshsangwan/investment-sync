@@ -1,19 +1,8 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TRPCProvider } from "./providers";
 import { AppShell } from "@/components/app-shell";
-
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-});
 
 export const metadata: Metadata = {
   title: {
@@ -23,6 +12,7 @@ export const metadata: Metadata = {
   description:
     "A private household portfolio view for Indian and US investments.",
   applicationName: "Investment Sync",
+  icons: { icon: "/brand/quiet.png", apple: "/brand/quiet.png" },
   openGraph: {
     title: "Investment Sync",
     description:
@@ -37,12 +27,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      <html
-        lang="en"
-        className={`${geistSans.variable} ${geistMono.variable}`}
-        suppressHydrationWarning
-      >
+    <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up">
+      <html lang="en" suppressHydrationWarning>
         <body className="antialiased">
           <TRPCProvider>
             <AppShell>{children}</AppShell>
