@@ -108,7 +108,9 @@ export function UploadsClient({
 
   const isBusy = status === "uploading" || commit.isLoading;
   const hasUploadPermission = me.data?.permissions.canUpload === true;
-  const canUpload = Boolean(hasUploadPermission && file && !fileError && !isBusy);
+  const canUpload = Boolean(
+    hasUploadPermission && file && !fileError && !isBusy,
+  );
 
   const resetFlow = () => {
     setFile(null);
@@ -278,7 +280,10 @@ export function UploadsClient({
 
           {me.isLoading ? (
             <Panel title="Select a portfolio export">
-              <Skeleton className="h-56 rounded-2xl" aria-label="Loading import permissions" />
+              <Skeleton
+                className="h-56 rounded-2xl"
+                aria-label="Loading import permissions"
+              />
             </Panel>
           ) : me.isError ? (
             <ErrorState

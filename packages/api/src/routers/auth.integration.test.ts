@@ -42,7 +42,9 @@ describeDb("auth.me household membership", () => {
       role: "viewer",
     });
 
-    const caller = appRouter.createCaller(contextFor(db, { clerkUserId, email }));
+    const caller = appRouter.createCaller(
+      contextFor(db, { clerkUserId, email }),
+    );
     const profile = await caller.auth.me();
 
     expect(profile).toMatchObject({

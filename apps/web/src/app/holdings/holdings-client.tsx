@@ -243,7 +243,10 @@ export function HoldingsClient({
                     onChange={setAccount}
                     options={[
                       ["all", "All accounts"],
-                      ...filters.accounts.map<[string, string]>((value) => [value, value]),
+                      ...filters.accounts.map<[string, string]>((value) => [
+                        value,
+                        value,
+                      ]),
                     ]}
                   />
                   <FilterSelect
@@ -252,7 +255,10 @@ export function HoldingsClient({
                     onChange={setCurrency}
                     options={[
                       ["all", "All currencies"],
-                      ...filters.currencies.map<[string, string]>((value) => [value, value]),
+                      ...filters.currencies.map<[string, string]>((value) => [
+                        value,
+                        value,
+                      ]),
                     ]}
                   />
                 </div>
