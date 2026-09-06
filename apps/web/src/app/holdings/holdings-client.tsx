@@ -130,7 +130,7 @@ export function HoldingsClient({
       {!isDataConfigured ? <SetupRequired /> : null}
 
       {isDataConfigured && query.isLoading ? (
-        <PortfolioContentSkeleton metricCount={4} />
+        <PortfolioContentSkeleton variant="holdings" />
       ) : null}
 
       {isDataConfigured && query.isError ? (

@@ -236,10 +236,10 @@ select {
   background: linear-gradient(
     90deg,
     transparent,
-    rgb(255 255 255 / 0.65),
+    rgb(255 255 255 / 0.35),
     transparent
   );
-  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  animation: skeleton-shimmer 2s ease-in-out infinite;
 }
 
 .dark .skeleton-shimmer::after {

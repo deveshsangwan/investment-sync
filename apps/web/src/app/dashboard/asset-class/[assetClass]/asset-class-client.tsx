@@ -83,7 +83,7 @@ export function AssetClassClient({
       {!isDataConfigured ? <SetupRequired /> : null}
 
       {isDataConfigured && detail.isLoading ? (
-        <PortfolioContentSkeleton />
+        <PortfolioContentSkeleton variant="asset" />
       ) : null}
 
       {isDataConfigured && detail.isError ? (

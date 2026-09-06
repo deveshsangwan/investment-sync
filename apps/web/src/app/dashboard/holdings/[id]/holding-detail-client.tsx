@@ -110,7 +110,7 @@ export function HoldingDetailClient({
       {!isDataConfigured ? <SetupRequired /> : null}
 
       {isDataConfigured && detail.isLoading ? (
-        <PortfolioContentSkeleton />
+        <PortfolioContentSkeleton variant="holding" />
       ) : null}
 
       {isDataConfigured && detail.isError ? (
