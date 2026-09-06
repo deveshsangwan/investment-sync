@@ -31,3 +31,6 @@ Left aligned labels and right aligned numbers. Opus summary and detail compositi
 
 ## Public pages
 Keep Public Sans and the existing black, charcoal, gray and outcome green palette. Home uses a left-aligned headline beside a drawn statement-to-portfolio illustration, with the product preview below. Authentication uses a compact two-column panel, illustration on the left and the existing Clerk form on the right. No viewport-height stretch. One-time line drawing gives the illustration and preview a little movement; reduced motion shows their finished state immediately. This is portfolio-specific artwork, without decorative floating blobs or continuous motion.
+
+## Home motion refinement
+Keep all existing copy and sections. Add a single viewport-triggered sequence to the hero artwork: statements settle into place, the connector draws, then the portfolio chart resolves. Add a soft green ambient light behind the composition and subtle hover depth. The larger portfolio chart draws on first scroll into view. No looping market animation or extra feature content. Reduced motion keeps the finished composition static. Scope these effects to home.

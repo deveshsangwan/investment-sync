@@ -505,3 +505,76 @@ select {
     gap: 6px;
   }
 }
+
+.home-art-scene {
+  overflow: clip;
+  position: relative;
+  perspective: 1000px;
+}
+.home-art-scene::before {
+  content: "";
+  position: absolute;
+  inset: -15% -4%;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at 65% 50%,
+    hsl(var(--positive) / 0.1),
+    transparent 65%
+  );
+}
+.home-art-scene .portfolio-art::before {
+  inset: -24px;
+  background-size: 22px 22px;
+}
+@keyframes home-statement-arrive {
+  from {
+    translate: -20px 8px;
+    opacity: 0.25;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+@keyframes home-result-arrive {
+  from {
+    translate: 12px 0;
+    opacity: 0.35;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-home-motion="pending"] .portfolio-draw {
+    animation: none;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  [data-home-motion="visible"] .portfolio-draw {
+    animation: portfolio-line-reveal 1.8s ease-out both;
+  }
+  .home-art-scene[data-home-motion="visible"] .portfolio-art-source {
+    animation: home-statement-arrive 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .home-art-scene[data-home-motion="visible"] .portfolio-art-source-second {
+    animation-delay: 0.15s;
+  }
+  .home-art-scene[data-home-motion="visible"] .portfolio-art-result {
+    animation: home-result-arrive 1s 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .home-art-scene[data-home-motion="visible"]
+    .portfolio-art-result
+    .portfolio-draw {
+    animation-delay: 0.65s;
+  }
+  .home-art-scene .portfolio-art {
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .home-art-scene:hover .portfolio-art {
+    transform: rotateY(-5deg) rotateX(2deg) translateY(-4px);
+  }
+}

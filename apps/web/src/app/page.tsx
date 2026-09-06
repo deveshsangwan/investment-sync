@@ -1,3 +1,4 @@
+import { HomeMotion } from "@/components/home-motion";
 import { PortfolioIllustration } from "@/components/portfolio-illustration";
 import { auth } from "@clerk/nextjs/server";
 import {
@@ -98,10 +99,12 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <PortfolioIllustration />
+          <HomeMotion className="home-art-scene">
+            <PortfolioIllustration />
+          </HomeMotion>
         </div>
 
-        <div className="mt-14 overflow-hidden rounded-[20px] border bg-card">
+        <HomeMotion className="home-preview mt-14 overflow-hidden rounded-[20px] border bg-card">
           <div className="flex items-center justify-between gap-4 border-b px-5 py-3.5 text-xs text-muted-foreground">
             <span className="flex items-center gap-2">
               <WalletCards className="size-3.5" />
@@ -200,7 +203,7 @@ export default async function HomePage() {
               </div>
             </div>
           </div>
-        </div>
+        </HomeMotion>
       </section>
 
       <section
