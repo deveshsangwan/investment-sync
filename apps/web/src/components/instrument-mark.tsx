@@ -1,3 +1,12 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import {
+  instrumentLogoUrls,
+  canRequestLogo,
+  recordLogoFailure,
+  type InstrumentLogoInput,
+} from "@/lib/instrument-logo";
 import { assetClassMeta } from "@/lib/asset-class-meta";
 import {
   resolveInstrumentIdentity,
@@ -16,18 +25,37 @@ export function InstrumentMark({
   assetClass,
   size = "row",
   className,
-}: {
+  isin,
+  exchange,
+  illustrative = false,
+  variant,
+}: InstrumentLogoInput & {
   symbol?: string | null;
   name: string;
   assetClass: string;
   size?: "row" | "detail";
   className?: string;
+  illustrative?: boolean;
+  variant?: "mono";
 }) {
-  const identity = resolveInstrumentIdentity({ symbol, name, assetClass });
+  const identity = resolveInstrumentIdentity({
+    symbol,
+    name,
+    assetClass,
+    illustrative,
+  });
+  const urls = illustrative
+    ? []
+    : instrumentLogoUrls(
+        { symbol, isin, exchange, assetClass },
+        process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY,
+      );
   const boxClass =
-    size === "detail"
-      ? "size-11 rounded-xl text-sm"
-      : "size-8 rounded-lg text-[0.7rem] md:size-7";
+    variant === "mono"
+      ? "mono-mark"
+      : size === "detail"
+        ? "size-11 rounded-xl text-sm"
+        : "size-8 rounded-lg text-[0.7rem] md:size-7";
 
   if (!identity.isBranded && usesPictogram(assetClass)) {
     const Icon = assetClassMeta(assetClass).icon;
@@ -61,11 +89,13 @@ export function InstrumentMark({
         color: identity.foreground,
       }}
     >
-      {identity.mark ? (
-        <CompanyIllustration mark={identity.mark} />
-      ) : (
-        identity.monogram
-      )}
+      <LogoImage key={urls.join("|")} urls={urls}>
+        {identity.mark ? (
+          <CompanyIllustration mark={identity.mark} />
+        ) : (
+          identity.monogram
+        )}
+      </LogoImage>
     </span>
   );
 }
@@ -110,5 +140,43 @@ function CompanyIllustration({
         </>
       )}
     </svg>
+  );
+}
+
+function LogoImage({
+  urls,
+  children,
+}: {
+  urls: string[];
+  children: ReactNode;
+}) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const [loadedUrl, setLoadedUrl] = useState<string>();
+  const url = urls.find(
+    (candidate) => !failed.includes(candidate) && canRequestLogo(candidate),
+  );
+
+  return (
+    <span className="relative grid size-full place-items-center overflow-hidden rounded-[inherit]">
+      {children}
+      {url ? (
+        <img
+          src={url}
+          alt=""
+          width={128}
+          height={128}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 size-full bg-white object-contain p-1"
+          style={{ opacity: loadedUrl === url ? 1 : 0 }}
+          onLoad={() => setLoadedUrl(url)}
+          onError={() => {
+            recordLogoFailure(url);
+            setFailed((previous) => [...previous, url]);
+          }}
+        />
+      ) : null}
+    </span>
   );
 }

@@ -14,16 +14,19 @@ export function resolveInstrumentIdentity({
   symbol,
   name,
   assetClass,
+  illustrative = false,
 }: {
   symbol?: string | null;
   name: string;
   assetClass: string;
+  illustrative?: boolean;
 }): InstrumentIdentity {
   const normalized = normalizeSymbol(symbol);
-  const mark =
-    assetClass === "us_stock" &&
-    normalized === "MSFT" &&
-    /microsoft/i.test(name)
+  const mark = !illustrative
+    ? undefined
+    : assetClass === "us_stock" &&
+        normalized === "MSFT" &&
+        /microsoft/i.test(name)
       ? "microsoft"
       : assetClass === "indian_stock" &&
           normalized === "HDFCBANK" &&
