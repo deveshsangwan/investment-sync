@@ -6,7 +6,7 @@ Palette: canvas #000000, panel #141414, control #1D1D1D, border #303030, text #F
 
 Borrow from Mono Opus: persistent amount hiding, subordinate headline decimals, compact imports and account lists, and plain document-style legal pages. Holdings show monetary gain and percentage together. Reuse Mono page headers, spacing and controls for a consistent composition.
 
-```
+```text
 Mono sidebar   Portfolio                    Hide amounts  Import
                Large total with quiet decimals
                Open history                 Allocation
@@ -20,7 +20,7 @@ This preserves the user's preferred visual direction. The hybrid does not replac
 
 Groww-style horizontal navigation, aligned to the content. Public Sans remains the sole typeface. Black #000000, panel #141414, white #f5f5f5, muted gray #a3a3a3, Opus green #60be7f and red #e16a61. Financial outcome colors use the exact Opus HSL tokens.
 
-```
+```text
 Brand   Overview Holdings Imports Accounts        Theme Profile
 Portfolio                                          Hide Import
 Total value                  Invested Gain Return XIRR
