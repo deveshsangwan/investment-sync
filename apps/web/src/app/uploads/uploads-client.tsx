@@ -93,20 +93,22 @@ export function UploadsClient({
   const list = trpc.imports.list.useQuery(undefined, {
     enabled: isDataConfigured,
   });
+  const me = trpc.auth.me.useQuery(undefined, {
+    enabled: isDataConfigured,
+  });
   const commit = trpc.imports.commit.useMutation({
     onSuccess: (result) => {
       setAppliedRowCount(result.committed);
       setStep("done");
       void utils.imports.list.invalidate();
-      void utils.portfolio.overview.invalidate();
-      void utils.portfolio.summary.invalidate();
-      void utils.portfolio.holdings.invalidate();
-      void utils.portfolio.positions.invalidate();
+      void utils.portfolio.invalidate();
+      void utils.accounts.list.invalidate();
     },
   });
 
   const isBusy = status === "uploading" || commit.isLoading;
-  const canUpload = Boolean(file && !fileError && !isBusy);
+  const hasUploadPermission = me.data?.permissions.canUpload === true;
+  const canUpload = Boolean(hasUploadPermission && file && !fileError && !isBusy);
 
   const resetFlow = () => {
     setFile(null);
@@ -152,12 +154,12 @@ export function UploadsClient({
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
-    if (isBusy) return;
+    if (isBusy || !hasUploadPermission) return;
     handleFileChange(event.dataTransfer.files[0] ?? null);
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || !hasUploadPermission || isBusy) return;
     const validationError = getImportFileValidationError({
       fileName: file.name,
       mimeType: file.type,
@@ -235,6 +237,8 @@ export function UploadsClient({
   };
 
   const handleApply = (importBatchId: string, nextPreview?: ImportPreview) => {
+    if (!hasUploadPermission || isBusy) return;
+
     if (nextPreview) setPreview(nextPreview);
     setActiveBatchId(importBatchId);
     setAppliedRowCount(null);
@@ -266,15 +270,34 @@ export function UploadsClient({
             type="file"
             accept=".csv,.xlsx"
             className="sr-only"
-            disabled={isBusy}
+            disabled={isBusy || !hasUploadPermission}
             onChange={(event) =>
               handleFileChange(event.target.files?.[0] ?? null)
             }
           />
 
-          <ImportProgress currentStep={step} />
+          {me.isLoading ? (
+            <Panel title="Select a portfolio export">
+              <Skeleton className="h-56 rounded-2xl" aria-label="Loading import permissions" />
+            </Panel>
+          ) : me.isError ? (
+            <ErrorState
+              title="Import permissions could not be loaded"
+              description="Try loading your permissions again before selecting a file."
+              onRetry={() => void me.refetch()}
+            />
+          ) : !hasUploadPermission ? (
+            <Alert>
+              <AlertTitle>Only household owners can import files</AlertTitle>
+              <AlertDescription>
+                You can view the import history for this household below.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-          {step === "select" ? (
+          {hasUploadPermission ? <ImportProgress currentStep={step} /> : null}
+
+          {hasUploadPermission && step === "select" ? (
             <Panel title="Select a portfolio export" bodyClassName="space-y-4">
               <div
                 className={cn(
@@ -284,7 +307,7 @@ export function UploadsClient({
                 )}
                 onDragEnter={(event) => {
                   event.preventDefault();
-                  if (!isBusy) setIsDragging(true);
+                  if (!isBusy && hasUploadPermission) setIsDragging(true);
                 }}
                 onDragOver={(event) => event.preventDefault()}
                 onDragLeave={() => setIsDragging(false)}
@@ -305,6 +328,7 @@ export function UploadsClient({
                   type="button"
                   variant="outline"
                   className="mt-4"
+                  disabled={isBusy}
                   onClick={() => inputRef.current?.click()}
                 >
                   Browse files
@@ -372,7 +396,7 @@ export function UploadsClient({
             </Panel>
           ) : null}
 
-          {step === "review" && preview ? (
+          {hasUploadPermission && step === "review" && preview ? (
             <ReviewImport
               preview={preview}
               onChooseAnother={chooseAnotherFile}
@@ -380,7 +404,7 @@ export function UploadsClient({
             />
           ) : null}
 
-          {step === "apply" && preview ? (
+          {hasUploadPermission && step === "apply" && preview ? (
             <Panel
               title={commit.isError ? "Import not applied" : "Applying import"}
               description={
@@ -421,7 +445,7 @@ export function UploadsClient({
             </Panel>
           ) : null}
 
-          {step === "done" && preview ? (
+          {hasUploadPermission && step === "done" && preview ? (
             <Panel title="Import applied">
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
@@ -507,6 +531,7 @@ export function UploadsClient({
                     const workflow = historyWorkflow(batch);
                     const retention = historyRetention(batch);
                     const canApply =
+                      hasUploadPermission &&
                       !batch.committedAt &&
                       batch.errors.length === 0 &&
                       batch.rowCount > 0 &&
