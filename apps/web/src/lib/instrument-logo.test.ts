@@ -124,6 +124,30 @@ describe("instrument logo identifiers", () => {
     ).toEqual([]);
   });
 
+  it("requests transparent PNGs adjusted to the selected theme", () => {
+    for (const theme of ["light", "dark"] as const) {
+      const urls = instrumentLogoUrls(
+        { assetClass: "us_stock", symbol: "UBER" },
+        key,
+        theme,
+      );
+      const params = new URL(urls[0] ?? "").searchParams;
+      expect(params.get("theme")).toBe(theme);
+      expect(params.get("format")).toBe("png");
+    }
+    const dark = instrumentLogoUrls(
+      { assetClass: "us_stock", symbol: "UBER" },
+      key,
+      "dark",
+    );
+    const light = instrumentLogoUrls(
+      { assetClass: "us_stock", symbol: "UBER" },
+      key,
+      "light",
+    );
+    expect(dark).not.toEqual(light);
+  });
+
   it("asks for a real failure instead of the provider's generated placeholder", () => {
     const [url] = instrumentLogoUrls(
       { assetClass: "us_stock", symbol: "MSFT" },

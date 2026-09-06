@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useTheme } from "next-themes";
 import {
   instrumentLogoUrls,
   canRequestLogo,
@@ -38,18 +39,25 @@ export function InstrumentMark({
   illustrative?: boolean;
   variant?: "mono";
 }) {
+  const { resolvedTheme } = useTheme();
+  const theme =
+    resolvedTheme === "light" || resolvedTheme === "dark"
+      ? resolvedTheme
+      : undefined;
   const identity = resolveInstrumentIdentity({
     symbol,
     name,
     assetClass,
     illustrative,
   });
-  const urls = illustrative
-    ? []
-    : instrumentLogoUrls(
-        { name, symbol, isin, exchange, assetClass },
-        process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY,
-      );
+  const urls =
+    illustrative || !theme
+      ? []
+      : instrumentLogoUrls(
+          { name, symbol, isin, exchange, assetClass },
+          process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY,
+          theme,
+        );
   const boxClass =
     variant === "mono"
       ? "mono-mark"
@@ -160,7 +168,12 @@ function LogoImage({
 
   return (
     <span className="relative grid size-full place-items-center overflow-hidden rounded-[inherit]">
-      {children}
+      <span
+        className="grid size-full place-items-center"
+        style={{ visibility: url && loadedUrl === url ? "hidden" : "visible" }}
+      >
+        {children}
+      </span>
       {url ? (
         <img
           src={url}
@@ -170,7 +183,7 @@ function LogoImage({
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
-          className="absolute inset-0 size-full bg-white object-contain p-1"
+          className="absolute inset-0 size-full object-contain p-1"
           style={{ opacity: loadedUrl === url ? 1 : 0 }}
           onLoad={() => setLoadedUrl(url)}
           onError={() => {
