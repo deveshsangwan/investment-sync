@@ -460,13 +460,6 @@ select {
   color: hsl(var(--muted-foreground));
   font-size: 10px;
 }
-.portfolio-art-connectors {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  color: hsl(var(--muted-foreground) / 0.5);
-}
 .portfolio-art-result {
   position: absolute;
   top: 52px;
@@ -507,14 +500,14 @@ select {
 }
 
 .home-art-scene {
-  overflow: clip;
+  padding-inline: 12px;
   position: relative;
   perspective: 1000px;
 }
 .home-art-scene::before {
   content: "";
   position: absolute;
-  inset: -15% -4%;
+  inset: -15% 0;
   pointer-events: none;
   background: radial-gradient(
     ellipse at 65% 50%,
@@ -523,7 +516,7 @@ select {
   );
 }
 .home-art-scene .portfolio-art::before {
-  inset: -24px;
+  inset: 0;
   background-size: 22px 22px;
 }
 @keyframes home-statement-arrive {
@@ -576,5 +569,29 @@ select {
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .home-art-scene:hover .portfolio-art {
     transform: rotateY(-5deg) rotateX(2deg) translateY(-4px);
+  }
+}
+
+@media (max-width: 480px) {
+  .home-art-scene .portfolio-art {
+    height: 380px;
+  }
+  .home-art-scene .portfolio-art-source-first {
+    top: 20px;
+    left: 4px;
+  }
+  .home-art-scene .portfolio-art-source-second {
+    top: 20px;
+    right: 4px;
+    bottom: auto;
+    left: auto;
+  }
+  .home-art-scene .portfolio-art-result {
+    top: 130px;
+    right: 0;
+    left: 0;
+    width: min(100%, 280px);
+    margin-inline: auto;
+    padding: 20px;
   }
 }

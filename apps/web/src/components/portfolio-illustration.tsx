@@ -16,19 +16,6 @@ export function PortfolioIllustration() {
           Funds<span className="portfolio-art-sub">Holdings.xlsx</span>
         </span>
       </div>
-      <svg
-        className="portfolio-art-connectors"
-        viewBox="0 0 440 300"
-        fill="none"
-      >
-        <path
-          className="portfolio-draw"
-          pathLength="1"
-          d="M125 68H185Q205 68 205 88V134Q205 150 225 150H260M125 230H185Q205 230 205 210V166Q205 150 225 150"
-          stroke="currentColor"
-          strokeDasharray="4 5"
-        />
-      </svg>
       <div className="portfolio-art-result">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <WalletCards size={15} /> One portfolio
