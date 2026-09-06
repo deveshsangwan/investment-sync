@@ -1,4 +1,7 @@
+import { findNseSecurity, namedLogoIdentifier } from "./logo-reference";
+
 export type InstrumentLogoInput = {
+  name?: string;
   symbol?: string | null;
   isin?: string | null;
   exchange?: string | null;
@@ -10,17 +13,36 @@ export function instrumentLogoUrls(
   publishableKey: string | undefined,
 ) {
   if (!publishableKey?.startsWith("pk_")) return [];
-  if (!["indian_stock", "us_stock"].includes(instrument.assetClass ?? ""))
-    return [];
 
   const identifiers: string[] = [];
-  const isin = instrument.isin?.trim().toUpperCase();
+  const isStock = ["indian_stock", "us_stock"].includes(
+    instrument.assetClass ?? "",
+  );
+  const reference =
+    instrument.assetClass === "indian_stock" &&
+    !instrument.exchange &&
+    !instrument.isin
+      ? findNseSecurity(instrument.symbol)
+      : null;
+  const isin = isStock
+    ? (instrument.isin ?? reference?.isin)?.trim().toUpperCase()
+    : undefined;
   if (isin && /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(isin)) {
     identifiers.push(`isin/${isin}`);
   }
 
-  const ticker = qualifiedTicker(instrument);
+  const ticker = qualifiedTicker(
+    reference
+      ? { ...instrument, symbol: reference.symbol, exchange: "NSE" }
+      : instrument,
+  );
   if (ticker) identifiers.push(`ticker/${encodeURIComponent(ticker)}`);
+
+  const namedIdentifier = namedLogoIdentifier(
+    instrument.name,
+    instrument.assetClass,
+  );
+  if (namedIdentifier) identifiers.push(namedIdentifier);
 
   const params = new URLSearchParams({
     token: publishableKey,
