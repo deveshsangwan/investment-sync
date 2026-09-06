@@ -28,3 +28,6 @@ Total value                  Invested Gain Return XIRR
 [ Largest holdings, unchanged                            ]
 ```
 Left aligned labels and right aligned numbers. Opus summary and detail composition, Hybrid asset cards and largest holdings. Chart color compares latest value with invested capital, never first-to-last value movement. No extra pie, because allocation bars already show the proportions. This follows the requested references rather than adding decorative dashboard widgets.
+
+## Public pages
+Keep Public Sans and the existing black, charcoal, gray and outcome green palette. Home uses a left-aligned headline beside a drawn statement-to-portfolio illustration, with the product preview below. Authentication uses a compact two-column panel, illustration on the left and the existing Clerk form on the right. No viewport-height stretch. One-time line drawing gives the illustration and preview a little movement; reduced motion shows their finished state immediately. This is portfolio-specific artwork, without decorative floating blobs or continuous motion.

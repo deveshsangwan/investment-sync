@@ -1,3 +1,4 @@
+import { PortfolioIllustration } from "@/components/portfolio-illustration";
 import { auth } from "@clerk/nextjs/server";
 import {
   ArrowUpRight,
@@ -49,9 +50,12 @@ export default async function HomePage() {
         Skip to content
       </a>
       <header className="mx-auto flex h-20 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
-        <Link href="/" className="flex items-center gap-2.5 font-semibold">
+        <Link
+          href="/"
+          aria-label="Investment Sync home"
+          className="flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+        >
           <WalletCards className="size-5" aria-hidden="true" />
-          <span>Investment Sync</span>
         </Link>
         <nav aria-label="Public navigation" className="flex items-center gap-5">
           <Link
@@ -70,27 +74,31 @@ export default async function HomePage() {
         id="public-content"
         className="mx-auto max-w-6xl px-5 pb-16 pt-14 sm:px-8 sm:pt-20"
       >
-        <div className="mx-auto max-w-2xl text-center">
-          <h1 className="text-[40px] font-semibold leading-[1.12] tracking-[-0.05em] sm:text-[56px]">
-            A clearer view of
-            <br />
-            what you own.
-          </h1>
-          <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-muted-foreground">
-            Stocks, funds, and retirement savings. Bring your statements
-            together and see your household portfolio in one place.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild>
-              <Link href="/sign-up">
-                Create your portfolio
-                <ChevronRight className="size-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="ghost">
-              <Link href="#sources">See supported imports</Link>
-            </Button>
+        <div className="grid items-center gap-6 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
+          <div className="max-w-2xl">
+            <h1 className="text-[40px] font-semibold leading-[1.12] tracking-[-0.05em] sm:text-[56px]">
+              A clearer view of
+              <br />
+              what you own.
+            </h1>
+            <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
+              Stocks, funds, and retirement savings. Bring your statements
+              together and see your household portfolio in one place.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <Button asChild>
+                <Link href="/sign-up">
+                  Create your portfolio
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="ghost">
+                <Link href="#sources">See supported imports</Link>
+              </Button>
+            </div>
           </div>
+
+          <PortfolioIllustration />
         </div>
 
         <div className="mt-14 overflow-hidden rounded-[20px] border bg-card">
@@ -101,19 +109,7 @@ export default async function HomePage() {
             </span>
             <span>Illustrative portfolio and marks</span>
           </div>
-          <div className="grid md:grid-cols-[165px_minmax(0,1fr)]">
-            <aside className="hidden border-r p-4 md:block">
-              <div className="rounded-md bg-secondary px-3 py-2 text-xs font-medium">
-                Overview
-              </div>
-              <p className="px-3 py-3 text-xs text-muted-foreground">
-                Holdings
-              </p>
-              <p className="px-3 py-2 text-xs text-muted-foreground">Imports</p>
-              <p className="px-3 py-3 text-xs text-muted-foreground">
-                Accounts
-              </p>
-            </aside>
+          <div className="grid">
             <div className="min-w-0 p-5 sm:p-8">
               <div className="flex flex-wrap items-end justify-between gap-5">
                 <div>
@@ -151,6 +147,8 @@ export default async function HomePage() {
                       opacity=".08"
                     />
                     <path
+                      className="portfolio-draw text-positive"
+                      pathLength="1"
                       d="M0 93L70 85L140 79L210 65L280 72L350 44L420 49L490 22L550 27L600 10"
                       fill="none"
                       stroke="currentColor"
