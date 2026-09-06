@@ -1,3 +1,7 @@
+import Link from "next/link";
+import { FileUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AccountsPageSkeleton } from "@/components/accounts-skeleton";
 import { PageHeader, PageShell } from "@/components/portfolio-ui";
 import { PortfolioContentSkeleton } from "@/components/portfolio-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +33,31 @@ export function PageLoading({ page }: { page: LoadingPage }) {
               Source files are kept for 30 days. Import history stays available
               after a file expires.
             </p>
+          }
+        />
+      ) : page === "overview" || page === "holdings" || page === "accounts" ? (
+        <PageHeader
+          title={
+            page === "overview"
+              ? "Portfolio"
+              : page === "holdings"
+                ? "Holdings"
+                : "Accounts"
+          }
+          description={
+            page === "holdings"
+              ? "The positions behind your portfolio."
+              : page === "accounts"
+                ? "The household this portfolio belongs to, the accounts imports have created, and what happens to your files."
+                : undefined
+          }
+          action={
+            <Button asChild>
+              <Link href="/uploads">
+                <FileUp className="size-4" aria-hidden="true" />
+                Import statement
+              </Link>
+            </Button>
           }
         />
       ) : (
@@ -102,23 +131,7 @@ export function PageLoading({ page }: { page: LoadingPage }) {
               </div>
             </>
           ) : page === "accounts" ? (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                {[0, 1].map((i) => (
-                  <div
-                    key={i}
-                    className="space-y-5 rounded-2xl border bg-card p-6"
-                  >
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-4 w-60" />
-                    <Skeleton className="h-4 w-36" />
-                  </div>
-                ))}
-              </div>
-              <Skeleton className="h-5 w-40" />
-              <LoadingRows />
-            </>
+            <AccountsPageSkeleton />
           ) : (
             <div className="max-w-3xl space-y-8">
               {[0, 1, 2].map((i) => (

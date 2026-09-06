@@ -13,7 +13,11 @@ import {
 } from "@/components/portfolio-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ProfileSkeleton,
+  AccountsSkeleton,
+  AccountsFileInformation,
+} from "@/components/accounts-skeleton";
 import {
   Table,
   TableBody,
@@ -131,35 +135,7 @@ export function SettingsClient() {
         </div>
       </section>
 
-      <section className="mt-8">
-        <h2 className="text-[0.82rem] font-semibold">Files and data</h2>
-        <dl className="mt-3 divide-y divide-border/70 border-y border-border/70 text-sm">
-          <div className="grid gap-1 py-3.5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-4">
-            <dt className="font-medium">Original source files</dt>
-            <dd className="text-muted-foreground">
-              Kept for 30 days by default, then removed from private storage
-              during scheduled cleanup.
-            </dd>
-          </div>
-          <div className="grid gap-1 py-3.5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-4">
-            <dt className="font-medium">Normalized portfolio data</dt>
-            <dd className="text-muted-foreground">
-              Holdings, transactions, and valuations stay after the file
-              expires, so the portfolio keeps working.
-            </dd>
-          </div>
-          <div className="grid gap-1 py-3.5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-4">
-            <dt className="font-medium">Access</dt>
-            <dd className="text-muted-foreground">
-              Clerk handles authentication. Portfolio requests are restricted to
-              your signed-in household.{" "}
-              <Link href="/privacy" className="underline underline-offset-4">
-                Privacy details
-              </Link>
-            </dd>
-          </div>
-        </dl>
-      </section>
+      <AccountsFileInformation />
     </PageShell>
   );
 }
@@ -197,32 +173,6 @@ function Permission({
         {isGranted ? "Allowed" : "Not allowed"}
       </span>
     </li>
-  );
-}
-
-function ProfileSkeleton({ title }: { title: string }) {
-  return (
-    <Panel title={title}>
-      <div role="status" aria-label={`Loading ${title.toLowerCase()}`}>
-        <Skeleton className="h-4 w-40" />
-        <Skeleton className="mt-3 h-4 w-56" />
-        <Skeleton className="mt-3 h-4 w-32" />
-      </div>
-    </Panel>
-  );
-}
-
-function AccountsSkeleton() {
-  return (
-    <div
-      role="status"
-      aria-label="Loading connected accounts"
-      className="space-y-2"
-    >
-      {Array.from({ length: 3 }, (_, index) => (
-        <Skeleton key={index} className="h-12 w-full" />
-      ))}
-    </div>
   );
 }
 
