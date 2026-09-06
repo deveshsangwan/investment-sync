@@ -105,7 +105,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <UserButton
                   afterSignOutUrl="/"
                   appearance={{
-                    elements: { avatarBox: "size-8 rounded-full" },
+                    elements: {
+                      rootBox: "shrink-0",
+                      userButtonTrigger: "grid size-11 shrink-0 place-items-center p-0",
+                      avatarBox: "size-8 shrink-0 rounded-full",
+                    },
                   }}
                 />
               </div>
