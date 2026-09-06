@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/portfolio-ui";
+import { PageHeader, PageShell } from "@/components/portfolio-ui";
 import { PortfolioContentSkeleton } from "@/components/portfolio-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -9,8 +9,6 @@ export type LoadingPage =
   | "asset"
   | "imports"
   | "accounts"
-  | "home"
-  | "auth"
   | "document";
 
 export function PageLoading({ page }: { page: LoadingPage }) {
@@ -22,52 +20,86 @@ export function PageLoading({ page }: { page: LoadingPage }) {
 
   return (
     <PageShell>
-      <div
-        className="mb-8 flex items-center justify-between gap-6"
-        aria-hidden="true"
-      >
-        <Skeleton className="h-8 w-40" />
-        <div className="flex gap-2">
-          <Skeleton className="h-11 w-24" />
-          <Skeleton className="hidden h-11 w-32 sm:block" />
+      {page === "imports" ? (
+        <PageHeader
+          title="Imports"
+          description="Select a statement, check what was detected, then apply it. Nothing changes in your portfolio until you apply."
+          meta={
+            <p className="text-xs text-muted-foreground">
+              Source files are kept for 30 days. Import history stays available
+              after a file expires.
+            </p>
+          }
+        />
+      ) : (
+        <div
+          className="mb-8 flex items-center justify-between gap-6"
+          aria-hidden="true"
+        >
+          <Skeleton className="h-8 w-40" />
+          <div className="flex gap-2">
+            <Skeleton className="h-11 w-24" />
+            <Skeleton className="hidden h-11 w-32 sm:block" />
+          </div>
         </div>
-      </div>
+      )}
       {isPortfolio ? (
         <PortfolioContentSkeleton variant={page} />
       ) : (
         <div
           role="status"
-          aria-label={`Loading ${page === "auth" ? "sign in" : page}`}
+          aria-label={`Loading ${page}`}
           aria-busy="true"
           className="space-y-8"
         >
           <span className="sr-only">Loading page</span>
           {page === "imports" ? (
             <>
-              <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <div className="rounded-2xl border p-6">
-                  <Skeleton className="h-5 w-40" />
-                  <Skeleton className="mt-6 h-11 w-full" />
-                  <div className="mt-5 grid h-48 place-items-center rounded-xl border border-dashed">
-                    <Skeleton className="size-12" />
+              <div className="flex flex-wrap items-center gap-3">
+                {[0, 1, 2, 3].map((step) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <Skeleton className="size-6 shrink-0" />
+                    <Skeleton className="h-3 w-16" />
                   </div>
-                  <Skeleton className="mt-5 h-11 w-32" />
+                ))}
+              </div>
+              <div className="rounded-2xl border bg-card p-5">
+                <h2 className="text-[0.82rem] font-semibold">
+                  Select a portfolio export
+                </h2>
+                <div className="mt-4 flex flex-col items-center rounded-2xl border border-dashed px-5 py-10">
+                  <Skeleton className="size-5" />
+                  <Skeleton className="mt-3 h-4 w-52" />
+                  <Skeleton className="mt-3 h-4 w-80" />
+                  <Skeleton className="mt-4 h-11 w-28" />
                 </div>
-                <div className="space-y-6 p-6">
-                  <Skeleton className="h-5 w-44" />
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="flex gap-4">
-                      <Skeleton className="size-9 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <Skeleton className="h-4 w-40" />
-                        <Skeleton className="mt-3 h-3 w-full" />
-                      </div>
+                <div className="mt-4 flex justify-end">
+                  <Skeleton className="h-11 w-32" />
+                </div>
+              </div>
+              <div>
+                <h2 className="text-[0.82rem] font-semibold">
+                  Supported exports
+                </h2>
+                <Skeleton className="mt-2 h-3 w-96" />
+                <div className="mt-3 divide-y border-y">
+                  {[0, 1, 2, 3].map((row) => (
+                    <div
+                      key={row}
+                      className="grid gap-3 py-4 sm:grid-cols-[12rem_minmax(0,1fr)_auto]"
+                    >
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-3 w-12" />
                     </div>
                   ))}
                 </div>
               </div>
-              <Skeleton className="h-5 w-40" />
-              <LoadingRows />
+              <div>
+                <h2 className="text-[0.82rem] font-semibold">Recent imports</h2>
+                <Skeleton className="mt-2 h-3 w-96" />
+                <LoadingRows />
+              </div>
             </>
           ) : page === "accounts" ? (
             <>
@@ -86,34 +118,6 @@ export function PageLoading({ page }: { page: LoadingPage }) {
               </div>
               <Skeleton className="h-5 w-40" />
               <LoadingRows />
-            </>
-          ) : page === "auth" ? (
-            <div className="grid gap-10 rounded-2xl border p-6 sm:p-10 lg:grid-cols-2">
-              <div className="space-y-6">
-                <Skeleton className="h-9 w-64" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="hidden h-64 w-full lg:block" />
-              </div>
-              <div className="space-y-6 rounded-xl bg-card p-5">
-                <Skeleton className="h-6 w-36" />
-                <Skeleton className="h-11 w-full" />
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-11 w-full" />
-                <Skeleton className="h-11 w-full" />
-              </div>
-            </div>
-          ) : page === "home" ? (
-            <>
-              <div className="grid items-center gap-12 py-12 lg:grid-cols-2">
-                <div className="space-y-5">
-                  <Skeleton className="h-12 w-80" />
-                  <Skeleton className="h-12 w-64" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-11 w-44" />
-                </div>
-                <Skeleton className="h-64 w-full" />
-              </div>
-              <Skeleton className="h-64 w-full" />
             </>
           ) : (
             <div className="max-w-3xl space-y-8">
