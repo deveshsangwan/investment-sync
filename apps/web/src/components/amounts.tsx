@@ -111,7 +111,7 @@ export function HideAmountsButton({ className }: { className?: string }) {
       onClick={toggle}
       aria-pressed={isHidden}
       className={cn(
-        "inline-flex h-11 items-center gap-2 rounded-lg border border-border/80 px-3 text-sm text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground motion-reduce:transition-none",
+        "inline-flex h-11 items-center gap-2 rounded-[8px] border border-border/80 px-3 text-sm text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground motion-reduce:transition-none",
         className,
       )}
     >
