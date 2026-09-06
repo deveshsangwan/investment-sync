@@ -320,7 +320,7 @@ export function Panel({
 }) {
   return (
     <section
-      className={cn("rounded-2xl border border-border/70 bg-card", className)}
+      className={cn("min-w-0 rounded-2xl border border-border/70 bg-card", className)}
     >
       {title ? (
         <div className="flex items-start justify-between gap-4 px-5 pt-5">

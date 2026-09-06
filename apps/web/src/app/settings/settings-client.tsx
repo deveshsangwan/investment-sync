@@ -44,7 +44,7 @@ export function SettingsClient() {
         }
       />
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {me.isLoading ? (
           <>
             <ProfileSkeleton title="Household" />
@@ -168,7 +168,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="wrap-break-word text-right font-medium">{value}</dd>
+      <dd className="min-w-0 break-words text-right font-medium">{value}</dd>
     </div>
   );
 }
@@ -191,7 +191,7 @@ function Permission({
             aria-hidden="true"
           />
         )}
-        <span className="truncate">{label}</span>
+        <span className="min-w-0">{label}</span>
       </span>
       <span className="shrink-0 text-xs text-muted-foreground">
         {isGranted ? "Allowed" : "Not allowed"}
