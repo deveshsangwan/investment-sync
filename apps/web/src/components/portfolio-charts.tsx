@@ -59,7 +59,6 @@ const allocationColors = [
 
 // 264px surface plus the 24px legend row is the original 288px footprint.
 const timelineChartHeight = 264;
-const allocationChartHeight = 208;
 // Recharts drew a 2 degree wedge gap; radians here.
 const allocationGapAngle = (2 * Math.PI) / 180;
 
@@ -125,42 +124,38 @@ export function PortfolioTimelineChart({
 export function AllocationDonutChart({ data }: { data: AllocationPoint[] }) {
   const rows = useMemo(() => prepareAllocation(data), [data]);
 
-  const definition = useMemo(() => buildAllocationDefinition(rows), [rows]);
-
   return (
-    <div className="grid gap-4 md:grid-cols-[minmax(160px,220px)_1fr] md:items-center">
-      <Chart
-        definition={definition}
-        height={allocationChartHeight}
-        className="w-full"
-        ariaLabel="Portfolio allocation by asset class"
-      />
-      <div className="space-y-3">
-        {rows.map((item) => (
+    <div className="space-y-5">
+      {[...rows]
+        .sort((left, right) => right.currentValue - left.currentValue)
+        .map((item) => (
           <Link
             key={item.assetClass}
             href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
-            className="group -mx-2 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group block rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <span
-              className="size-2.5 rounded-full"
-              style={{ backgroundColor: item.color }}
-              aria-hidden="true"
-            />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold group-hover:text-primary">
-                {item.label}
-              </p>
-              <p className="number text-xs text-muted-foreground">
-                {formatInr(item.currentValue)}
-              </p>
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span>{item.label}</span>
+              <span className="number text-muted-foreground">
+                {formatPercent(item.weight)}
+              </span>
             </div>
-            <p className="number text-sm font-semibold">
-              {formatPercent(item.weight)}
+            <div
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+              aria-hidden="true"
+            >
+              <div
+                className="h-full rounded-full bg-foreground/70 group-hover:bg-foreground transition-colors"
+                style={{
+                  width: `${Math.max(0, Math.min(100, item.weight ?? 0))}%`,
+                }}
+              />
+            </div>
+            <p className="number mt-2 text-xs text-muted-foreground">
+              {formatInr(item.currentValue)}
             </p>
           </Link>
         ))}
-      </div>
     </div>
   );
 }

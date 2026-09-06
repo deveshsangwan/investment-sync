@@ -11,8 +11,8 @@ export default function SignInPage() {
   return (
     <AuthPageShell
       eyebrow="Welcome back"
-      title="Return to the complete picture."
-      description="Pick up with the latest portfolio data, import history, and account context already in place."
+      title="Sign in to your portfolio."
+      description="Your holdings, statements, and accounts are waiting here."
       securityDescription="Clerk manages the sign-in flow and session security."
     >
       <SignIn

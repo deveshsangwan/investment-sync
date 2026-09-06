@@ -17,16 +17,16 @@ export default function PrivacyPage() {
 
       <article
         id="legal-content"
-        className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[0.55fr_1.45fr] lg:px-8 lg:py-20"
+        className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[0.55fr_1.45fr] lg:px-8 lg:py-20"
       >
         <aside className="lg:sticky lg:top-8 lg:self-start">
           <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
             <ShieldCheck className="size-5" aria-hidden="true" />
           </div>
-          <p className="mt-6 text-xs font-semibold tracking-[0.16em] text-primary">
+          <p className="mt-6 text-xs font-semibold tracking-normal text-primary">
             Privacy
           </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">
+          <h1 className="mt-4 text-3xl font-semibold tracking-[-0.055em] sm:text-4xl">
             Your portfolio data, explained plainly.
           </h1>
           <p className="mt-5 text-sm leading-6 text-muted-foreground">
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
           </Button>
         </aside>
 
-        <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="overflow-hidden border-t bg-transparent">
           <section className="p-7 sm:p-10">
             <h2 className="text-2xl font-semibold tracking-[-0.035em]">
               The short version

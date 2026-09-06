@@ -1,5 +1,6 @@
 "use client";
 
+import { InstrumentMark } from "@/components/instrument-identity";
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
@@ -83,6 +84,11 @@ export function HoldingDetailClient({
         meta={
           holding ? (
             <div className="flex flex-wrap items-center gap-2">
+              <InstrumentMark
+                name={holding.instrumentName}
+                symbol={holding.symbol}
+                assetClass={holding.assetClass}
+              />
               <Badge variant="secondary">{labelize(holding.assetClass)}</Badge>
               <span className="text-xs text-muted-foreground">
                 {formatAsOfDate(holding.snapshotDate)}
@@ -152,13 +158,13 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
 
   return (
     <>
-      <Card className="overflow-hidden border-primary/25 bg-accent/35">
-        <CardContent className="grid gap-6 p-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
+      <Card className="overflow-hidden rounded-none border-0 border-b bg-transparent">
+        <CardContent className="mono-detail-summary grid grid-cols-3 gap-3 px-0 py-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
           <div>
             <p className="text-xs font-medium text-muted-foreground">
               Current value
             </p>
-            <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">
+            <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-[40px]">
               {formatCurrency(
                 Number(holding.currentValue ?? 0),
                 holding.currency,
@@ -192,7 +198,7 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
         </CardContent>
       </Card>
 
-      <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard
           label="XIRR"
           value={formatPercent(holding.xirr)}

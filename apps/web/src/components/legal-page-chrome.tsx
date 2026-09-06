@@ -9,7 +9,7 @@ export function LegalHeader() {
       <a className="skip-link" href="#legal-content">
         Skip to legal content
       </a>
-      <header className="mx-auto flex h-[4.5rem] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <header className="mx-auto flex h-[4.5rem] w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
           aria-label="Investment Sync home"
@@ -30,7 +30,7 @@ export function LegalHeader() {
 
 export function LegalFooter({ current }: { current: "privacy" | "terms" }) {
   return (
-    <footer className="mx-auto flex w-full max-w-7xl flex-col gap-4 border-t px-4 pb-24 pt-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 md:pb-8 lg:px-8">
+    <footer className="mx-auto flex w-full max-w-6xl flex-col gap-4 border-t px-4 pb-24 pt-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 md:pb-8 lg:px-8">
       <p>Investment Sync</p>
       <nav aria-label="Legal" className="flex gap-5">
         <LegalLink href="/privacy" active={current === "privacy"}>

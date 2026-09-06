@@ -63,8 +63,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <aside
             id="desktop-sidebar"
             className={cn(
-              "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border/75 bg-card transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
-              sidebarCollapsed ? "w-[4.5rem]" : "w-60",
+              "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border/75 bg-background transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
+              sidebarCollapsed ? "w-[4.5rem]" : "w-52",
             )}
           >
             <div
@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 aria-controls="desktop-sidebar"
                 aria-expanded={!sidebarCollapsed}
                 onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-                className="absolute right-[-0.875rem] top-[1.125rem] size-7 rounded-full bg-card shadow-sm"
+                className="absolute right-[-0.875rem] top-[1.125rem] size-7 rounded-md bg-card"
               >
                 {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
               </Button>
@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   sidebarCollapsed && "sr-only",
                 )}
               >
-                Portfolio
+                Workspace
               </p>
               {navItems.map((item) => {
                 const Icon = item.icon;
@@ -112,9 +112,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     aria-current={active ? "page" : undefined}
                     title={sidebarCollapsed ? item.label : undefined}
                     className={cn(
-                      "group flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground",
+                      "group flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground",
                       sidebarCollapsed && "justify-center px-0",
-                      active && "bg-accent text-accent-foreground",
+                      active && "bg-secondary text-foreground",
                     )}
                   >
                     <Icon
@@ -155,7 +155,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   />
                   {!sidebarCollapsed && (
                     <span className="text-xs font-medium text-muted-foreground">
-                      Your account
+                      Personal account
                     </span>
                   )}
                 </div>
@@ -178,7 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div
             className={cn(
               "transition-[padding-left] duration-200 ease-out motion-reduce:transition-none",
-              sidebarCollapsed ? "md:pl-[4.5rem]" : "md:pl-60",
+              sidebarCollapsed ? "md:pl-[4.5rem]" : "md:pl-52",
             )}
           >
             {children}
@@ -198,7 +198,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.68rem] font-medium text-muted-foreground transition-[background-color,color,transform] duration-150 active:scale-[0.98]",
-                    active && "bg-accent text-accent-foreground",
+                    active && "bg-secondary text-foreground",
                   )}
                 >
                   <Icon

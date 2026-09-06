@@ -66,7 +66,7 @@ describe("allocation preparation", () => {
       "fixed_deposit",
       "nps",
     ]);
-    expect(rows[0]?.label).toBe("Mutual Fund");
+    expect(rows[0]?.label).toBe("Mutual funds");
   });
 
   it("keeps weight and source lineage", () => {

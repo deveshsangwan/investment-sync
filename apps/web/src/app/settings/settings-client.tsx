@@ -40,14 +40,13 @@ export function SettingsClient() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Settings"
-        title="Household and data"
-        description="Review your portfolio identity, connected accounts, access permissions, and source-file retention."
+        title="Accounts"
+        description="Your household, accounts, and stored records."
         action={
           <Button asChild>
             <Link href="/uploads">
               <UploadCloud className="size-4" aria-hidden="true" />
-              Import data
+              Import statement
             </Link>
           </Button>
         }
@@ -71,7 +70,7 @@ export function SettingsClient() {
           <>
             <SectionCard
               title="Household"
-              description="The portfolio identity attached to your signed-in account."
+              description="The household attached to your account."
             >
               <dl className="grid gap-5 sm:grid-cols-2">
                 <div>
@@ -105,7 +104,7 @@ export function SettingsClient() {
 
             <SectionCard
               title="Access permissions"
-              description="Capabilities granted to your current household membership."
+              description="What you can do in this household."
             >
               <div className="grid gap-3">
                 <PermissionRow
@@ -132,9 +131,9 @@ export function SettingsClient() {
       </section>
 
       <SectionCard
-        title="Connected accounts"
-        description="Active account records created from applied portfolio imports."
-        className="mt-4"
+        title="Imported accounts"
+        description="Accounts found in the statements you have imported."
+        className="mt-7 border-0 bg-transparent"
       >
         {accounts.isLoading ? (
           <AccountsSkeleton />
@@ -151,7 +150,7 @@ export function SettingsClient() {
             description="Accounts appear here after you review and apply a supported portfolio import."
             action={
               <Button asChild size="sm">
-                <Link href="/uploads">Import data</Link>
+                <Link href="/uploads">Import statement</Link>
               </Button>
             }
           />
@@ -163,7 +162,7 @@ export function SettingsClient() {
       <SectionCard
         title="Data and privacy"
         description="What Investment Sync keeps after you upload a portfolio file."
-        className="mt-4"
+        className="mt-7 border-0 bg-transparent"
       >
         <div className="grid overflow-hidden rounded-lg border border-border/70 md:grid-cols-2 md:divide-x md:divide-border/70">
           <div className="border-b border-border/70 p-5 md:border-b-0">

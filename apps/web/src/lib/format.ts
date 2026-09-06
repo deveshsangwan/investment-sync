@@ -56,6 +56,19 @@ export function numberOrUndefined(value: string | number | null | undefined) {
 }
 
 export function labelize(value: string) {
+  const assetLabels: Record<string, string> = {
+    indian_stock: "Indian stocks",
+    us_stock: "US stocks",
+    mutual_fund: "Mutual funds",
+    nps: "NPS",
+    ulip: "ULIP",
+    crypto: "Crypto",
+    cash: "Cash",
+    other: "Other assets",
+  };
+
+  if (assetLabels[value]) return assetLabels[value];
+
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (match) => match.toUpperCase());

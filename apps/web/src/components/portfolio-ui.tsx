@@ -17,7 +17,7 @@ export function PageShell({
     <main
       id="main-content"
       className={cn(
-        "mx-auto w-full max-w-[90rem] px-4 pb-24 pt-6 sm:px-6 sm:pt-8 md:pb-12 lg:px-8",
+        "mx-auto w-full max-w-[82rem] px-4 pb-24 pt-6 sm:px-6 sm:pt-10 md:pb-12 lg:px-10",
         className,
       )}
     >
@@ -42,13 +42,15 @@ export function PageHeader({
   meta?: React.ReactNode;
 }) {
   return (
-    <section className="mb-7 flex flex-col gap-5 border-b border-border/70 pb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
+    <section className="mb-8 flex flex-col gap-5 pb-2 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
       <div className="min-w-0">
         {before}
-        {eyebrow ? (
-          <p className="mb-2 text-xs font-semibold text-primary">{eyebrow}</p>
+        {eyebrow && eyebrow !== title ? (
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            {eyebrow}
+          </p>
         ) : null}
-        <h1 className="text-[1.85rem] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground sm:text-[2.25rem]">
+        <h1 className="text-[1.65rem] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground sm:text-[1.85rem]">
           {title}
         </h1>
         {description ? (
@@ -79,8 +81,13 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("overflow-hidden shadow-none", className)}>
-      <CardContent className="p-4 sm:p-5">
+    <Card
+      className={cn(
+        "overflow-hidden rounded-none border-0 bg-transparent shadow-none",
+        className,
+      )}
+    >
+      <CardContent className="px-0 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-medium text-muted-foreground">{label}</p>

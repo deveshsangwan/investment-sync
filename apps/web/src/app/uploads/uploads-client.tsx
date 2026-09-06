@@ -253,9 +253,8 @@ export function UploadsClient({
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Imports"
-        title="Bring your portfolio up to date"
-        description="Select an export, review the detected data, then apply it to your household portfolio."
+        title="Import statements"
+        description="Add a statement. Review the holdings before applying changes."
         meta={
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
@@ -287,6 +286,7 @@ export function UploadsClient({
             <SectionCard
               title="Select a portfolio export"
               description="Files are parsed first. Nothing changes in your portfolio until you review and apply the import."
+              className="border-0 bg-transparent"
               contentClassName="space-y-4"
             >
               <div

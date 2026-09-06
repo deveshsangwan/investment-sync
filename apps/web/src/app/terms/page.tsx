@@ -51,10 +51,10 @@ export default function TermsPage() {
           <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
             <Scale className="size-5" aria-hidden="true" />
           </div>
-          <p className="mt-6 text-xs font-semibold tracking-[0.16em] text-primary">
+          <p className="mt-6 text-xs font-semibold tracking-normal text-primary">
             Terms of use
           </p>
-          <h1 className="mt-4 text-4xl font-semibold leading-[1.02] tracking-[-0.055em] sm:text-6xl">
+          <h1 className="mt-4 text-3xl font-semibold leading-[1.02] tracking-[-0.055em] sm:text-6xl">
             Clear terms for a portfolio view.
           </h1>
           <p className="mt-5 text-sm leading-6 text-muted-foreground">
@@ -62,7 +62,7 @@ export default function TermsPage() {
           </p>
         </div>
 
-        <div className="mt-12 overflow-hidden rounded-xl border bg-card">
+        <div className="mt-12 overflow-hidden border-t bg-transparent">
           <section className="p-7 sm:p-10">
             <h2 className="text-2xl font-semibold tracking-[-0.035em]">
               Using Investment Sync

@@ -1,5 +1,6 @@
 "use client";
 
+import { InstrumentIdentity } from "@/components/instrument-identity";
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
@@ -111,8 +112,8 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
 
   return (
     <>
-      <Card className="overflow-hidden border-primary/25 bg-accent/35">
-        <CardContent className="grid gap-6 p-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
+      <Card className="overflow-hidden rounded-none border-0 border-b bg-transparent">
+        <CardContent className="mono-detail-summary grid grid-cols-3 gap-3 px-0 py-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs font-medium text-muted-foreground">
@@ -122,7 +123,7 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
                 <Badge variant="secondary">{formatAsOfDate(asOfDate)}</Badge>
               ) : null}
             </div>
-            <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">
+            <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-[40px]">
               {formatInr(summary.currentValue)}
             </p>
           </div>
@@ -144,7 +145,7 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
         </CardContent>
       </Card>
 
-      <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard
           label="Portfolio weight"
           value={formatPercent(summary.portfolioWeight)}
@@ -204,7 +205,11 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
                 >
                   <div className="min-w-0">
                     <p className="truncate font-semibold">
-                      {holding.symbol ?? holding.instrumentName}
+                      <InstrumentIdentity
+                        name={holding.instrumentName}
+                        symbol={holding.symbol}
+                        assetClass={holding.assetClass}
+                      />
                     </p>
                     <p className="number mt-1 truncate text-xs text-muted-foreground">
                       {formatCurrency(
@@ -319,7 +324,11 @@ function AssetPositionRow({
           className="font-semibold hover:text-primary"
           href={`/dashboard/holdings/${holding.id}`}
         >
-          {holding.symbol ?? holding.instrumentName}
+          <InstrumentIdentity
+            name={holding.instrumentName}
+            symbol={holding.symbol}
+            assetClass={holding.assetClass}
+          />
         </Link>
         <p className="mt-1 text-xs text-muted-foreground">
           {holding.accountName}
@@ -381,7 +390,11 @@ function AssetPositionCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-semibold">
-            {holding.symbol ?? holding.instrumentName}
+            <InstrumentIdentity
+              name={holding.instrumentName}
+              symbol={holding.symbol}
+              assetClass={holding.assetClass}
+            />
           </p>
           <p className="mt-1 truncate text-xs text-muted-foreground">
             {holding.accountName} /{" "}
