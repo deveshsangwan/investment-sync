@@ -22,13 +22,77 @@ describe("instrument logo identifiers", () => {
   });
 
   it("does not send ambiguous Indian symbols to the default US market", () => {
-    expect(paths({ assetClass: "indian_stock", symbol: "ITC" })).toEqual([]);
+    expect(
+      paths({ assetClass: "indian_stock", symbol: "UNKNOWN-SECURITY" }),
+    ).toEqual([]);
     expect(
       paths({ assetClass: "indian_stock", symbol: "ITC", exchange: "unknown" }),
     ).toEqual([]);
     expect(
       paths({ assetClass: "indian_stock", symbol: "500180", exchange: "BSE" }),
     ).toEqual(["/ticker/500180.BO"]);
+  });
+
+  it("resolves existing Indian symbols and ETFs without mutating their records", () => {
+    const input = Object.freeze({
+      assetClass: "indian_stock",
+      symbol: "HDFCBANK",
+    });
+    expect(paths(input)).toEqual(["/isin/INE040A01034", "/ticker/HDFCBANK.NS"]);
+    expect(paths({ assetClass: "indian_stock", symbol: "NIFTYBEES" })).toEqual([
+      "/isin/INF204KB14I2",
+      "/ticker/NIFTYBEES.NS",
+    ]);
+    expect(input).toEqual({ assetClass: "indian_stock", symbol: "HDFCBANK" });
+    expect(paths({ assetClass: "indian_stock", symbol: "__proto__" })).toEqual(
+      [],
+    );
+  });
+
+  it("uses issuer domains only within the matching asset class", () => {
+    expect(
+      paths({ assetClass: "mutual_fund", name: "HDFC Small Cap Fund" }),
+    ).toEqual(["/hdfcfund.com"]);
+    expect(
+      paths({
+        assetClass: "mutual_fund",
+        name: "Parag Parikh ELSS Tax Saver Fund",
+      }),
+    ).toEqual(["/ppfas.com"]);
+    expect(paths({ assetClass: "ulip", name: "HDFC Click2 Invest" })).toEqual([
+      "/hdfclife.com",
+    ]);
+    expect(
+      paths({ assetClass: "ulip", name: "Bajaj Alliance Goal Assure" }),
+    ).toEqual(["/bajajlifeinsurance.com"]);
+    expect(
+      paths({ assetClass: "us_stock", name: "HDFC Small Cap Fund" }),
+    ).toEqual([]);
+    expect(
+      paths({ assetClass: "mutual_fund", name: "Quantitative Small Cap Fund" }),
+    ).toEqual([]);
+  });
+
+  it("resolves known crypto names and leaves aggregate and unknown rows alone", () => {
+    expect(paths({ assetClass: "crypto", name: " Bitcoin " })).toEqual([
+      "/crypto/BTC",
+    ]);
+    expect(paths({ assetClass: "crypto", name: "Solana" })).toEqual([
+      "/crypto/SOL",
+    ]);
+    expect(paths({ assetClass: "crypto", name: "REI network" })).toEqual([
+      "/rei.network",
+    ]);
+    for (const name of [
+      "Mutual Funds Summary",
+      "HDFC Summary",
+      "Invested Today",
+      "Unknown Fund",
+    ]) {
+      expect(paths({ assetClass: "mutual_fund", name })).toEqual([]);
+    }
+    expect(paths({ assetClass: "nps", name: "NPS" })).toEqual([]);
+    expect(paths({ assetClass: "crypto", name: "Crypto Summary" })).toEqual([]);
   });
 
   it("preserves a supplied Indian exchange suffix and US share classes", () => {

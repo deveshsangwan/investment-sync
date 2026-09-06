@@ -47,7 +47,7 @@ export function InstrumentMark({
   const urls = illustrative
     ? []
     : instrumentLogoUrls(
-        { symbol, isin, exchange, assetClass },
+        { name, symbol, isin, exchange, assetClass },
         process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY,
       );
   const boxClass =
@@ -68,7 +68,9 @@ export function InstrumentMark({
           className,
         )}
       >
-        <Icon className={size === "detail" ? "size-5" : "size-3.5"} />
+        <LogoImage key={urls.join("|")} urls={urls}>
+          <Icon className={size === "detail" ? "size-5" : "size-3.5"} />
+        </LogoImage>
       </span>
     );
   }
