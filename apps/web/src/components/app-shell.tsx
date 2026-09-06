@@ -58,6 +58,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("scroll", updateScrollState);
   }, []);
 
+  const isPublicPage =
+    pathname === "/" ||
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/sign-up") ||
+    pathname === "/privacy" ||
+    pathname === "/terms";
+
+  if (isPublicPage) return children;
+
   return (
     <>
       <SignedIn>
