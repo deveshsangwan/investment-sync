@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   description:
     "A private household portfolio view for Indian and US investments.",
   applicationName: "Investment Sync",
+  icons: { icon: "/brand/quiet.png", apple: "/brand/quiet.png" },
   openGraph: {
     title: "Investment Sync",
     description:

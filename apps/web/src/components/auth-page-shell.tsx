@@ -1,5 +1,6 @@
+import { BrandMark } from "@/components/brand-mark";
 import { PortfolioIllustration } from "@/components/portfolio-illustration";
-import { FileClock, LockKeyhole, ShieldCheck, WalletCards } from "lucide-react";
+import { FileClock, LockKeyhole, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 export const authAppearance = {
@@ -145,9 +146,7 @@ function BrandLink() {
       aria-label="Investment Sync home"
       className="flex items-center gap-2.5 font-semibold tracking-[-0.02em]"
     >
-      <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-        <WalletCards className="size-[1.05rem]" aria-hidden="true" />
-      </span>
+      <BrandMark className="size-11" />
     </Link>
   );
 }

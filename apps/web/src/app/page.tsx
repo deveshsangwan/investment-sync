@@ -1,3 +1,4 @@
+import { BrandMark } from "@/components/brand-mark";
 import { HomeMotion } from "@/components/home-motion";
 import { PortfolioIllustration } from "@/components/portfolio-illustration";
 import { auth } from "@clerk/nextjs/server";
@@ -54,9 +55,9 @@ export default async function HomePage() {
         <Link
           href="/"
           aria-label="Investment Sync home"
-          className="flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+          className="flex size-11 items-center justify-center"
         >
-          <WalletCards className="size-5" aria-hidden="true" />
+          <BrandMark className="size-11" />
         </Link>
         <nav aria-label="Public navigation" className="flex items-center gap-5">
           <Link
@@ -189,7 +190,7 @@ export default async function HomePage() {
                     key={holding.name}
                     className="flex items-center justify-between gap-4 py-4 last:pb-0"
                   >
-                    <InstrumentIdentity {...holding} />
+                    <InstrumentIdentity {...holding} illustrative />
                     <div className="shrink-0 text-right">
                       <p className="number text-sm font-medium">
                         {holding.value}

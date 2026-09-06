@@ -6,11 +6,11 @@ import {
   CloudUpload,
   Landmark,
   LayoutDashboard,
-  WalletCards,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandMark } from "@/components/brand-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -158,9 +158,7 @@ function Brand() {
       aria-label="Investment Sync overview"
       className="flex size-11 shrink-0 items-center justify-center"
     >
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
-        <WalletCards className="size-4" aria-hidden="true" />
-      </span>
+      <BrandMark className="size-11" />
     </Link>
   );
 }
