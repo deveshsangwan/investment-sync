@@ -1,5 +1,7 @@
 "use client";
 
+import { DisplayAmount, useAmountFormatters } from "@/components/amounts";
+
 import { InstrumentIdentity } from "@/components/instrument-identity";
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -35,8 +37,6 @@ import {
 } from "@/components/ui/table";
 import {
   formatAsOfDate,
-  formatCurrency,
-  formatInr,
   formatPercent,
   labelize,
   numberOrUndefined,
@@ -104,6 +104,8 @@ export function AssetClassClient({
 }
 
 function AssetClassContent({ data }: { data: AssetClassDetail }) {
+  const { formatInr, formatCurrency } = useAmountFormatters();
+
   const { summary } = data;
   const pnlTone = summary.pnlAmount >= 0 ? "positive" : "negative";
   const PnlIcon = pnlTone === "positive" ? ArrowUpRight : ArrowDownRight;
@@ -124,7 +126,7 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
               ) : null}
             </div>
             <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-[40px]">
-              {formatInr(summary.currentValue)}
+              <DisplayAmount value={summary.currentValue} />
             </p>
           </div>
           <HeroStat
@@ -315,6 +317,8 @@ function AssetPositionRow({
   holding: AssetPosition;
   exited: boolean;
 }) {
+  const { formatCurrency } = useAmountFormatters();
+
   const pnlInInr = Number(holding.pnlAmountInInr ?? 0);
   const tone = pnlInInr >= 0 ? "positive" : "negative";
   return (
@@ -380,6 +384,8 @@ function AssetPositionCard({
   holding: AssetPosition;
   exited: boolean;
 }) {
+  const { formatCurrency } = useAmountFormatters();
+
   const tone =
     Number(holding.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   return (

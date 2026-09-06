@@ -1,7 +1,9 @@
 "use client";
 
+import { useAmountFormatters } from "@/components/amounts";
+
 import Link from "next/link";
-import { useState } from "react";
+import { DisplayAmount, useAmountsVisibility } from "@/components/amounts";
 import {
   AssetIcon,
   InstrumentIdentity,
@@ -10,8 +12,6 @@ import {
   Activity,
   ChevronDown,
   ChevronRight,
-  Eye,
-  EyeOff,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
@@ -40,7 +40,6 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   formatDate,
-  formatInr,
   formatPercent,
   labelize,
   qualityLabel,
@@ -54,7 +53,9 @@ export function DashboardClient({
 }: {
   isDataConfigured: boolean;
 }) {
-  const [amountsHidden, setAmountsHidden] = useState(false);
+  const { formatInr } = useAmountFormatters();
+
+  const { isHidden: amountsHidden } = useAmountsVisibility();
   const overview = trpc.portfolio.overview.useQuery(undefined, {
     enabled: isDataConfigured,
   });
@@ -138,21 +139,12 @@ export function DashboardClient({
                 ? formatDate(latestSnapshotDate)
                 : "date unavailable"}
             </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAmountsHidden(!amountsHidden)}
-              aria-pressed={amountsHidden}
-            >
-              {amountsHidden ? <EyeOff /> : <Eye />}
-              {amountsHidden ? "Show summary" : "Hide summary"}
-            </Button>
           </div>
           <dl className="mono-summary">
             <div>
               <dt>Total portfolio value</dt>
               <dd className="number">
-                {amountsHidden ? "••••••" : formatInr(summary.currentValue)}
+                <DisplayAmount value={summary.currentValue} />
               </dd>
             </div>
             <div>
@@ -613,6 +605,8 @@ function RateValue({
 }
 
 function PnlValue({ value }: { value: number | null }) {
+  const { formatInr } = useAmountFormatters();
+
   if (value === null || !Number.isFinite(value)) {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">

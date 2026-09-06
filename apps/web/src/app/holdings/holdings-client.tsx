@@ -1,5 +1,7 @@
 "use client";
 
+import { Money, useAmountFormatters } from "@/components/amounts";
+
 import { InstrumentIdentity } from "@/components/instrument-identity";
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -35,7 +37,6 @@ import {
 } from "@/components/ui/table";
 import {
   formatAsOfDate,
-  formatInr,
   formatPercent,
   labelize,
   numberOrUndefined,
@@ -57,6 +58,8 @@ export function HoldingsClient({
 }: {
   isDataConfigured: boolean;
 }) {
+  const { formatInr } = useAmountFormatters();
+
   const query = trpc.portfolio.positions.useQuery(undefined, {
     enabled: isDataConfigured,
   });
@@ -357,6 +360,8 @@ function FilterSelect({
 }
 
 function PositionTableRow({ position }: { position: Position }) {
+  const { formatInr } = useAmountFormatters();
+
   const tone =
     Number(position.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   return (
@@ -406,6 +411,8 @@ function PositionTableRow({ position }: { position: Position }) {
 }
 
 function PositionCard({ position }: { position: Position }) {
+  const { formatInr } = useAmountFormatters();
+
   const tone =
     Number(position.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   return (
@@ -435,14 +442,17 @@ function PositionCard({ position }: { position: Position }) {
           {formatAsOfDate(position.snapshotDate)}
         </span>
         <span
-          className={`number inline-flex items-center gap-1 font-medium ${tone}`}
+          className={`number grid justify-items-end gap-1 text-xs font-medium ${tone}`}
         >
-          {tone === "positive" ? (
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
-          ) : (
-            <ArrowDownRight className="size-3.5" aria-hidden="true" />
-          )}
-          {formatPercent(numberOrUndefined(position.pnlPercent))}
+          <Money value={position.pnlAmountInInr ?? 0} signed />
+          <span className="inline-flex items-center gap-1">
+            {tone === "positive" ? (
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            ) : (
+              <ArrowDownRight className="size-3.5" aria-hidden="true" />
+            )}
+            {formatPercent(numberOrUndefined(position.pnlPercent))}
+          </span>
         </span>
       </div>
     </Link>

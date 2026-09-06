@@ -1,5 +1,7 @@
 "use client";
 
+import { DisplayAmount, useAmountFormatters } from "@/components/amounts";
+
 import { InstrumentMark } from "@/components/instrument-identity";
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -37,7 +39,6 @@ import {
 } from "@/components/ui/table";
 import {
   formatAsOfDate,
-  formatCurrency,
   formatDate,
   formatPercent,
   formatQuantity,
@@ -133,6 +134,8 @@ export function HoldingDetailClient({
 }
 
 function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
+  const { formatCurrency } = useAmountFormatters();
+
   const { holding } = data;
   if (!holding) return null;
   const pnlTone = (holding.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
@@ -165,10 +168,10 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
               Current value
             </p>
             <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-[40px]">
-              {formatCurrency(
-                Number(holding.currentValue ?? 0),
-                holding.currency,
-              )}
+              <DisplayAmount
+                value={Number(holding.currentValue ?? 0)}
+                currency={holding.currency}
+              />
             </p>
             <p className="mt-3 text-xs text-muted-foreground">
               Shown in {holding.currency}. History is normalized to INR.

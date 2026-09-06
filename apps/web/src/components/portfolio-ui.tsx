@@ -1,3 +1,4 @@
+import { HideAmountsButton } from "@/components/amounts";
 import { AlertTriangle, RefreshCw, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +61,10 @@ export function PageHeader({
         ) : null}
         {meta ? <div className="mt-3">{meta}</div> : null}
       </div>
-      {action ? <div className="shrink-0 sm:pb-0.5">{action}</div> : null}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pb-0.5">
+        <HideAmountsButton />
+        {action}
+      </div>
     </section>
   );
 }
@@ -297,4 +301,45 @@ export function QualityBadge({ value }: { value: string }) {
         ? "warning"
         : "secondary";
   return <Badge variant={variant}>{value}</Badge>;
+}
+
+export function Panel({
+  title,
+  description,
+  action,
+  children,
+  className,
+  bodyClassName,
+}: {
+  title?: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  bodyClassName?: string;
+}) {
+  return (
+    <section
+      className={cn("rounded-2xl border border-border/70 bg-card", className)}
+    >
+      {title ? (
+        <div className="flex items-start justify-between gap-4 px-5 pt-5">
+          <div className="min-w-0">
+            <h2 className="text-[0.82rem] font-semibold text-foreground">
+              {title}
+            </h2>
+            {description ? (
+              <p className="mt-1 max-w-[54ch] text-xs leading-5 text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
+      ) : null}
+      <div className={cn(title ? "px-5 pb-5 pt-4" : "p-5", bodyClassName)}>
+        {children}
+      </div>
+    </section>
+  );
 }

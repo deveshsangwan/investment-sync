@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { useAmountsVisibility } from "./amounts";
 import { areaY, defineChart, lineY } from "@tanstack/charts";
 import { decorative } from "@tanstack/charts/mark/decorative";
 import { pie, polar, radialArc } from "@tanstack/charts/polar";
@@ -75,6 +76,7 @@ export function PortfolioTimelineChart({
   investedLabel?: string;
   showInvested?: boolean;
 }) {
+  const { isHidden } = useAmountsVisibility();
   const rows = useMemo(() => prepareTimeline(data), [data]);
   const hasInvested =
     showInvested && rows.some((row) => row.investedAmount !== undefined);
@@ -88,6 +90,19 @@ export function PortfolioTimelineChart({
       }),
     [rows, hasInvested, currentLabel, investedLabel],
   );
+
+  if (isHidden) {
+    return (
+      <div
+        className={cn(
+          "grid h-72 place-items-center text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        Amounts hidden
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex w-full flex-col", className)}>
@@ -122,7 +137,15 @@ export function PortfolioTimelineChart({
 }
 
 export function AllocationDonutChart({ data }: { data: AllocationPoint[] }) {
+  const { isHidden } = useAmountsVisibility();
   const rows = useMemo(() => prepareAllocation(data), [data]);
+
+  if (isHidden)
+    return (
+      <div className="grid h-64 place-items-center text-sm text-muted-foreground">
+        Amounts hidden
+      </div>
+    );
 
   return (
     <div className="space-y-5">
