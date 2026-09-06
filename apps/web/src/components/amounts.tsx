@@ -15,8 +15,8 @@ const mask = "••••••";
 
 /**
  * Amount visibility lives in localStorage rather than React state so the choice
- * survives navigation and reloads. The server always renders amounts visible;
- * React swaps in the stored preference after hydration.
+ * survives navigation and reloads. Mask amounts until hydration can read that
+ * preference, so a saved hidden state never exposes values during a reload.
  */
 const listeners = new Set<() => void>();
 
@@ -31,15 +31,15 @@ function readStoredPreference() {
   return window.localStorage.getItem(storageKey) === "true";
 }
 
-function amountsAreVisibleOnServer() {
-  return false;
+function amountsAreHiddenOnServer() {
+  return true;
 }
 
 export function useAmountsVisibility() {
   const isHidden = useSyncExternalStore(
     subscribe,
     readStoredPreference,
-    amountsAreVisibleOnServer,
+    amountsAreHiddenOnServer,
   );
 
   const toggle = useCallback(() => {
