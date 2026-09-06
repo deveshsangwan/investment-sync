@@ -70,9 +70,9 @@ export function AccountsPageSkeleton() {
         <ProfileSkeleton title="What you can do" />
       </section>
       <section className="mt-8">
-        <h2 className="text-[0.82rem] font-semibold">Connected accounts</h2>
+        <h2 className="text-[0.82rem] font-semibold">Portfolio accounts</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Account records created from applied portfolio imports.
+          Accounts available to organize your imported holdings.
         </p>
         <div className="mt-3">
           <AccountsSkeleton />

@@ -48,7 +48,7 @@ export function PageLoading({ page }: { page: LoadingPage }) {
             page === "holdings"
               ? "The positions behind your portfolio."
               : page === "accounts"
-                ? "The household this portfolio belongs to, the accounts imports have created, and what happens to your files."
+                ? "Your household, portfolio accounts, and what happens to your files."
                 : undefined
           }
           action={

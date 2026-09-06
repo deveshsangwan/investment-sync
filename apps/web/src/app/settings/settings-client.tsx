@@ -37,7 +37,7 @@ export function SettingsClient() {
     <PageShell>
       <PageHeader
         title="Accounts"
-        description="The household this portfolio belongs to, the accounts imports have created, and what happens to your files."
+        description="Your household, portfolio accounts, and what happens to your files."
         action={
           <Button asChild>
             <Link href="/uploads">
@@ -104,9 +104,9 @@ export function SettingsClient() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-[0.82rem] font-semibold">Connected accounts</h2>
+        <h2 className="text-[0.82rem] font-semibold">Portfolio accounts</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Account records created from applied portfolio imports.
+          Accounts available to organize your imported holdings.
         </p>
 
         <div className="mt-3">
@@ -114,14 +114,14 @@ export function SettingsClient() {
             <AccountsSkeleton />
           ) : accounts.error ? (
             <ErrorState
-              title="Connected accounts could not be loaded"
+              title="Portfolio accounts could not be loaded"
               description="The account inventory is temporarily unavailable. Your saved accounts have not changed."
               onRetry={() => void accounts.refetch()}
             />
           ) : accounts.data.length === 0 ? (
             <EmptyState
               icon={Database}
-              title="No connected accounts yet"
+              title="No portfolio accounts yet"
               description="Accounts appear here after you review and apply a supported portfolio import."
               action={
                 <Button asChild size="sm">
