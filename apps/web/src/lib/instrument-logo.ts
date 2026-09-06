@@ -11,6 +11,7 @@ export type InstrumentLogoInput = {
 export function instrumentLogoUrls(
   instrument: InstrumentLogoInput,
   publishableKey: string | undefined,
+  theme: "light" | "dark" | "auto" = "auto",
 ) {
   if (!publishableKey?.startsWith("pk_")) return [];
 
@@ -48,6 +49,7 @@ export function instrumentLogoUrls(
     token: publishableKey,
     size: "128",
     format: "png",
+    theme,
     fallback: "404",
   });
   return identifiers.map(
