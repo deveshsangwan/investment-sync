@@ -3,7 +3,7 @@
 import { useAmountFormatters } from "@/components/amounts";
 
 import Link from "next/link";
-import { DisplayAmount, useAmountsVisibility } from "@/components/amounts";
+import { DisplayAmount, Money } from "@/components/amounts";
 import {
   AssetIcon,
   InstrumentIdentity,
@@ -15,7 +15,6 @@ import {
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  CalendarDays,
   CheckCircle2,
   CircleAlert,
   Database,
@@ -36,10 +35,14 @@ import {
   PortfolioContentSkeleton,
   QualityBadge,
   SectionCard,
+  StatRail,
+  RailStat,
+  toneOf,
 } from "@/components/portfolio-ui";
 import { Button } from "@/components/ui/button";
 import {
   formatDate,
+  formatSignedPercent,
   formatPercent,
   labelize,
   qualityLabel,
@@ -55,7 +58,6 @@ export function DashboardClient({
 }) {
   const { formatInr } = useAmountFormatters();
 
-  const { isHidden: amountsHidden } = useAmountsVisibility();
   const overview = trpc.portfolio.overview.useQuery(undefined, {
     enabled: isDataConfigured,
   });
@@ -130,62 +132,47 @@ export function DashboardClient({
       <DashboardHeader />
 
       <div className="space-y-8">
-        <section aria-label="Portfolio summary">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-              <CalendarDays className="size-3.5" aria-hidden="true" />
-              Holdings dated{" "}
+        <section
+          aria-label="Portfolio summary"
+          className="flex flex-col gap-8 border-b pb-8 xl:flex-row xl:items-end xl:justify-between"
+        >
+          <div className="min-w-0">
+            <DisplayAmount
+              value={summary.currentValue}
+              className="text-4xl font-semibold tracking-tight sm:text-5xl"
+            />
+            <p className="mt-3 text-sm text-muted-foreground">
+              Total value · holdings dated{" "}
               {latestSnapshotDate
                 ? formatDate(latestSnapshotDate)
                 : "date unavailable"}
             </p>
           </div>
-          <dl className="mono-summary">
-            <div>
-              <dt>Total portfolio value</dt>
-              <dd className="number">
-                <DisplayAmount value={summary.currentValue} />
-              </dd>
-            </div>
-            <div>
-              <dt>Invested capital</dt>
-              <dd className="number">
-                {amountsHidden ? "••••••" : formatInr(summary.investedAmount)}
-              </dd>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Across {holdings.length} holdings
-              </p>
-            </div>
-            <div>
-              <dt>Total gain / loss</dt>
-              <dd
-                className={cn(
-                  "number",
-                  summary.pnlAmount > 0 && "positive",
-                  summary.pnlAmount < 0 && "negative",
-                )}
-              >
-                {amountsHidden
-                  ? "••••••"
-                  : `${summary.pnlAmount > 0 ? "+" : ""}${formatInr(summary.pnlAmount)}`}
-              </dd>
-              <p
-                className={cn(
-                  "number mt-2 text-xs",
-                  summary.pnlAmount >= 0 ? "positive" : "negative",
-                )}
-              >
-                {amountsHidden
-                  ? "••••"
-                  : formatPercent(performance.absoluteReturnPercent)}{" "}
-                absolute return
-              </p>
-            </div>
-          </dl>
+          <StatRail>
+            <RailStat
+              label="Invested"
+              value={<Money value={summary.investedAmount} />}
+            />
+            <RailStat
+              label="Gain or loss"
+              value={<Money value={summary.pnlAmount} signed />}
+              tone={toneOf(summary.pnlAmount)}
+            />
+            <RailStat
+              label="Return"
+              value={formatSignedPercent(performance.absoluteReturnPercent)}
+              tone={toneOf(performance.absoluteReturnPercent)}
+            />
+            <RailStat
+              label="XIRR"
+              value={formatPercent(performance.xirr)}
+              detail={qualityLabel(performance.dataQuality)}
+            />
+          </StatRail>
         </section>
 
-        <section className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="min-w-0">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0 rounded-2xl border bg-card p-5">
             <div className="mb-6 flex items-center justify-between gap-3">
               <h2 className="mono-section-title">Value history</h2>
               <span className="rounded-md border px-2.5 py-1 text-xs text-muted-foreground">
@@ -202,10 +189,11 @@ export function DashboardClient({
               <PortfolioTimelineChart data={timeline} />
             )}
             <p className="mt-3 text-xs text-muted-foreground">
-              Value changes include deposits and withdrawals.
+              Value changes include deposits and withdrawals. Line color
+              compares the latest value with invested capital.
             </p>
           </div>
-          <div className="border-t pt-6 xl:border-l xl:border-t-0 xl:pl-7 xl:pt-0">
+          <div className="min-w-0 rounded-2xl border bg-card p-5">
             <h2 className="mono-section-title mb-6">Asset allocation</h2>
             <AllocationDonutChart data={summary.allocationByAssetClass} />
           </div>
@@ -472,7 +460,6 @@ function DashboardHeader() {
   return (
     <PageHeader
       title="Portfolio"
-      description="All your investments, together."
       action={
         <Button asChild>
           <Link href="/uploads">

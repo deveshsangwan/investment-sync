@@ -1,32 +1,27 @@
 "use client";
 
-import { DisplayAmount, useAmountFormatters } from "@/components/amounts";
-
-import { InstrumentIdentity } from "@/components/instrument-identity";
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
-import {
-  ArrowDownRight,
-  ArrowLeft,
-  ArrowUpRight,
-  BarChart3,
-  PieChart,
-} from "lucide-react";
+import { ArrowLeft, LineChart, Rows3 } from "lucide-react";
+import { DisplayAmount, HideAmountsButton, Money } from "@/components/amounts";
+import { SetupRequired } from "@/components/dashboard-states";
+import { InstrumentMark } from "@/components/instrument-mark";
+import { PortfolioTimelineChart } from "@/components/portfolio-charts";
 import {
   EmptyState,
   ErrorState,
-  MetricCard,
-  PageHeader,
+  Outcome,
   PageShell,
+  Panel,
   PortfolioContentSkeleton,
-  SectionCard,
+  RailStat,
+  ReturnValue,
+  StatRail,
+  WeightBar,
+  toneOf,
 } from "@/components/portfolio-ui";
-import { PortfolioTimelineChart } from "@/components/portfolio-charts";
-import { SetupRequired } from "@/components/dashboard-states";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -35,14 +30,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { assetClassMeta } from "@/lib/asset-class-meta";
+import type { AssetClass } from "@/lib/asset-classes";
 import {
-  formatAsOfDate,
+  formatDate,
   formatPercent,
-  labelize,
+  formatSignedPercent,
   numberOrUndefined,
   qualityLabel,
 } from "@/lib/format";
-import type { AssetClass } from "@/lib/asset-classes";
 import { trpc } from "../../../providers";
 
 type AssetClassDetail =
@@ -62,27 +58,27 @@ export function AssetClassClient({
     { assetClass },
     { enabled: isDataConfigured },
   );
+  const meta = assetClassMeta(assetClass);
+  const Icon = meta.icon;
 
   return (
     <PageShell>
-      <PageHeader
-        eyebrow="Asset class"
-        title={labelize(assetClass)}
-        description="Exposure, concentration, performance, and position history."
-        before={
-          <Button variant="ghost" size="sm" asChild className="mb-3 -ml-3">
-            <Link href="/dashboard">
-              <ArrowLeft className="size-4" aria-hidden="true" />
-              Overview
-            </Link>
-          </Button>
-        }
-        action={
-          <Button asChild variant="secondary">
-            <Link href="/holdings">Browse holdings</Link>
-          </Button>
-        }
-      />
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <Button variant="ghost" size="sm" asChild className="-ml-2.5">
+          <Link href="/dashboard">
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Overview
+          </Link>
+        </Button>
+        <HideAmountsButton />
+      </div>
+
+      <header className="mb-8 flex items-center gap-3">
+        <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
+        <h1 className="text-2xl font-semibold tracking-[-0.02em]">
+          {meta.label}
+        </h1>
+      </header>
 
       {!isDataConfigured ? <SetupRequired /> : null}
 
@@ -92,7 +88,7 @@ export function AssetClassClient({
 
       {isDataConfigured && detail.isError ? (
         <ErrorState
-          title="This asset class couldn't be loaded"
+          title="This asset class could not be loaded"
           description="The saved positions are unchanged. Try loading this allocation again."
           onRetry={() => void detail.refetch()}
         />
@@ -104,135 +100,120 @@ export function AssetClassClient({
 }
 
 function AssetClassContent({ data }: { data: AssetClassDetail }) {
-  const { formatInr, formatCurrency } = useAmountFormatters();
-
   const { summary } = data;
-  const pnlTone = summary.pnlAmount >= 0 ? "positive" : "negative";
-  const PnlIcon = pnlTone === "positive" ? ArrowUpRight : ArrowDownRight;
+  const meta = assetClassMeta(data.assetClass);
   const asOfDate = data.holdings[0]?.snapshotDate;
-  const largestHolding = data.holdings[0];
 
   return (
     <>
-      <Card className="overflow-hidden rounded-none border-0 border-b bg-transparent">
-        <CardContent className="mono-detail-summary grid grid-cols-3 gap-3 px-0 py-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                Current value
-              </p>
-              {asOfDate ? (
-                <Badge variant="secondary">{formatAsOfDate(asOfDate)}</Badge>
-              ) : null}
-            </div>
-            <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-[40px]">
-              <DisplayAmount value={summary.currentValue} />
-            </p>
-          </div>
-          <HeroStat
-            label="Invested"
-            value={formatInr(summary.investedAmount)}
+      <section className="flex flex-col gap-8 border-b border-border/70 pb-8 xl:flex-row xl:items-end xl:justify-between xl:gap-8">
+        <div>
+          <DisplayAmount
+            value={summary.currentValue}
+            className="block text-[2.5rem] font-semibold leading-none tracking-[-0.03em]"
           />
-          <HeroStat
-            label="Gain / loss"
-            value={formatInr(summary.pnlAmount)}
-            tone={pnlTone}
-            icon={PnlIcon}
-          />
-          <HeroStat
-            label="Return"
-            value={formatPercent(summary.pnlPercent)}
-            tone={pnlTone}
-          />
-        </CardContent>
-      </Card>
+          <p className="mt-3 text-sm text-muted-foreground">
+            {summary.holdingCount} {meta.unit}
+            {asOfDate ? ` · dated ${formatDate(asOfDate)}` : ""}
+          </p>
+        </div>
 
-      <section className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <MetricCard
-          label="Portfolio weight"
-          value={formatPercent(summary.portfolioWeight)}
-        />
-        <MetricCard
-          label="Current holdings"
-          value={`${summary.holdingCount}`}
-        />
-        <MetricCard
-          label="Largest position"
-          value={formatPercent(largestHolding?.weightInAssetClass)}
-          detail={
-            largestHolding?.symbol ??
-            largestHolding?.instrumentName ??
-            "No position"
-          }
-        />
-        <MetricCard
-          label="XIRR"
-          value={formatPercent(summary.xirr)}
-          detail={qualityLabel(summary.xirrDataQuality)}
-        />
+        <StatRail>
+          <RailStat
+            label="Invested"
+            value={<Money value={summary.investedAmount} />}
+          />
+          <RailStat
+            label="Gain or loss"
+            value={<Money value={summary.pnlAmount} signed />}
+            tone={toneOf(summary.pnlAmount)}
+          />
+          <RailStat
+            label="Return"
+            value={formatSignedPercent(summary.pnlPercent)}
+            tone={toneOf(summary.pnlPercent)}
+          />
+          <RailStat
+            label="Share of portfolio"
+            value={formatPercent(summary.portfolioWeight)}
+          />
+          <RailStat
+            label="XIRR"
+            value={formatPercent(summary.xirr)}
+            detail={qualityLabel(summary.xirrDataQuality)}
+          />
+        </StatRail>
       </section>
 
-      <section className="mt-4 grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-        <SectionCard
+      <section className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Panel
           title="Value history"
-          description="Asset-class value and invested amount in INR across dated imports."
+          description="Value and invested amount in INR across dated imports."
         >
           {data.timeline.length < 2 ? (
             <EmptyState
-              icon={BarChart3}
-              title="No history yet"
-              description="Another dated import will create a useful trend for this allocation."
+              icon={LineChart}
+              title="History needs a second dated import"
+              description="Import another statement from a different date to see how this allocation moved."
             />
           ) : (
             <PortfolioTimelineChart data={data.timeline} />
           )}
-        </SectionCard>
-        <SectionCard
+        </Panel>
+
+        <Panel
           title="Concentration"
-          description="The largest positions inside this allocation."
+          description="Largest positions inside this allocation."
         >
           {data.holdings.length === 0 ? (
             <EmptyState
-              icon={PieChart}
-              title="No current holdings"
+              icon={Rows3}
+              title="No current positions"
               description="No positions from this asset class appear in the latest snapshot."
             />
           ) : (
-            <div className="space-y-2">
+            <ul className="space-y-3">
               {data.holdings.slice(0, 5).map((holding) => (
-                <Link
-                  key={holding.id}
-                  href={`/dashboard/holdings/${holding.id}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-transparent bg-muted/30 p-3.5 transition-colors hover:border-border hover:bg-muted/55"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">
-                      <InstrumentIdentity
-                        name={holding.instrumentName}
-                        symbol={holding.symbol}
-                        assetClass={holding.assetClass}
-                      />
-                    </p>
-                    <p className="number mt-1 truncate text-xs text-muted-foreground">
-                      {formatCurrency(
-                        Number(holding.currentValue),
-                        holding.currency,
-                      )}
-                    </p>
-                  </div>
-                  <p className="number text-sm font-semibold">
-                    {formatPercent(holding.weightInAssetClass)}
-                  </p>
-                </Link>
+                <li key={holding.id}>
+                  <Link
+                    href={`/dashboard/holdings/${holding.id}`}
+                    className="-mx-2 block rounded-lg px-2 py-1.5 transition-colors duration-150 hover:bg-secondary/70 motion-reduce:transition-none"
+                  >
+                    <span className="flex items-center justify-between gap-4">
+                      <span className="flex min-w-0 items-center gap-3">
+                        <InstrumentMark
+                          symbol={holding.symbol}
+                          name={holding.instrumentName}
+                          assetClass={holding.assetClass}
+                        />
+                        <span className="truncate text-sm">
+                          {holding.symbol ?? holding.instrumentName}
+                        </span>
+                      </span>
+                      <span className="number shrink-0 text-sm font-medium">
+                        {formatPercent(holding.weightInAssetClass)}
+                      </span>
+                    </span>
+                    <WeightBar
+                      value={holding.weightInAssetClass}
+                      className="mt-2"
+                    />
+                  </Link>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </SectionCard>
+        </Panel>
       </section>
 
-      <HoldingsTable title="Current holdings" holdings={data.holdings} />
-      <HoldingsTable
-        title="Exited holdings"
+      <PositionsSection
+        title="Current positions"
+        description="Latest positions ordered by value."
+        holdings={data.holdings}
+      />
+      <PositionsSection
+        title="Exited positions"
+        description="Present in earlier imports but absent from the latest snapshot."
         holdings={data.exitedHoldings}
         exited
       />
@@ -240,53 +221,55 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
   );
 }
 
-function HoldingsTable({
+function PositionsSection({
   title,
+  description,
   holdings,
   exited = false,
 }: {
   title: string;
+  description: string;
   holdings: AssetPosition[];
   exited?: boolean;
 }) {
   return (
-    <SectionCard
-      title={title}
-      description={
-        exited
-          ? "Positions present historically but absent from the latest source snapshot."
-          : "Latest positions ordered by value."
-      }
-      className="mt-4"
-    >
+    <section className="mt-8">
+      <h2 className="text-[0.82rem] font-semibold">{title}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+
       {holdings.length === 0 ? (
         <EmptyState
-          icon={BarChart3}
-          title={exited ? "No exited holdings" : "No current holdings"}
+          className="mt-3"
+          icon={Rows3}
+          title={exited ? "No exited positions" : "No current positions"}
           description={
             exited
-              ? "No historical positions have left this allocation."
+              ? "Nothing has left this allocation between imports."
               : "No positions were found for this asset class."
           }
         />
       ) : (
         <>
-          <div className="hidden md:block">
+          <div className="mt-3 hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Holding</TableHead>
                   <TableHead>{exited ? "Last seen" : "Account"}</TableHead>
-                  <TableHead>Value</TableHead>
-                  <TableHead>P&amp;L</TableHead>
-                  <TableHead>Return</TableHead>
-                  {!exited ? <TableHead>Weight</TableHead> : null}
-                  {!exited ? <TableHead>XIRR</TableHead> : null}
+                  <TableHead className="text-right">Value</TableHead>
+                  <TableHead className="text-right">Gain or loss</TableHead>
+                  <TableHead className="text-right">Return</TableHead>
+                  {exited ? null : (
+                    <TableHead className="text-right">Weight</TableHead>
+                  )}
+                  {exited ? null : (
+                    <TableHead className="text-right">XIRR</TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {holdings.map((holding) => (
-                  <AssetPositionRow
+                  <PositionRow
                     key={holding.id}
                     holding={holding}
                     exited={exited}
@@ -295,149 +278,137 @@ function HoldingsTable({
               </TableBody>
             </Table>
           </div>
-          <div className="divide-y md:hidden">
+          <ul className="mt-3 md:hidden">
             {holdings.map((holding) => (
-              <AssetPositionCard
-                key={holding.id}
-                holding={holding}
-                exited={exited}
-              />
+              <li key={holding.id} className="border-b border-hairline">
+                <PositionCard holding={holding} exited={exited} />
+              </li>
             ))}
-          </div>
+          </ul>
         </>
       )}
-    </SectionCard>
+    </section>
   );
 }
 
-function AssetPositionRow({
+function PositionRow({
   holding,
   exited,
 }: {
   holding: AssetPosition;
   exited: boolean;
 }) {
-  const { formatCurrency } = useAmountFormatters();
-
-  const pnlInInr = Number(holding.pnlAmountInInr ?? 0);
-  const tone = pnlInInr >= 0 ? "positive" : "negative";
   return (
     <TableRow>
       <TableCell>
         <Link
-          className="font-semibold hover:text-primary"
           href={`/dashboard/holdings/${holding.id}`}
+          className="flex items-center gap-3"
         >
-          <InstrumentIdentity
-            name={holding.instrumentName}
+          <InstrumentMark
             symbol={holding.symbol}
+            name={holding.instrumentName}
             assetClass={holding.assetClass}
           />
+          <span className="min-w-0">
+            <span className="block truncate font-medium">
+              {holding.symbol ?? holding.instrumentName}
+            </span>
+            {holding.symbol ? (
+              <span className="mt-0.5 block max-w-[24rem] truncate text-xs text-muted-foreground">
+                {holding.instrumentName}
+              </span>
+            ) : null}
+          </span>
         </Link>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {holding.accountName}
-        </p>
       </TableCell>
       <TableCell className="text-muted-foreground">
-        {exited ? formatAsOfDate(holding.snapshotDate) : holding.provider}
+        {exited ? (
+          <span className="number">{formatDate(holding.snapshotDate)}</span>
+        ) : (
+          holding.accountName
+        )}
       </TableCell>
-      <TableCell className="number font-medium">
-        {formatCurrency(Number(holding.currentValue), holding.currency)}
+      <TableCell className="text-right font-medium">
+        <Money
+          value={Number(holding.currentValue)}
+          currency={holding.currency}
+        />
       </TableCell>
-      <TableCell className={`number font-medium ${tone}`}>
-        {formatCurrency(Number(holding.pnlAmount ?? 0), holding.currency)}
+      <TableCell className="text-right">
+        <Outcome
+          amount={Number(holding.pnlAmount ?? 0)}
+          currency={holding.currency}
+        />
       </TableCell>
-      <TableCell className={`number font-medium ${tone}`}>
-        {formatPercent(numberOrUndefined(holding.pnlPercent))}
+      <TableCell className="text-right">
+        <ReturnValue value={numberOrUndefined(holding.pnlPercent)} />
       </TableCell>
-      {!exited ? (
-        <TableCell className="number">
+      {exited ? null : (
+        <TableCell className="number text-right text-muted-foreground">
           {formatPercent(
             "weightInAssetClass" in holding
               ? holding.weightInAssetClass
               : undefined,
           )}
         </TableCell>
-      ) : null}
-      {!exited ? (
-        <TableCell>
-          <p className="number">
+      )}
+      {exited ? null : (
+        <TableCell className="text-right">
+          <span className="number block">
             {formatPercent("xirr" in holding ? holding.xirr : undefined)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
             {qualityLabel(
               "xirrDataQuality" in holding
                 ? holding.xirrDataQuality
                 : undefined,
             )}
-          </p>
+          </span>
         </TableCell>
-      ) : null}
+      )}
     </TableRow>
   );
 }
 
-function AssetPositionCard({
+function PositionCard({
   holding,
   exited,
 }: {
   holding: AssetPosition;
   exited: boolean;
 }) {
-  const { formatCurrency } = useAmountFormatters();
-
-  const tone =
-    Number(holding.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   return (
     <Link
-      className="block py-4 transition-colors hover:bg-muted/30"
       href={`/dashboard/holdings/${holding.id}`}
+      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 py-3.5"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-semibold">
-            <InstrumentIdentity
-              name={holding.instrumentName}
-              symbol={holding.symbol}
-              assetClass={holding.assetClass}
-            />
-          </p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {holding.accountName} /{" "}
-            {exited ? formatAsOfDate(holding.snapshotDate) : holding.provider}
-          </p>
-        </div>
-        <p className="number shrink-0 font-semibold">
-          {formatCurrency(Number(holding.currentValue), holding.currency)}
-        </p>
-      </div>
-      <p className={`number mt-3 text-sm font-medium ${tone}`}>
-        {formatPercent(numberOrUndefined(holding.pnlPercent))} return
-      </p>
+      <InstrumentMark
+        symbol={holding.symbol}
+        name={holding.instrumentName}
+        assetClass={holding.assetClass}
+        className="row-span-3 mt-0.5"
+      />
+      <span className="truncate font-medium">
+        {holding.symbol ?? holding.instrumentName}
+      </span>
+      <Money
+        value={Number(holding.currentValue)}
+        currency={holding.currency}
+        className="text-right font-medium"
+      />
+      <span className="truncate text-xs text-muted-foreground">
+        {holding.accountName}
+      </span>
+      <Outcome
+        amount={Number(holding.pnlAmount ?? 0)}
+        currency={holding.currency}
+        className="text-xs"
+      />
+      <span className="number col-span-2 text-xs text-muted-foreground">
+        {exited ? "Last seen " : "Priced "}
+        {formatDate(holding.snapshotDate)}
+      </span>
     </Link>
-  );
-}
-
-function HeroStat({
-  label,
-  value,
-  tone,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  tone?: "positive" | "negative";
-  icon?: typeof ArrowUpRight;
-}) {
-  return (
-    <div className="border-t border-border/70 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p
-        className={`number mt-1.5 flex items-center gap-1 text-lg font-semibold ${tone ?? ""}`}
-      >
-        {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
-        {value}
-      </p>
-    </div>
   );
 }

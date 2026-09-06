@@ -6,6 +6,7 @@ import {
   compactInr,
   prepareAllocation,
   prepareTimeline,
+  timelineOutcomeColor,
 } from "./portfolio-charts";
 
 const timelineInput = [
@@ -135,4 +136,35 @@ describe("DOM-free chart scenes", () => {
     expect(svg).toContain('aria-label="Portfolio allocation"');
     expect(svg).not.toMatch(/NaN|Infinity/);
   });
+});
+
+describe("timeline outcome color", () => {
+  it("uses invested capital, even when portfolio value has risen", () => {
+    const rows = prepareTimeline([
+      { snapshotDate: "2026-01-01", currentValue: 100, investedAmount: 90 },
+      { snapshotDate: "2026-02-01", currentValue: 200, investedAmount: 220 },
+    ]);
+    expect(timelineOutcomeColor(rows)).toBe("hsl(var(--negative))");
+  });
+
+  it("uses the latest dated snapshot even when input is unordered", () => {
+    const rows = prepareTimeline([
+      { snapshotDate: "2026-02-01", currentValue: 200, investedAmount: 180 },
+      { snapshotDate: "2026-01-01", currentValue: 100, investedAmount: 110 },
+    ]);
+    expect(timelineOutcomeColor(rows)).toBe("hsl(var(--positive))");
+  });
+
+  it.each([undefined, 200])(
+    "stays neutral for missing capital or equal values",
+    (investedAmount) => {
+      expect(
+        timelineOutcomeColor(
+          prepareTimeline([
+            { snapshotDate: "2026-02-01", currentValue: 200, investedAmount },
+          ]),
+        ),
+      ).toBe("hsl(var(--chart-1))");
+    },
+  );
 });

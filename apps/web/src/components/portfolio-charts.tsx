@@ -46,7 +46,6 @@ export type AllocationRow = {
   origin: AllocationPoint;
 };
 
-const currentColor = "hsl(var(--chart-1))";
 const investedColor = "hsl(var(--chart-6))";
 
 const allocationColors = [
@@ -78,6 +77,7 @@ export function PortfolioTimelineChart({
 }) {
   const { isHidden } = useAmountsVisibility();
   const rows = useMemo(() => prepareTimeline(data), [data]);
+  const currentColor = timelineOutcomeColor(rows);
   const hasInvested =
     showInvested && rows.some((row) => row.investedAmount !== undefined);
 
@@ -87,8 +87,9 @@ export function PortfolioTimelineChart({
         currentLabel,
         investedLabel,
         hasInvested,
+        currentColor,
       }),
-    [rows, hasInvested, currentLabel, investedLabel],
+    [rows, hasInvested, currentLabel, investedLabel, currentColor],
   );
 
   if (isHidden) {
@@ -213,7 +214,8 @@ export function prepareAllocation(data: AllocationPoint[]): AllocationRow[] {
         weight: numberValue(item.weight),
         // Keyed to the source index so filtering cannot shift palette colors.
         color:
-          allocationColors[index % allocationColors.length] ?? currentColor,
+          allocationColors[index % allocationColors.length] ??
+          "hsl(var(--chart-1))",
         origin: item,
       },
     ];
@@ -227,7 +229,13 @@ export function buildTimelineDefinition(
     currentLabel,
     investedLabel,
     hasInvested,
-  }: { currentLabel: string; investedLabel: string; hasInvested: boolean },
+    currentColor = "hsl(var(--chart-1))",
+  }: {
+    currentLabel: string;
+    investedLabel: string;
+    hasInvested: boolean;
+    currentColor?: string;
+  },
 ) {
   // Empty invested rows render no second series; populated rows keep null gaps.
   const investedRows = hasInvested ? rows : [];
@@ -281,7 +289,7 @@ export function buildTimelineDefinition(
         x2: 0,
         y2: 1,
         stops: [
-          { offset: 0.05, color: currentColor, opacity: 0.28 },
+          { offset: 0.05, color: currentColor, opacity: 0.18 },
           { offset: 0.95, color: currentColor, opacity: 0.02 },
         ],
       },
@@ -355,4 +363,25 @@ export function compactInr(value: number): string {
   if (Math.abs(value) >= 100000) return `Rs ${Math.round(value / 100000)}L`;
   if (Math.abs(value) >= 1000) return `Rs ${Math.round(value / 1000)}k`;
   return `Rs ${Math.round(value)}`;
+}
+
+export function timelineOutcomeColor(rows: TimelineRow[]) {
+  const latest = rows.reduce<TimelineRow | undefined>(
+    (result, row) =>
+      !result ||
+      new Date(row.origin.snapshotDate) > new Date(result.origin.snapshotDate)
+        ? row
+        : result,
+    undefined,
+  );
+
+  if (!latest || latest.investedAmount === undefined)
+    return "hsl(var(--chart-1))";
+
+  if (latest.currentValue > latest.investedAmount)
+    return "hsl(var(--positive))";
+  if (latest.currentValue < latest.investedAmount)
+    return "hsl(var(--negative))";
+
+  return "hsl(var(--chart-1))";
 }

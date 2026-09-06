@@ -15,3 +15,16 @@ Mono sidebar   Portfolio                    Hide amounts  Import
 ```
 
 This preserves the user's preferred visual direction. The hybrid does not replace either source proposal and has no independent rating. All changes are confined to this worktree. The comparison uses sample data, illustrative logos and substituted authentication.
+
+## September revision
+Groww-style horizontal navigation, aligned to the content. Public Sans remains the sole typeface. Black #000000, panel #141414, white #f5f5f5, muted gray #a3a3a3, Opus green #60be7f and red #e16a61. Financial outcome colors use the exact Opus HSL tokens.
+
+```
+Brand   Overview Holdings Imports Accounts        Theme Profile
+Portfolio                                          Hide Import
+Total value                  Invested Gain Return XIRR
+[ Value history, wide                 ] [ Allocation bars ]
+[ Asset cards, unchanged                                 ]
+[ Largest holdings, unchanged                            ]
+```
+Left aligned labels and right aligned numbers. Opus summary and detail composition, Hybrid asset cards and largest holdings. Chart color compares latest value with invested capital, never first-to-last value movement. No extra pie, because allocation bars already show the proportions. This follows the requested references rather than adding decorative dashboard widgets.

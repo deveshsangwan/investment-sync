@@ -1,5 +1,13 @@
-import { HideAmountsButton } from "@/components/amounts";
-import { AlertTriangle, RefreshCw, type LucideIcon } from "lucide-react";
+import { formatSignedPercent } from "@/lib/format";
+import { HideAmountsButton, Money } from "@/components/amounts";
+import {
+  AlertTriangle,
+  RefreshCw,
+  ArrowDownRight,
+  ArrowUpRight,
+  Minus,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -161,14 +169,21 @@ export function EmptyState({
   title,
   description,
   action,
+  className,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   action?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex min-h-32 flex-col items-start gap-4 rounded-lg border border-dashed bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+    <div
+      className={cn(
+        "flex min-h-32 flex-col items-start gap-4 rounded-lg border border-dashed bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5",
+        className,
+      )}
+    >
       <div className="flex items-start gap-3.5">
         <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-primary">
           <Icon className="size-5" aria-hidden="true" />
@@ -320,7 +335,10 @@ export function Panel({
 }) {
   return (
     <section
-      className={cn("min-w-0 rounded-2xl border border-border/70 bg-card", className)}
+      className={cn(
+        "min-w-0 rounded-2xl border border-border/70 bg-card",
+        className,
+      )}
     >
       {title ? (
         <div className="flex items-start justify-between gap-4 px-5 pt-5">
@@ -341,5 +359,167 @@ export function Panel({
         {children}
       </div>
     </section>
+  );
+}
+
+/** Hairline-separated facts beside a headline amount. */
+export function StatRail({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3 lg:flex lg:items-start lg:gap-0">
+      {children}
+    </div>
+  );
+}
+
+export function RailStat({
+  label,
+  value,
+  tone,
+  detail,
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone?: Tone;
+  detail?: string;
+}) {
+  return (
+    <div className="min-w-0 xl:min-w-[8rem] lg:border-l lg:border-border/70 lg:px-4 lg:first:border-l-0 lg:first:pl-0 lg:last:pr-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "number mt-1.5 whitespace-nowrap text-lg font-semibold tracking-[-0.015em]",
+          toneClass(tone),
+        )}
+      >
+        {value}
+      </p>
+      {detail ? (
+        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      ) : null}
+    </div>
+  );
+}
+
+export type Tone = "positive" | "negative" | "flat" | undefined;
+
+export function toneOf(value: number | null | undefined): Tone {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return undefined;
+  }
+  if (value > 0) return "positive";
+  if (value < 0) return "negative";
+  return "flat";
+}
+
+export function toneClass(tone: Tone) {
+  if (tone === "positive") return "positive";
+  if (tone === "negative") return "negative";
+  return undefined;
+}
+
+/**
+ * Signed money with a direction glyph. The glyph repeats what the sign says so
+ * the outcome survives without colour.
+ */
+export function Outcome({
+  amount,
+  currency,
+  percent,
+  className,
+}: {
+  amount: number | null | undefined;
+  currency?: string | null;
+  percent?: number | null;
+  className?: string;
+}) {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) {
+    return (
+      <span
+        className={cn(
+          "number inline-flex items-center gap-1 text-muted-foreground",
+          className,
+        )}
+      >
+        <Minus className="size-3.5" aria-hidden="true" />
+        N/A
+      </span>
+    );
+  }
+
+  const tone = toneOf(amount);
+  const Icon =
+    tone === "positive"
+      ? ArrowUpRight
+      : tone === "negative"
+        ? ArrowDownRight
+        : Minus;
+  const spoken =
+    tone === "positive" ? "Gain" : tone === "negative" ? "Loss" : "No change";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center justify-end gap-1.5 font-medium",
+        toneClass(tone) ?? "text-muted-foreground",
+        className,
+      )}
+    >
+      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="sr-only">{spoken} </span>
+      <Money value={amount} currency={currency} signed />
+      {percent === undefined ? null : (
+        <span className="number text-muted-foreground">
+          {formatSignedPercent(percent)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Percent on its own, signed and toned, for return columns. */
+export function ReturnValue({
+  value,
+  className,
+}: {
+  value: number | null | undefined;
+  className?: string;
+}) {
+  const usable =
+    value !== null && value !== undefined && Number.isFinite(value);
+  return (
+    <span
+      className={cn(
+        "number font-medium",
+        usable ? toneClass(toneOf(value)) : "text-muted-foreground",
+        className,
+      )}
+    >
+      {usable ? formatSignedPercent(value) : "N/A"}
+    </span>
+  );
+}
+
+/** A quiet horizontal proportion. Neutral by design: weight is not an outcome. */
+export function WeightBar({
+  value,
+  className,
+}: {
+  value: number;
+  className?: string;
+}) {
+  const width = Math.max(2, Math.min(100, value));
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "block h-1 w-full overflow-hidden rounded-full bg-secondary",
+        className,
+      )}
+    >
+      <span
+        className="block h-full rounded-full bg-foreground/45"
+        style={{ width: `${width}%` }}
+      />
+    </span>
   );
 }
