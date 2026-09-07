@@ -14,6 +14,7 @@ import {
   usesPictogram,
 } from "@/lib/instrument-identity";
 import { cn } from "@/lib/utils";
+import { loadedLogoBackground } from "@/lib/logo-background";
 
 /**
  * Fixed-size instrument identity. The box is reserved before the mark resolves
@@ -162,6 +163,7 @@ function LogoImage({
 }) {
   const [failed, setFailed] = useState<string[]>([]);
   const [loadedUrl, setLoadedUrl] = useState<string>();
+  const [background, setBackground] = useState("#ffffff");
   const url = urls.find(
     (candidate) => !failed.includes(candidate) && canRequestLogo(candidate),
   );
@@ -182,10 +184,17 @@ function LogoImage({
           height={128}
           loading="lazy"
           decoding="async"
+          crossOrigin="anonymous"
           referrerPolicy="no-referrer"
           className="absolute inset-0 size-full object-contain p-1"
-          style={{ opacity: loadedUrl === url ? 1 : 0 }}
-          onLoad={() => setLoadedUrl(url)}
+          style={{
+            opacity: loadedUrl === url ? 1 : 0,
+            backgroundColor: background,
+          }}
+          onLoad={(event) => {
+            setBackground(loadedLogoBackground(event.currentTarget));
+            setLoadedUrl(url);
+          }}
           onError={() => {
             recordLogoFailure(url);
             setFailed((previous) => [...previous, url]);
