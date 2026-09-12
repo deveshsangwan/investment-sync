@@ -3,29 +3,24 @@
 import type { AppRouter } from "@investment-sync/api";
 import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
-import {
-  ArrowDownRight,
-  ArrowLeft,
-  ArrowUpRight,
-  FileSpreadsheet,
-  ReceiptText,
-} from "lucide-react";
+import { ArrowLeft, LineChart, ReceiptText } from "lucide-react";
+import { DisplayAmount, HideAmountsButton, Money } from "@/components/amounts";
+import { MissingHolding, SetupRequired } from "@/components/dashboard-states";
+import { InstrumentMark } from "@/components/instrument-mark";
+import { NpsDetailsSections } from "@/components/nps-details-sections";
+import { PortfolioTimelineChart } from "@/components/portfolio-charts";
 import {
   EmptyState,
   ErrorState,
-  MetricCard,
-  PageHeader,
   PageShell,
+  Panel,
   PortfolioContentSkeleton,
-  QualityBadge,
-  SectionCard,
+  RailStat,
+  StatRail,
+  toneOf,
 } from "@/components/portfolio-ui";
-import { PortfolioTimelineChart } from "@/components/portfolio-charts";
-import { MissingHolding, SetupRequired } from "@/components/dashboard-states";
-import { NpsDetailsSections } from "@/components/nps-details-sections";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -34,12 +29,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { assetClassLabel } from "@/lib/asset-class-meta";
 import {
-  formatAsOfDate,
-  formatCurrency,
   formatDate,
   formatPercent,
   formatQuantity,
+  formatSignedPercent,
   labelize,
   numberOrUndefined,
   qualityLabel,
@@ -64,54 +59,65 @@ export function HoldingDetailClient({
 
   return (
     <PageShell>
-      <PageHeader
-        eyebrow="Holding detail"
-        title={holding ? (holding.symbol ?? holding.instrumentName) : "Holding"}
-        description={
-          holding
-            ? `${holding.instrumentName} / ${holding.accountName} / ${holding.provider}`
-            : "Position history, return, and source quality."
-        }
-        before={
-          <Button variant="ghost" size="sm" asChild className="mb-3 -ml-3">
-            <Link href="/holdings">
-              <ArrowLeft className="size-4" aria-hidden="true" />
-              Holdings
-            </Link>
-          </Button>
-        }
-        meta={
-          holding ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">{labelize(holding.assetClass)}</Badge>
-              <span className="text-xs text-muted-foreground">
-                {formatAsOfDate(holding.snapshotDate)}
-              </span>
-            </div>
-          ) : null
-        }
-        action={
-          holding ? (
-            <Button variant="secondary" asChild>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <Button variant="ghost" size="sm" asChild className="-ml-2.5">
+          <Link href="/holdings">
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Holdings
+          </Link>
+        </Button>
+        <HideAmountsButton />
+      </div>
+
+      {holding ? (
+        <header className="mb-8 flex items-start gap-4">
+          <InstrumentMark
+            symbol={holding.symbol}
+            isin={holding.isin}
+            exchange={holding.exchange}
+            name={holding.instrumentName}
+            assetClass={holding.assetClass}
+            size="detail"
+          />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-[-0.02em]">
+              {holding.symbol ?? holding.instrumentName}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {holding.symbol ? `${holding.instrumentName} · ` : ""}
+              {holding.accountName}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <Link
                 href={`/dashboard/asset-class/${encodeURIComponent(holding.assetClass)}`}
+                className="rounded-md border border-border/80 px-2 py-0.5 text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
               >
-                View {labelize(holding.assetClass)}
+                {assetClassLabel(holding.assetClass)}
               </Link>
-            </Button>
-          ) : null
-        }
-      />
+              {holding.isCurrent === false ? (
+                <Badge variant="outline">Not in latest snapshot</Badge>
+              ) : null}
+              <span className="number text-xs text-muted-foreground">
+                Priced {formatDate(holding.snapshotDate)}
+              </span>
+            </div>
+          </div>
+        </header>
+      ) : (
+        <h1 className="mb-8 text-2xl font-semibold tracking-[-0.02em]">
+          Holding
+        </h1>
+      )}
 
       {!isDataConfigured ? <SetupRequired /> : null}
 
       {isDataConfigured && detail.isLoading ? (
-        <PortfolioContentSkeleton />
+        <PortfolioContentSkeleton variant="holding" />
       ) : null}
 
       {isDataConfigured && detail.isError ? (
         <ErrorState
-          title="This holding couldn't be loaded"
+          title="This holding could not be loaded"
           description="The position remains saved. Try loading its latest analytics again."
           onRetry={() => void detail.refetch()}
         />
@@ -129,106 +135,68 @@ export function HoldingDetailClient({
 function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
   const { holding } = data;
   if (!holding) return null;
-  const pnlTone = (holding.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
-  const PnlIcon = pnlTone === "positive" ? ArrowUpRight : ArrowDownRight;
-  const emptyTransactions =
-    data.npsDetails && holding.xirrDataQuality === "source_provided"
-      ? {
-          title: "No normalized transactions",
-          description:
-            "Statement activity is partial and is not used as complete cash-flow history. The portal-provided XIRR remains the return source.",
-        }
-      : data.npsDetails
-        ? {
-            title: "No normalized transactions",
-            description:
-              "Statement activity is partial and is not used as complete cash-flow history.",
-          }
-        : {
-            title: "No transactions yet",
-            description:
-              "Transaction imports will unlock exact cash-flow XIRR and realized gains.",
-          };
+
+  const pnlAmount = Number(holding.pnlAmount ?? 0);
+  const emptyTransactions = transactionEmptyState(
+    Boolean(data.npsDetails),
+    holding.xirrDataQuality,
+  );
 
   return (
     <>
-      <Card className="overflow-hidden border-primary/25 bg-accent/35">
-        <CardContent className="grid gap-6 p-5 lg:grid-cols-[1.35fr_repeat(3,minmax(0,0.65fr))] lg:items-end">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              Current value
-            </p>
-            <p className="number mt-2 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">
-              {formatCurrency(
-                Number(holding.currentValue ?? 0),
-                holding.currency,
-              )}
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Shown in {holding.currency}. History is normalized to INR.
-            </p>
-          </div>
-          <HeroStat
-            label="Invested"
-            value={formatCurrency(
-              Number(holding.investedAmount ?? 0),
-              holding.currency,
-            )}
+      <section className="flex flex-col gap-8 border-b border-border/70 pb-8 xl:flex-row xl:items-end xl:justify-between xl:gap-8">
+        <div>
+          <DisplayAmount
+            value={Number(holding.currentValue ?? 0)}
+            currency={holding.currency}
+            className="block text-[2.5rem] font-semibold leading-none tracking-[-0.03em]"
           />
-          <HeroStat
-            label="Gain / loss"
-            value={formatCurrency(
-              Number(holding.pnlAmount ?? 0),
-              holding.currency,
-            )}
-            tone={pnlTone}
-            icon={PnlIcon}
-          />
-          <HeroStat
-            label="Return"
-            value={formatPercent(numberOrUndefined(holding.pnlPercent))}
-            tone={pnlTone}
-          />
-        </CardContent>
-      </Card>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Current value in {holding.currency}
+            {holding.currency === "USD" ? ", converted to INR elsewhere" : ""}
+          </p>
+        </div>
 
-      <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="XIRR"
-          value={formatPercent(holding.xirr)}
-          detail={qualityLabel(holding.xirrDataQuality)}
-        />
-        <MetricCard
-          label="Portfolio weight"
-          value={
-            holding.isCurrent === false
-              ? "Exited"
-              : formatPercent(holding.portfolioWeight)
-          }
-          detail={
-            holding.isCurrent === false
-              ? "Not in the latest snapshot"
-              : undefined
-          }
-        />
-        <MetricCard
-          label="P&L contribution"
-          value={formatPercent(holding.pnlContribution)}
-          tone={pnlTone}
-        />
-        <MetricCard label="Snapshots" value={`${data.history.length}`} />
+        <StatRail>
+          <RailStat
+            label="Invested"
+            value={
+              <Money
+                value={Number(holding.investedAmount ?? 0)}
+                currency={holding.currency}
+              />
+            }
+          />
+          <RailStat
+            label="Gain or loss"
+            value={
+              <Money value={pnlAmount} currency={holding.currency} signed />
+            }
+            tone={toneOf(pnlAmount)}
+          />
+          <RailStat
+            label="Return"
+            value={formatSignedPercent(numberOrUndefined(holding.pnlPercent))}
+            tone={toneOf(numberOrUndefined(holding.pnlPercent))}
+          />
+          <RailStat
+            label="XIRR"
+            value={formatPercent(holding.xirr)}
+            detail={qualityLabel(holding.xirrDataQuality)}
+          />
+        </StatRail>
       </section>
 
-      <section className="mt-4 grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-        <SectionCard
+      <section className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Panel
           title="Value history"
           description="Current value and invested amount in INR across dated imports."
         >
           {data.history.length < 2 ? (
             <EmptyState
-              icon={FileSpreadsheet}
-              title="No history yet"
-              description="Another dated import will create a useful trend for this position."
+              icon={LineChart}
+              title="Only one dated snapshot so far"
+              description="This position needs a second import from a different date before a trend means anything."
             />
           ) : (
             <PortfolioTimelineChart
@@ -239,35 +207,30 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
               }))}
             />
           )}
-        </SectionCard>
+        </Panel>
 
-        <SectionCard
-          title="Holding facts"
-          description="Source identifiers and the latest recorded position."
-        >
-          <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            {[
-              ["Quantity", formatQuantity(holding.quantity)],
-              ["Last updated", formatDate(holding.snapshotDate)],
-              ["Currency", holding.currency ?? "N/A"],
-              ["ISIN", holding.isin ?? "N/A"],
-              ["Exchange", holding.exchange ?? "N/A"],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-lg border border-border/60 bg-muted/30 p-3.5"
-              >
-                <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className="mt-1 wrap-break-word text-sm font-semibold">
-                  {value}
-                </dd>
-              </div>
-            ))}
+        <Panel title="Position facts">
+          <dl className="divide-y divide-hairline text-sm">
+            <Fact label="Quantity" value={formatQuantity(holding.quantity)} />
+            <Fact
+              label="Share of portfolio"
+              value={
+                holding.isCurrent === false
+                  ? "Exited"
+                  : formatPercent(holding.portfolioWeight)
+              }
+            />
+            <Fact
+              label="Share of portfolio gain"
+              value={formatPercent(holding.pnlContribution)}
+            />
+            <Fact label="Account" value={holding.accountName} />
+            <Fact label="Provider" value={labelize(holding.provider)} />
+            <Fact label="ISIN" value={holding.isin ?? "N/A"} />
+            <Fact label="Exchange" value={holding.exchange ?? "N/A"} />
+            <Fact label="Dated snapshots" value={`${data.history.length}`} />
           </dl>
-          <div className="mt-4">
-            <QualityBadge value={qualityLabel(holding.xirrDataQuality)} />
-          </div>
-        </SectionCard>
+        </Panel>
       </section>
 
       {data.npsDetails ? (
@@ -278,106 +241,125 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
         />
       ) : null}
 
-      <SectionCard
-        title="Transactions"
-        description="Imported cash flows used for return calculations."
-        className="mt-4"
-      >
+      <section className="mt-10">
+        <h2 className="text-[0.82rem] font-semibold">Transactions</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Imported cash flows used for return calculations.
+        </p>
+
         {data.transactions.length === 0 ? (
           <EmptyState
+            className="mt-3"
             icon={ReceiptText}
             title={emptyTransactions.title}
             description={emptyTransactions.description}
           />
         ) : (
           <>
-            <div className="hidden md:block">
+            <div className="mt-3 hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Amount</TableHead>
+                    <TableHead className="text-right">Quantity</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.transactions.map((transaction) => (
                     <TableRow key={transaction.id}>
-                      <TableCell>{formatDate(transaction.tradeDate)}</TableCell>
-                      <TableCell>{labelize(transaction.type)}</TableCell>
                       <TableCell className="number">
+                        {formatDate(transaction.tradeDate)}
+                      </TableCell>
+                      <TableCell>{labelize(transaction.type)}</TableCell>
+                      <TableCell className="number text-right">
                         {formatQuantity(transaction.quantity)}
                       </TableCell>
-                      <TableCell className="number">
-                        {transaction.price
-                          ? formatCurrency(
-                              Number(transaction.price),
-                              transaction.currency,
-                            )
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell className="number font-semibold">
-                        {formatCurrency(
-                          Number(transaction.amount),
-                          transaction.currency,
+                      <TableCell className="text-right">
+                        {transaction.price != null ? (
+                          <Money
+                            value={Number(transaction.price)}
+                            currency={transaction.currency}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">N/A</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        <Money
+                          value={Number(transaction.amount)}
+                          currency={transaction.currency}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
-            <div className="divide-y md:hidden">
+            <ul className="mt-3 divide-y divide-hairline border-t border-hairline md:hidden">
               {data.transactions.map((transaction) => (
-                <div
+                <li
                   key={transaction.id}
-                  className="flex items-center justify-between gap-4 py-3"
+                  className="flex items-start justify-between gap-4 py-3"
                 >
                   <div>
-                    <p className="font-medium">{labelize(transaction.type)}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDate(transaction.tradeDate)} /{" "}
+                    <p className="text-sm font-medium">
+                      {labelize(transaction.type)}
+                    </p>
+                    <p className="number mt-1 text-xs text-muted-foreground">
+                      {formatDate(transaction.tradeDate)} ·{" "}
                       {formatQuantity(transaction.quantity)} units
                     </p>
                   </div>
-                  <p className="number font-semibold">
-                    {formatCurrency(
-                      Number(transaction.amount),
-                      transaction.currency,
-                    )}
-                  </p>
-                </div>
+                  <Money
+                    value={Number(transaction.amount)}
+                    currency={transaction.currency}
+                    className="shrink-0 text-sm font-medium"
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           </>
         )}
-      </SectionCard>
+      </section>
+
+      <p className="mt-6 text-xs text-muted-foreground">
+        Figures come from imported statements. Investment Sync does not fetch
+        live prices.
+      </p>
     </>
   );
 }
 
-function HeroStat({
-  label,
-  value,
-  tone,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  tone?: "positive" | "negative";
-  icon?: typeof ArrowUpRight;
-}) {
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-t border-border/70 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p
-        className={`number mt-1.5 flex items-center gap-1 text-lg font-semibold ${tone ?? ""}`}
-      >
-        {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
-        {value}
-      </p>
+    <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="number wrap-break-word text-right font-medium">{value}</dd>
     </div>
   );
+}
+
+function transactionEmptyState(hasNpsDetails: boolean, dataQuality?: string) {
+  if (hasNpsDetails && dataQuality === "source_provided") {
+    return {
+      title: "No normalized transactions",
+      description:
+        "Statement activity is partial, so it is not used as complete cash-flow history. The portal-provided XIRR remains the return source.",
+    };
+  }
+  if (hasNpsDetails) {
+    return {
+      title: "No normalized transactions",
+      description:
+        "Statement activity is partial and is not used as complete cash-flow history.",
+    };
+  }
+  return {
+    title: "No transactions yet",
+    description:
+      "Importing transactions unlocks an exact cash-flow XIRR and realized gains for this position.",
+  };
 }

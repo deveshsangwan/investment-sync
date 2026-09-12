@@ -10,9 +10,9 @@ export const metadata: Metadata = {
 export default function SignUpPage() {
   return (
     <AuthPageShell
-      eyebrow="Create your household view"
-      title="Bring every account into context."
-      description="Start with a supported export, review detected records, and keep Indian and US investments in one portfolio."
+      eyebrow="Investment Sync"
+      title="Create your portfolio."
+      description="Bring your Indian and US investments together. Start with a statement you already have."
       securityDescription="Clerk manages account creation and session security."
     >
       <SignUp

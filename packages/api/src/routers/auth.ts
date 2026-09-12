@@ -14,7 +14,7 @@ export const authRouter = router({
         householdName: households.name,
       })
       .from(users)
-      .innerJoin(households, eq(households.ownerUserId, users.id))
+      .innerJoin(households, eq(households.id, ctx.membership.householdId))
       .where(eq(users.id, ctx.membership.appUserId))
       .limit(1);
 

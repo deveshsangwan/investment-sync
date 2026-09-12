@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { useAmountsVisibility } from "./amounts";
 import { areaY, defineChart, lineY } from "@tanstack/charts";
 import { decorative } from "@tanstack/charts/mark/decorative";
 import { pie, polar, radialArc } from "@tanstack/charts/polar";
@@ -45,7 +46,6 @@ export type AllocationRow = {
   origin: AllocationPoint;
 };
 
-const currentColor = "hsl(var(--chart-1))";
 const investedColor = "hsl(var(--chart-6))";
 
 const allocationColors = [
@@ -59,7 +59,6 @@ const allocationColors = [
 
 // 264px surface plus the 24px legend row is the original 288px footprint.
 const timelineChartHeight = 264;
-const allocationChartHeight = 208;
 // Recharts drew a 2 degree wedge gap; radians here.
 const allocationGapAngle = (2 * Math.PI) / 180;
 
@@ -76,7 +75,9 @@ export function PortfolioTimelineChart({
   investedLabel?: string;
   showInvested?: boolean;
 }) {
+  const { isHidden } = useAmountsVisibility();
   const rows = useMemo(() => prepareTimeline(data), [data]);
+  const currentColor = timelineOutcomeColor(rows);
   const hasInvested =
     showInvested && rows.some((row) => row.investedAmount !== undefined);
 
@@ -86,9 +87,23 @@ export function PortfolioTimelineChart({
         currentLabel,
         investedLabel,
         hasInvested,
+        currentColor,
       }),
-    [rows, hasInvested, currentLabel, investedLabel],
+    [rows, hasInvested, currentLabel, investedLabel, currentColor],
   );
+
+  if (isHidden) {
+    return (
+      <div
+        className={cn(
+          "grid h-72 place-items-center text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        Amounts hidden
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex w-full flex-col", className)}>
@@ -123,44 +138,48 @@ export function PortfolioTimelineChart({
 }
 
 export function AllocationDonutChart({ data }: { data: AllocationPoint[] }) {
+  const { isHidden } = useAmountsVisibility();
   const rows = useMemo(() => prepareAllocation(data), [data]);
 
-  const definition = useMemo(() => buildAllocationDefinition(rows), [rows]);
+  if (isHidden)
+    return (
+      <div className="grid h-64 place-items-center text-sm text-muted-foreground">
+        Amounts hidden
+      </div>
+    );
 
   return (
-    <div className="grid gap-4 md:grid-cols-[minmax(160px,220px)_1fr] md:items-center">
-      <Chart
-        definition={definition}
-        height={allocationChartHeight}
-        className="w-full"
-        ariaLabel="Portfolio allocation by asset class"
-      />
-      <div className="space-y-3">
-        {rows.map((item) => (
+    <div className="space-y-5">
+      {[...rows]
+        .sort((left, right) => right.currentValue - left.currentValue)
+        .map((item) => (
           <Link
             key={item.assetClass}
             href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
-            className="group -mx-2 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group block rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <span
-              className="size-2.5 rounded-full"
-              style={{ backgroundColor: item.color }}
-              aria-hidden="true"
-            />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold group-hover:text-primary">
-                {item.label}
-              </p>
-              <p className="number text-xs text-muted-foreground">
-                {formatInr(item.currentValue)}
-              </p>
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span>{item.label}</span>
+              <span className="number text-muted-foreground">
+                {formatPercent(item.weight)}
+              </span>
             </div>
-            <p className="number text-sm font-semibold">
-              {formatPercent(item.weight)}
+            <div
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+              aria-hidden="true"
+            >
+              <div
+                className="h-full rounded-full bg-foreground/70 group-hover:bg-foreground transition-colors"
+                style={{
+                  width: `${Math.max(0, Math.min(100, item.weight ?? 0))}%`,
+                }}
+              />
+            </div>
+            <p className="number mt-2 text-xs text-muted-foreground">
+              {formatInr(item.currentValue)}
             </p>
           </Link>
         ))}
-      </div>
     </div>
   );
 }
@@ -195,7 +214,8 @@ export function prepareAllocation(data: AllocationPoint[]): AllocationRow[] {
         weight: numberValue(item.weight),
         // Keyed to the source index so filtering cannot shift palette colors.
         color:
-          allocationColors[index % allocationColors.length] ?? currentColor,
+          allocationColors[index % allocationColors.length] ??
+          "hsl(var(--chart-1))",
         origin: item,
       },
     ];
@@ -209,7 +229,13 @@ export function buildTimelineDefinition(
     currentLabel,
     investedLabel,
     hasInvested,
-  }: { currentLabel: string; investedLabel: string; hasInvested: boolean },
+    currentColor = "hsl(var(--chart-1))",
+  }: {
+    currentLabel: string;
+    investedLabel: string;
+    hasInvested: boolean;
+    currentColor?: string;
+  },
 ) {
   // Empty invested rows render no second series; populated rows keep null gaps.
   const investedRows = hasInvested ? rows : [];
@@ -263,7 +289,7 @@ export function buildTimelineDefinition(
         x2: 0,
         y2: 1,
         stops: [
-          { offset: 0.05, color: currentColor, opacity: 0.28 },
+          { offset: 0.05, color: currentColor, opacity: 0.18 },
           { offset: 0.95, color: currentColor, opacity: 0.02 },
         ],
       },
@@ -337,4 +363,25 @@ export function compactInr(value: number): string {
   if (Math.abs(value) >= 100000) return `Rs ${Math.round(value / 100000)}L`;
   if (Math.abs(value) >= 1000) return `Rs ${Math.round(value / 1000)}k`;
   return `Rs ${Math.round(value)}`;
+}
+
+export function timelineOutcomeColor(rows: TimelineRow[]) {
+  const latest = rows.reduce<TimelineRow | undefined>(
+    (result, row) =>
+      !result ||
+      new Date(row.origin.snapshotDate) > new Date(result.origin.snapshotDate)
+        ? row
+        : result,
+    undefined,
+  );
+
+  if (!latest || latest.investedAmount === undefined)
+    return "hsl(var(--chart-1))";
+
+  if (latest.currentValue > latest.investedAmount)
+    return "hsl(var(--positive))";
+  if (latest.currentValue < latest.investedAmount)
+    return "hsl(var(--negative))";
+
+  return "hsl(var(--chart-1))";
 }

@@ -1,3 +1,7 @@
+"use client";
+
+import { useAmountFormatters } from "@/components/amounts";
+
 import type { NpsDetails } from "@investment-sync/importers";
 import { FileSpreadsheet, ReceiptText } from "lucide-react";
 import { EmptyState, SectionCard } from "@/components/portfolio-ui";
@@ -10,7 +14,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  formatCurrency,
   formatDate,
   formatPercent,
   formatQuantity,
@@ -26,6 +29,8 @@ export function NpsDetailsSections({
   currency: string;
   totalValue: number;
 }) {
+  const { formatCurrency } = useAmountFormatters();
+
   return (
     <>
       <SectionCard
@@ -203,6 +208,8 @@ function NpsAmount({
   value: number;
   currency: string;
 }) {
+  const { formatCurrency } = useAmountFormatters();
+
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>

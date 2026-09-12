@@ -1,17 +1,24 @@
 "use client";
 
+import { useAmountFormatters } from "@/components/amounts";
+
 import Link from "next/link";
+import { DisplayAmount, Money } from "@/components/amounts";
+import {
+  AssetIcon,
+  InstrumentIdentity,
+} from "@/components/instrument-identity";
 import {
   Activity,
+  ChevronDown,
+  ChevronRight,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  CalendarDays,
   CheckCircle2,
   CircleAlert,
   Database,
   Minus,
-  PieChart,
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
@@ -28,11 +35,14 @@ import {
   PortfolioContentSkeleton,
   QualityBadge,
   SectionCard,
+  StatRail,
+  RailStat,
+  toneOf,
 } from "@/components/portfolio-ui";
 import { Button } from "@/components/ui/button";
 import {
   formatDate,
-  formatInr,
+  formatSignedPercent,
   formatPercent,
   labelize,
   qualityLabel,
@@ -46,6 +56,8 @@ export function DashboardClient({
 }: {
   isDataConfigured: boolean;
 }) {
+  const { formatInr } = useAmountFormatters();
+
   const overview = trpc.portfolio.overview.useQuery(undefined, {
     enabled: isDataConfigured,
   });
@@ -112,14 +124,6 @@ export function DashboardClient({
   const topHoldings = [...holdings]
     .sort((left, right) => right.currentValueInInr - left.currentValueInInr)
     .slice(0, 5);
-  const pnlDirection =
-    summary.pnlAmount > 0 ? "gain" : summary.pnlAmount < 0 ? "loss" : "flat";
-  const absoluteReturnTone =
-    performance.absoluteReturnPercent > 0
-      ? "positive"
-      : performance.absoluteReturnPercent < 0
-        ? "negative"
-        : undefined;
   const hasUsableXirr =
     performance.xirr !== undefined && Number.isFinite(performance.xirr);
 
@@ -127,101 +131,313 @@ export function DashboardClient({
     <PageShell>
       <DashboardHeader />
 
-      <div className="space-y-4">
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(19rem,0.65fr)]">
-          <SectionCard
-            title="Portfolio value"
-            description="Current value and invested capital across your household."
-            className="overflow-hidden"
-          >
-            <div className="flex flex-col gap-3 border-b border-border/70 pb-5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Current value</p>
-                <p className="number mt-1 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-                  {formatInr(summary.currentValue)}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "flex items-center gap-2 text-sm font-semibold",
-                  pnlDirection === "gain" && "positive",
-                  pnlDirection === "loss" && "negative",
-                  pnlDirection === "flat" && "text-muted-foreground",
-                )}
+      <div className="space-y-8">
+        <section
+          aria-label="Portfolio summary"
+          className="flex flex-col gap-8 border-b pb-8 xl:flex-row xl:items-end xl:justify-between"
+        >
+          <div className="min-w-0">
+            <DisplayAmount
+              value={summary.currentValue}
+              className="text-4xl font-semibold tracking-tight sm:text-5xl"
+            />
+            <p className="mt-3 text-sm text-muted-foreground">
+              Total value · holdings dated{" "}
+              {latestSnapshotDate
+                ? formatDate(latestSnapshotDate)
+                : "date unavailable"}
+            </p>
+          </div>
+          <StatRail>
+            <RailStat
+              label="Invested"
+              value={<Money value={summary.investedAmount} />}
+            />
+            <RailStat
+              label="Gain or loss"
+              value={<Money value={summary.pnlAmount} signed />}
+              tone={toneOf(summary.pnlAmount)}
+            />
+            <RailStat
+              label="Return"
+              value={formatSignedPercent(performance.absoluteReturnPercent)}
+              tone={toneOf(performance.absoluteReturnPercent)}
+            />
+            <RailStat
+              label="XIRR"
+              value={formatPercent(performance.xirr)}
+              detail={qualityLabel(performance.dataQuality)}
+            />
+          </StatRail>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0 rounded-2xl border bg-card p-5">
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <h2 className="mono-section-title">Value history</h2>
+              <span className="rounded-md border px-2.5 py-1 text-xs text-muted-foreground">
+                All snapshots
+              </span>
+            </div>
+            {timeline.length < 2 ? (
+              <EmptyState
+                icon={TrendingUp}
+                title="Your history starts here"
+                description="Import another dated snapshot to compare portfolio values."
+              />
+            ) : (
+              <PortfolioTimelineChart data={timeline} />
+            )}
+            <p className="mt-3 text-xs text-muted-foreground">
+              Value changes include deposits and withdrawals. Line color
+              compares the latest value with invested capital.
+            </p>
+          </div>
+          <div className="min-w-0 rounded-2xl border bg-card p-5">
+            <h2 className="mono-section-title mb-6">Asset allocation</h2>
+            <AllocationDonutChart data={summary.allocationByAssetClass} />
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="mono-section-title">Your investments</h2>
+            <span className="text-xs text-muted-foreground">
+              {summary.allocationByAssetClass.length} asset classes
+            </span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {summary.allocationByAssetClass.map((item) => {
+              const positions = holdings.filter(
+                (holding) => holding.assetClass === item.assetClass,
+              );
+              const invested = positions.reduce(
+                (total, holding) => total + holding.investedAmountInInr,
+                0,
+              );
+              const gain = Number(item.currentValue) - invested;
+              const rate = performance.byAssetClass.find(
+                (asset) => asset.assetClass === item.assetClass,
+              );
+
+              return (
+                <Link
+                  key={item.assetClass}
+                  className="mono-asset"
+                  href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
+                >
+                  <div className="flex items-center gap-3 border-b px-5 py-4">
+                    <AssetIcon assetClass={item.assetClass} />
+                    <h3 className="flex-1 text-sm font-medium">
+                      {labelize(item.assetClass)}
+                    </h3>
+                    <ChevronRight className="size-4 text-muted-foreground" />
+                  </div>
+                  <div className="p-5">
+                    <p className="number text-[28px] font-semibold tracking-tight">
+                      {formatInr(Number(item.currentValue))}
+                    </p>
+                    <dl className="mt-5 space-y-2.5 text-sm">
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">
+                          {item.assetClass === "nps"
+                            ? "Retirement holdings"
+                            : item.assetClass === "mutual_fund"
+                              ? "Funds invested in"
+                              : "Holdings"}
+                        </dt>
+                        <dd className="number">{positions.length}</dd>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Invested</dt>
+                        <dd className="number">{formatInr(invested)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">
+                          {item.assetClass === "nps" ? "XIRR" : "Gain / loss"}
+                        </dt>
+                        <dd
+                          className={cn(
+                            "number",
+                            item.assetClass !== "nps" &&
+                              (gain >= 0 ? "positive" : "negative"),
+                          )}
+                        >
+                          {item.assetClass === "nps"
+                            ? formatPercent(rate?.xirr)
+                            : `${gain > 0 ? "+" : ""}${formatInr(gain)}`}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="mono-section-title">Largest holdings</h2>
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/holdings">
+                View all <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+          <ul className="divide-y border-y">
+            {topHoldings.map((holding) => (
+              <li key={holding.id}>
+                <Link
+                  href={`/dashboard/holdings/${holding.id}`}
+                  className="flex items-center justify-between gap-4 rounded-lg py-4 transition-colors hover:bg-muted/40"
+                >
+                  <InstrumentIdentity
+                    name={holding.instrumentName}
+                    symbol={holding.symbol}
+                    isin={holding.isin}
+                    exchange={holding.exchange}
+                    assetClass={holding.assetClass}
+                  />
+                  <div className="shrink-0 text-right">
+                    <p className="number text-sm font-semibold">
+                      {formatInr(holding.currentValueInInr)}
+                    </p>
+                    <div className="mt-1">
+                      <PnlValue value={holding.pnlAmountInInr} />
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Company marks are illustrative. Values are from imported records.
+          </p>
+        </section>
+
+        <details className="mono-disclosure border-t pt-5">
+          <summary className="flex min-h-11 items-center gap-3 text-sm font-medium">
+            <Activity className="size-4 text-muted-foreground" />
+            Return calculations and source details
+            <ChevronDown className="ml-auto size-4" />
+          </summary>
+          <div className="pt-5">
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+              <SectionCard
+                title="Data health"
+                description="How much confidence to place in the return calculations."
               >
-                {pnlDirection === "gain" ? (
-                  <ArrowUpRight className="size-4" aria-hidden="true" />
-                ) : pnlDirection === "loss" ? (
-                  <ArrowDownRight className="size-4" aria-hidden="true" />
-                ) : (
-                  <Minus className="size-4" aria-hidden="true" />
-                )}
-                <span>
-                  {pnlDirection === "gain"
-                    ? "Gain"
-                    : pnlDirection === "loss"
-                      ? "Loss"
-                      : "No change"}
-                </span>
-                <span className="number">{formatInr(summary.pnlAmount)}</span>
-                <span className="number text-muted-foreground">
-                  ({formatPercent(summary.pnlPercent)})
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-5">
-              {timeline.length < 2 ? (
-                <EmptyState
-                  icon={TrendingUp}
-                  title="Portfolio history is still building"
-                  description="Add another dated snapshot to see value and invested capital over time."
-                />
-              ) : (
-                <PortfolioTimelineChart data={timeline} />
-              )}
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Snapshot"
-            description="The numbers behind your latest portfolio value."
-          >
-            <dl className="divide-y divide-border/70">
-              <CompactMetric
-                label="Invested capital"
-                value={formatInr(summary.investedAmount)}
-              />
-              <CompactMetric
-                label="Absolute return"
-                value={formatPercent(performance.absoluteReturnPercent)}
-                tone={absoluteReturnTone}
-              />
-              <CompactMetric
-                label="Annualized growth"
-                value={formatPercent(performance.cagr)}
-                detail="Based on available valuation history"
-              />
-            </dl>
-
-            <div className="mt-5 space-y-4 rounded-xl bg-muted/40 p-4">
-              <div className="flex items-start gap-3">
-                <CalendarDays
-                  className="mt-0.5 size-4 shrink-0 text-primary"
-                  aria-hidden="true"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Latest holdings snapshot
-                  </p>
-                  <p className="number mt-1 text-sm font-semibold">
-                    {latestSnapshotDate
-                      ? formatDate(latestSnapshotDate)
-                      : "Date unavailable"}
-                  </p>
+                <div
+                  className={cn(
+                    "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between",
+                    hasUsableXirr
+                      ? "border-primary/20 bg-accent/40"
+                      : "border-warning/25 bg-warning/5",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    {hasUsableXirr ? (
+                      <CheckCircle2
+                        className="mt-0.5 size-5 shrink-0 text-positive"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <CircleAlert
+                        className="mt-0.5 size-5 shrink-0 text-warning"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <div>
+                      <p className="font-semibold">
+                        {hasUsableXirr
+                          ? "A portfolio XIRR is available"
+                          : "XIRR needs more data"}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        {xirrExplanation(performance.dataQuality)}
+                      </p>
+                    </div>
+                  </div>
+                  <QualityBadge value={qualityLabel(performance.dataQuality)} />
                 </div>
-              </div>
 
+                <dl className="mt-5 divide-y divide-border/70">
+                  <HealthMetric
+                    label="Portfolio XIRR"
+                    explanation="Money-weighted annual return that accounts for when money entered and left the portfolio."
+                    value={<RateValue value={performance.xirr} />}
+                  />
+                  <HealthMetric
+                    label="Source return coverage"
+                    explanation="Share of current portfolio value with a return supplied directly by its source file."
+                    value={
+                      <span className="number font-semibold">
+                        {formatPercent(performance.sourceXirrCoveragePercent)}
+                      </span>
+                    }
+                  />
+                  <HealthMetric
+                    label="Dated cash flows"
+                    explanation="Deposits, withdrawals, purchases, and sales available for an exact money-weighted return."
+                    value={
+                      <span className="number font-semibold">
+                        {performance.cashFlowCount.toLocaleString("en-IN")}
+                      </span>
+                    }
+                  />
+                </dl>
+              </SectionCard>
+
+              <SectionCard
+                title="Performance by asset class"
+                description="Return quality can differ between sources."
+              >
+                {performance.byAssetClass.length === 0 ? (
+                  <EmptyState
+                    icon={Activity}
+                    title="Asset-class returns are unavailable"
+                    description="Add source returns or dated cash flows to calculate them."
+                  />
+                ) : (
+                  <ul className="divide-y divide-border/70">
+                    {performance.byAssetClass.map((item) => (
+                      <li
+                        key={item.assetClass}
+                        className="space-y-3 py-3 first:pt-0 last:pb-0"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <Link
+                              className="truncate text-sm font-semibold text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
+                            >
+                              {labelize(item.assetClass)}
+                            </Link>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Current value
+                            </p>
+                          </div>
+                          <p className="number text-sm font-semibold">
+                            {formatInr(item.currentValue)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>XIRR</span>
+                            <RateValue value={item.xirr} compact />
+                          </div>
+                          <QualityBadge
+                            value={qualityLabel(item.dataQuality)}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SectionCard>
+            </section>
+            <div className="mt-5">
               <ImportSummary
                 isLoading={importHistory.isLoading && !importHistory.data}
                 isError={importHistory.isError && !importHistory.data}
@@ -235,178 +451,8 @@ export function DashboardClient({
                 }
               />
             </div>
-          </SectionCard>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-2">
-          <SectionCard
-            title="Allocation"
-            description="Select an asset class to inspect its holdings and performance."
-          >
-            {summary.allocationByAssetClass.length === 0 ? (
-              <EmptyState
-                icon={PieChart}
-                title="Allocation is unavailable"
-                description="Asset allocation will appear when categorized holdings are available."
-              />
-            ) : (
-              <AllocationDonutChart data={summary.allocationByAssetClass} />
-            )}
-          </SectionCard>
-
-          <SectionCard
-            title="Top holdings"
-            description="Largest positions by current value."
-            action={
-              <Button asChild size="sm" variant="ghost">
-                <Link href="/holdings">
-                  View all
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-              </Button>
-            }
-          >
-            <ul className="divide-y divide-border/70">
-              {topHoldings.map((holding) => (
-                <li
-                  key={holding.id}
-                  className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                >
-                  <div className="min-w-0">
-                    <Link
-                      className="block truncate text-sm font-semibold text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      href={`/dashboard/holdings/${holding.id}`}
-                    >
-                      {holding.symbol ?? holding.instrumentName}
-                    </Link>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {holding.accountName}
-                    </p>
-                  </div>
-                  <div className="flex items-end justify-between gap-4 sm:flex-col sm:items-end sm:gap-1">
-                    <p className="number text-sm font-semibold">
-                      {formatInr(holding.currentValueInInr)}
-                    </p>
-                    <PnlValue value={holding.pnlAmountInInr} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-          <SectionCard
-            title="Data health"
-            description="How much confidence to place in the return calculations."
-          >
-            <div
-              className={cn(
-                "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between",
-                hasUsableXirr
-                  ? "border-primary/20 bg-accent/40"
-                  : "border-warning/25 bg-warning/5",
-              )}
-            >
-              <div className="flex items-start gap-3">
-                {hasUsableXirr ? (
-                  <CheckCircle2
-                    className="mt-0.5 size-5 shrink-0 text-positive"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <CircleAlert
-                    className="mt-0.5 size-5 shrink-0 text-warning"
-                    aria-hidden="true"
-                  />
-                )}
-                <div>
-                  <p className="font-semibold">
-                    {hasUsableXirr
-                      ? "A portfolio XIRR is available"
-                      : "XIRR needs more data"}
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    {xirrExplanation(performance.dataQuality)}
-                  </p>
-                </div>
-              </div>
-              <QualityBadge value={qualityLabel(performance.dataQuality)} />
-            </div>
-
-            <dl className="mt-5 divide-y divide-border/70">
-              <HealthMetric
-                label="Portfolio XIRR"
-                explanation="Money-weighted annual return that accounts for when money entered and left the portfolio."
-                value={<RateValue value={performance.xirr} />}
-              />
-              <HealthMetric
-                label="Source return coverage"
-                explanation="Share of current portfolio value with a return supplied directly by its source file."
-                value={
-                  <span className="number font-semibold">
-                    {formatPercent(performance.sourceXirrCoveragePercent)}
-                  </span>
-                }
-              />
-              <HealthMetric
-                label="Dated cash flows"
-                explanation="Deposits, withdrawals, purchases, and sales available for an exact money-weighted return."
-                value={
-                  <span className="number font-semibold">
-                    {performance.cashFlowCount.toLocaleString("en-IN")}
-                  </span>
-                }
-              />
-            </dl>
-          </SectionCard>
-
-          <SectionCard
-            title="Performance by asset class"
-            description="Return quality can differ between sources."
-          >
-            {performance.byAssetClass.length === 0 ? (
-              <EmptyState
-                icon={Activity}
-                title="Asset-class returns are unavailable"
-                description="Add source returns or dated cash flows to calculate them."
-              />
-            ) : (
-              <ul className="divide-y divide-border/70">
-                {performance.byAssetClass.map((item) => (
-                  <li
-                    key={item.assetClass}
-                    className="space-y-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <Link
-                          className="truncate text-sm font-semibold text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          href={`/dashboard/asset-class/${encodeURIComponent(item.assetClass)}`}
-                        >
-                          {labelize(item.assetClass)}
-                        </Link>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          Current value
-                        </p>
-                      </div>
-                      <p className="number text-sm font-semibold">
-                        {formatInr(item.currentValue)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>XIRR</span>
-                        <RateValue value={item.xirr} compact />
-                      </div>
-                      <QualityBadge value={qualityLabel(item.dataQuality)} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
-        </section>
+          </div>
+        </details>
       </div>
     </PageShell>
   );
@@ -415,52 +461,16 @@ export function DashboardClient({
 function DashboardHeader() {
   return (
     <PageHeader
-      eyebrow="Overview"
-      title="Your portfolio"
-      description="A current view of household value, performance, allocation, and data quality."
+      title="Portfolio"
       action={
         <Button asChild>
           <Link href="/uploads">
             <UploadCloud className="size-4" aria-hidden="true" />
-            Import data
+            Import statement
           </Link>
         </Button>
       }
     />
-  );
-}
-
-function CompactMetric({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  tone?: "positive" | "negative";
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
-      <div>
-        <dt className="text-sm text-muted-foreground">{label}</dt>
-        {detail ? (
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {detail}
-          </p>
-        ) : null}
-      </div>
-      <dd
-        className={cn(
-          "number shrink-0 text-right text-base font-semibold",
-          tone === "positive" && "positive",
-          tone === "negative" && "negative",
-        )}
-      >
-        {value}
-      </dd>
-    </div>
   );
 }
 
@@ -584,6 +594,8 @@ function RateValue({
 }
 
 function PnlValue({ value }: { value: number | null }) {
+  const { formatInr } = useAmountFormatters();
+
   if (value === null || !Number.isFinite(value)) {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">

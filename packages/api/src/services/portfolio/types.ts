@@ -25,6 +25,8 @@ export type CurrentHoldingRow = {
   provider: string;
   instrumentName: string;
   symbol: string | null;
+  isin?: string | null;
+  exchange?: string | null;
   assetClass: AssetClass;
 };
 

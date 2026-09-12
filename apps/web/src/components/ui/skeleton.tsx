@@ -8,7 +8,7 @@ function Skeleton({
   return (
     <div
       aria-hidden="true"
-      className={cn("skeleton-shimmer rounded-lg", className)}
+      className={cn("skeleton-shimmer max-w-full rounded-[6px]", className)}
       {...props}
     />
   );
