@@ -142,6 +142,41 @@ describe("runtime safeguards", () => {
     );
   });
 
+  it("rejects IPv6 loopback database URLs before collecting inventory", () => {
+    for (const host of ["[::1]", "[0:0:0:0:0:0:0:1]"]) {
+      const result = runNode(
+        `const r=require(${JSON.stringify(runtimePath)}); r.assertProductionDatabaseUrl(${JSON.stringify(`postgresql://user:pass@${host}/db`)});`,
+      );
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /refuses a local database URL/);
+    }
+  });
+
+  it("rejects local Storage URLs before collecting inventory", () => {
+    for (const host of [
+      "localhost",
+      "127.0.0.1",
+      "[::1]",
+      "[0:0:0:0:0:0:0:1]",
+    ]) {
+      const result = runNode(
+        `const r=require(${JSON.stringify(runtimePath)}); r.assertProductionStorageUrl(${JSON.stringify(`http://${host}:54321`)});`,
+      );
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /refuses a local Supabase URL/);
+    }
+  });
+
+  it("accepts non-local inventory URLs without connecting", () => {
+    const result = runNode(
+      `const r=require(${JSON.stringify(runtimePath)}); r.assertProductionDatabaseUrl('postgresql://user:pass@db.example.invalid/db'); r.assertProductionStorageUrl('https://storage.example.invalid');`,
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
   it("uses protected modes and refuses overwrite", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "phase0-runtime-"));
     try {

@@ -2,7 +2,7 @@
 
 Date: 2026-09-12
 
-Status: backend connected and deployed; real browser sign-in verified, but its email claim and the remaining external gates are pending. This does not close Phase 1 or authorize production migration.
+Status: backend connected and deployed; real browser sign-in, saved email, and repeat-sign-in uniqueness verified. The remaining external gates are pending. This does not close Phase 1 or authorize production migration.
 
 Review base: `d838924`, with a clean tracked working tree before this setup. The repository changes are this record, the additional-claims setup instructions, and `.github/workflows/convex-development.yml`.
 
@@ -31,6 +31,7 @@ Only ignored local configuration changed: `packages/backend/.env.local` now sele
 - Backend test, lint, and typecheck passed. The test suite has 23 passing tests.
 - Public cloud `users.current` and `users.ensureCurrent` calls without authentication both rejected with `UNAUTHENTICATED`.
 - The owner confirmed successful real browser sign-in. The local server recorded successful dashboard and Postgres API responses. A read-only cloud check found exactly one non-fixture user, one owned Household, and one correctly linked owner membership. The Household name is present, but the email is missing. The owner has been asked to add the email shortcode to the development Clerk session claims and sign in again. No user email or token was copied into this record.
+- Follow-up: after the owner added the development Clerk email claim and signed in again, the same read-only check returned `hasEmail: true`, exactly one non-fixture user, one owned Household, and one correctly linked owner membership. The Household name remains present. The email setup and duplicate-free repeat-sign-in checks passed; no real profile values were printed or committed.
 
 ## Trusted codegen workflow
 
@@ -40,7 +41,7 @@ That step rejects any key not scoped to `dev:hardy-barracuda-115`, generates bin
 
 A dedicated deploy key named `github-development-codegen-main` was created for this development deployment and stored as environment secret `CONVEX_DEV_DEPLOY_KEY` inside `convex-development`. Its value was passed directly in memory to GitHub, not printed or written to a repository file. The initial repository-scoped secret was removed and its earlier development key revoked after the protected replacement passed cloud codegen. Read-back checks confirmed the environment secret exists and there are no repository-scoped secrets. This is an administrative credential for development, not a read-only credential; keep it limited to trusted code and revoke it when the workflow is retired.
 
-The equivalent codegen and drift checks passed locally. The GitHub workflow itself has not run: it is not yet published on `main`. No push or merge was performed.
+The equivalent codegen and drift checks passed locally. The GitHub workflow itself has not run: it is not yet published on `main`. No push or merge was performed during that setup milestone.
 
 The workflow's shell block passed `bash -n`. Executing its actual key guard with dummy inputs accepted the expected development prefix and rejected production, another development deployment, and an unset key. New untracked bindings are reported by filename before the check fails.
 
@@ -48,9 +49,28 @@ The workflow's shell block passed `bash -n`. Executing its actual key guard with
 
 Claude Code confirmed model `claude-opus-5` and approved committing the initial setup files with Phase 1 open, conditional on fixing credential confinement before publication. The follow-up changes address that concern with a server-enforced environment policy, corrected security claims, clearer tier and profile gates, explicit fake-fixture baseline, diagnostic output, and SHA-pinned actions. The targeted follow-up, again confirmed as `claude-opus-5`, approved the three setup files with no blocking findings. Its optional recommendation to let pnpm/action-setup read the root `packageManager` field was applied, avoiding a second potentially conflicting version input. Final documentation and that version-input simplification were applied after approval.
 
+## PR integration verification
+
+The owner requested a PR after incorporating the redesigned UI from `main`. The clean feature branch merged `origin/main` at `c4e0e73` without conflicts, producing merge commit `5ff5253`. The UI redesign, branding, fonts, logo lookup, and membership-profile fixes remain intact. Relative to that main revision, the root layout only adds the development-only Convex provider around the existing AppShell. Production portfolio reads and writes still use Postgres.
+
+Checks against the merged revision:
+
+- `pnpm install --frozen-lockfile`: exit 0; no lockfile rewrite.
+- `pnpm exec turbo run lint typecheck test --force`: exit 0; all 21 tasks passed with no cache hits. The existing `instrument-mark.tsx` native-image warning remains; there are no lint errors.
+- `pnpm test:db:integration`: exit 0; all 95 API tests and the database migration test passed. This includes all 48 database integration tests, not skipped tests, against the dedicated local test database.
+- `pnpm exec turbo run build --force`: exit 0; all seven builds passed, including Next.js. This was a local build, not a deployment.
+- Browser verification after restarting the development server: the redesigned landing and Clerk sign-in pages rendered with their expected links and Google sign-in button. Screenshots were inspected, no browser errors were captured, and the error-overlay check returned `OK`. This did not repeat the owner's authenticated dashboard test after the merge.
+- The independent Codex review found that IPv6 loopback addresses bypassed the inventory URL guard because Node returns `[::1]` as the hostname. Regression tests first failed, then passed after correcting both database and Storage validation. Storage URL validation now lives in a directly tested runtime function used by the inventory script.
+- Targeted lint exposed an existing `crypto` global-name collision in the touched scripts. The failure was reproduced from the unchanged runtime file; renaming the imports to `nodeCrypto` resolves it without changing hashing behavior.
+- `pnpm test:migration-tools`: all 14 tests passed after the correction. Targeted script lint, repository formatting, and whitespace checks passed.
+
+The full-branch Claude Code review confirmed `claude-opus-5` but ended with API status 429 and a session-limit message before returning a verdict. It did not approve the merged PR scope. The CLI reported a reset at 8:10 p.m. Asia/Kolkata. The owner then explicitly authorized skipping the Opus review for now, committing the remaining changes, and publishing a PR ready for review. This exception applies to this PR; later phase reviews remain required. It does not close the remaining Phase 1 external gates or authorize production migration.
+
+The independent Codex follow-up approved the correction and receipt update with no remaining blocking findings. It separately verified compressed and expanded IPv6 loopback rejection for database and Storage URLs without network access.
+
 ## Remaining gates
 
-- Complete the email-claim setup, confirm the actual profile claim shape and displayed email/name, and verify repeat real sign-in saves the email without adding duplicate users or Households.
+- Confirm the displayed profile email/name against the intended claim contract. Saved email and duplicate-free repeat real sign-in are verified above; a UI profile comparison has not been recorded.
 - Owner-selected billing tier, required preview-deployment support, backup retention sufficient for the seven-day rollback window, concurrency class, and the existing production deployment relationship, all verified without production writes.
 - Actual trusted GitHub workflow execution after the reviewed workflow reaches `main`.
 

@@ -1,4 +1,4 @@
-const crypto = require("node:crypto");
+const nodeCrypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -85,15 +85,25 @@ function assertProductionDatabaseUrl(databaseUrl) {
     fail("DATABASE_URL must use PostgreSQL");
   }
 
-  if (["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) {
+  if (["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
     fail("Production inventory refuses a local database URL");
   }
 
   return parsed;
 }
 
+function assertProductionStorageUrl(storageUrl) {
+  const parsed = new URL(storageUrl);
+
+  if (["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+    fail("Production storage inventory refuses a local Supabase URL");
+  }
+
+  return parsed;
+}
+
 function sourceFingerprint(parts) {
-  return crypto
+  return nodeCrypto
     .createHash("sha256")
     .update(parts.join("\0"))
     .digest("hex")
@@ -164,6 +174,7 @@ module.exports = {
   parseArguments,
   requireProductionArguments,
   assertProductionDatabaseUrl,
+  assertProductionStorageUrl,
   sourceFingerprint,
   writeProtectedJson,
 };

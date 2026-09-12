@@ -1,10 +1,11 @@
-const crypto = require("node:crypto");
+const nodeCrypto = require("node:crypto");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 const { spawnSync } = require("node:child_process");
 const {
   assertAllowedArguments,
   assertProductionDatabaseUrl,
+  assertProductionStorageUrl,
   createProtectedRunDirectory,
   fail,
   loadExplicitEnvironment,
@@ -82,10 +83,9 @@ async function main() {
     return;
   }
 
-  const storageUrl = new URL(storageEnvironment.SUPABASE_URL);
-  if (["localhost", "127.0.0.1", "::1"].includes(storageUrl.hostname)) {
-    fail("Production storage inventory refuses a local Supabase URL");
-  }
+  const storageUrl = assertProductionStorageUrl(
+    storageEnvironment.SUPABASE_URL,
+  );
 
   const references = await loadDatabaseReferences(
     databaseEnvironment.DATABASE_URL,
@@ -122,7 +122,7 @@ async function main() {
     }
 
     const content = Buffer.from(await result.data.arrayBuffer());
-    const actualHash = crypto
+    const actualHash = nodeCrypto
       .createHash("sha256")
       .update(content)
       .digest("hex");
