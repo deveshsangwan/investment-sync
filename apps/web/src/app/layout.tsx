@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import "./globals.css";
+import { DevelopmentConvexProvider } from "./convex-provider";
 import { TRPCProvider } from "./providers";
 import { AppShell } from "@/components/app-shell";
 
@@ -31,7 +32,9 @@ export default function RootLayout({
       <html lang="en" suppressHydrationWarning>
         <body className="antialiased">
           <TRPCProvider>
-            <AppShell>{children}</AppShell>
+            <DevelopmentConvexProvider>
+              <AppShell>{children}</AppShell>
+            </DevelopmentConvexProvider>
           </TRPCProvider>
         </body>
       </html>

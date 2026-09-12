@@ -141,6 +141,62 @@ describeDb("import service integration", () => {
     });
   });
 
+  it("marks an omitted position exited and restores it when it re-enters", async () => {
+    const fixture = await createFixture([
+      holdingRow({ instrumentName: "ALPHA", symbol: "ALPHA" }),
+      holdingRow({ instrumentName: "BETA", symbol: "BETA" }),
+    ]);
+    const ctx = contextOf(fixture);
+    await runImportEffect(
+      commitImport(ctx, fixture.membership, fixture.batchId),
+    );
+
+    const omissionBatchId = await createBatch(fixture.membership, [
+      holdingRow({
+        instrumentName: "BETA",
+        symbol: "BETA",
+        sourceDate: "2026-06-17",
+      }),
+    ]);
+    await runImportEffect(
+      commitImport(ctx, fixture.membership, omissionBatchId),
+    );
+
+    const afterOmission = await appRouter
+      .createCaller(contextOf(fixture))
+      .portfolio.positions();
+    expect(afterOmission.current.map((holding) => holding.symbol)).toEqual([
+      "BETA",
+    ]);
+    expect(afterOmission.exited.map((holding) => holding.symbol)).toEqual([
+      "ALPHA",
+    ]);
+
+    const reentryBatchId = await createBatch(fixture.membership, [
+      holdingRow({
+        instrumentName: "ALPHA",
+        symbol: "ALPHA",
+        sourceDate: "2026-06-18",
+      }),
+      holdingRow({
+        instrumentName: "BETA",
+        symbol: "BETA",
+        sourceDate: "2026-06-18",
+      }),
+    ]);
+    await runImportEffect(
+      commitImport(ctx, fixture.membership, reentryBatchId),
+    );
+
+    const afterReentry = await appRouter
+      .createCaller(contextOf(fixture))
+      .portfolio.positions();
+    expect(
+      afterReentry.current.map((holding) => holding.symbol).sort(),
+    ).toEqual(["ALPHA", "BETA"]);
+    expect(afterReentry.exited).toEqual([]);
+  });
+
   it("keeps dashboard and asset-class holdings aligned for aggregate edges", async () => {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const fixture = await createFixture([
