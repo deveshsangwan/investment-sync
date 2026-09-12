@@ -1,0 +1,31 @@
+scripts/convex-migration/capacity-evidence.test.cjs
+  s_59b91dee14d4f1::t_16f9da0e323308 145-156,163-179
+  s_59b91dee14d4f1::t_8e9be2fbaedcbc 157-162
+scripts/convex-migration/inventory-storage.cjs
+  s_59b91dee14d4f1::t_c9e5ece8da53fe 8
+  s_59b91dee14d4f1::t_8e9be2fbaedcbc 86-88
+  s_59b91dee14d4f1::t_d63f3d92bcc813 1,125
+scripts/convex-migration/runtime.cjs
+  s_59b91dee14d4f1::t_c9e5ece8da53fe 88,95-104,177
+  s_59b91dee14d4f1::t_d63f3d92bcc813 1,106
+docs/convex-phase-1-cloud-verification.md
+  s_59b91dee14d4f1::t_a37b21d54a5c54 5,34,44,52-66,68,73
+  s_59b91dee14d4f1::t_ff473d53526599 67
+  s_59b91dee14d4f1::t_ec685bf4635278 69-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "54fee909b7b646d3dcfda465f26e1565a49fba34",
+  "prompts": {},
+  "sessions": {
+    "s_59b91dee14d4f1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04e00-935a-7f31-ac7f-826c2a11e662",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
