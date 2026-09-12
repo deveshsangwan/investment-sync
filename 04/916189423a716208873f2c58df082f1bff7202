@@ -1,0 +1,28 @@
+docs/local-development.md
+  s_59b91dee14d4f1::t_822a856e85ab99 89-90
+.github/workflows/convex-development.yml
+  s_59b91dee14d4f1::t_e2697ba47e2b35 23,26-27
+  s_59b91dee14d4f1::t_083588604a6568 1-16,18,20-22,24-25,28-44
+  s_59b91dee14d4f1::t_c4d6e038960980 17,19,45-50
+docs/convex-phase-1-cloud-verification.md
+  s_59b91dee14d4f1::t_822a856e85ab99 5,7,32-33
+  s_59b91dee14d4f1::t_e2697ba47e2b35 15,29-30,37,41,45-48,50,53-54
+  s_59b91dee14d4f1::t_6f5237be6ffe1b 49
+  s_59b91dee14d4f1::t_6ad70a9e0e8dfa 1-4,6,8-14,16-28,31,34-36,38-40,42-44,51-52,55-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "04916189423a716208873f2c58df082f1bff7202",
+  "prompts": {},
+  "sessions": {
+    "s_59b91dee14d4f1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04e00-935a-7f31-ac7f-826c2a11e662",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "deveshsangwan <dev.sangwan2001@gmail.com>"
+    }
+  }
+}
