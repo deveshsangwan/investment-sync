@@ -86,6 +86,8 @@ Keep the generated `CONVEX_DEPLOYMENT` in `packages/backend/.env.local`. Add `NE
 
 In the development Clerk application, activate the Convex integration and copy the application's Frontend API URL, following the [Convex Clerk setup guide](https://docs.convex.dev/auth/clerk). The token audience must be `convex`, matching `applicationID` in `convex/auth.config.ts`. Use that development application's issuer domain below. The provider is enabled only in development; this step does not switch application reads away from Postgres.
 
+In Clerk's development instance, open **Sessions → Customize session token → Claims** and add `"email": "{{user.primary_email_address}}"`, preserving the existing `aud` and any other claims. The integration can authenticate without this claim, but this app needs it to save the sign-in email. Sign out and sign back in after changing claims, then confirm the email is present in the development `users` document. See [Clerk's additional-claims instructions](https://clerk.com/docs/guides/development/integrations/databases/convex).
+
 `CLERK_JWT_ISSUER_DOMAIN` and `APP_ENV` are Convex deployment environment variables, not shell-only variables. Set them on the personal development deployment:
 
 ```bash
