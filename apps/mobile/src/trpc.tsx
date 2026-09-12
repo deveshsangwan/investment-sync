@@ -1,3 +1,5 @@
+import Constants from "expo-constants";
+import { resolveApiUrl } from "./api-url";
 import type { AppRouter } from "@investment-sync/api";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
@@ -26,7 +28,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
       transformer: superjson,
       links: [
         httpBatchLink({
-          url: `${process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000"}/api/trpc`,
+          url: `${resolveApiUrl(process.env.EXPO_PUBLIC_API_URL, __DEV__ ? Constants.expoConfig?.hostUri : undefined)}/api/trpc`,
           async headers() {
             const token = await getToken();
             return token ? { authorization: `Bearer ${token}` } : {};

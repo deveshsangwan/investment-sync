@@ -1,50 +1,92 @@
+import Svg, { Defs, Image, Mask, Rect } from "react-native-svg";
+import quietMark from "../assets/quiet.png";
+import { useAmounts } from "./amounts";
+import { AppText as Text } from "./app-text";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useId, type ReactNode } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { type Theme, useTheme } from "./theme";
 
 export function BrandMark({ size = 40 }: { size?: number }) {
   const theme = useTheme();
+  const maskId = useId();
+
   return (
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[
-        styles.brandMark,
-        {
-          backgroundColor: theme.primary,
-          borderRadius: size * 0.25,
-          height: size,
-          width: size,
-        },
-      ]}
     >
-      <Ionicons
-        color={theme.primaryForeground}
-        name="wallet-outline"
-        size={size * 0.48}
-      />
+      <Svg width={size} height={size} viewBox="0 0 1280 1280">
+        <Defs>
+          <Mask
+            id={maskId}
+            x="0"
+            y="0"
+            width="1280"
+            height="1280"
+            maskUnits="userSpaceOnUse"
+            maskType="luminance"
+          >
+            <Image href={quietMark} width="1280" height="1280" />
+          </Mask>
+        </Defs>
+        <Rect
+          width="1280"
+          height="1280"
+          fill={theme.foreground}
+          mask={`url(#${maskId})`}
+        />
+      </Svg>
+    </View>
+  );
+}
+
+export function PortfolioToolbar() {
+  const theme = useTheme();
+  const { isHidden, isReady, toggle } = useAmounts();
+
+  return (
+    <View style={styles.toolbar}>
+      <View style={styles.brand}>
+        <BrandMark size={32} />
+        <Text
+          style={{ color: theme.foreground, fontSize: 15, fontWeight: "600" }}
+        >
+          Investment Sync
+        </Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={isHidden ? "Show amounts" : "Hide amounts"}
+        accessibilityState={{ disabled: !isReady, selected: isHidden }}
+        disabled={!isReady}
+        onPress={toggle}
+        style={({ pressed }) => [
+          styles.iconButton,
+          { borderColor: theme.border },
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name={isHidden ? "eye-off-outline" : "eye-outline"}
+          size={20}
+          color={theme.foreground}
+        />
+      </Pressable>
     </View>
   );
 }
 
 export function PageHeader({
-  eyebrow,
   title,
   description,
 }: {
-  eyebrow?: string;
   title: string;
   description?: string;
 }) {
   const theme = useTheme();
   return (
     <View style={[styles.header, { borderBottomColor: theme.border }]}>
-      {eyebrow ? (
-        <Text style={[styles.eyebrow, { color: theme.primary }]}>
-          {eyebrow}
-        </Text>
-      ) : null}
       <Text style={[styles.title, { color: theme.foreground }]}>{title}</Text>
       {description ? (
         <Text style={[styles.description, { color: theme.mutedForeground }]}>
@@ -157,28 +199,43 @@ function buttonPalette(
 }
 
 const styles = StyleSheet.create({
-  brandMark: { alignItems: "center", justifyContent: "center" },
-  header: { borderBottomWidth: 1, marginBottom: 20, paddingBottom: 18 },
-  eyebrow: { fontSize: 12, fontWeight: "700", marginBottom: 5 },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 28,
+  },
+  brand: { flexDirection: "row", alignItems: "center", gap: 8 },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  header: { marginBottom: 24 },
+  eyebrow: { fontSize: 12, fontWeight: "600", marginBottom: 5 },
   title: {
-    fontSize: 34,
-    fontWeight: "700",
+    fontSize: 30,
+    fontWeight: "600",
     letterSpacing: -1.2,
     lineHeight: 39,
   },
   description: { fontSize: 14, lineHeight: 21, marginTop: 7 },
   button: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     justifyContent: "center",
     minHeight: 48,
     paddingHorizontal: 16,
   },
-  buttonText: { fontSize: 15, fontWeight: "700" },
+  buttonText: { fontSize: 15, fontWeight: "600" },
   pressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
-  statePanel: { borderRadius: 12, borderWidth: 1, padding: 18 },
-  stateTitle: { fontSize: 17, fontWeight: "700" },
+  statePanel: { borderRadius: 16, borderWidth: 1, padding: 18 },
+  stateTitle: { fontSize: 17, fontWeight: "600" },
   stateDescription: { fontSize: 14, lineHeight: 21, marginTop: 5 },
   stateAction: { alignSelf: "flex-start", marginTop: 15 },
 });

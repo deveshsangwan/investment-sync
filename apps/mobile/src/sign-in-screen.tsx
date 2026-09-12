@@ -1,31 +1,63 @@
-import { useSSO } from "@clerk/clerk-expo";
+import { makeRedirectUri } from "expo-auth-session";
+import { traceClerkRequests } from "./debug-clerk-fetch";
+import { PortfolioIllustration } from "./portfolio-illustration";
+import * as WebBrowser from "expo-web-browser";
+import { AppText as Text } from "./app-text";
+import { useAuth, useSSO } from "@clerk/clerk-expo";
 import { useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppButton, BrandMark } from "./mobile-ui";
 import { type Theme, useTheme } from "./theme";
 
+WebBrowser.maybeCompleteAuthSession();
+
 export function SignInScreen() {
   const { startSSOFlow } = useSSO();
+  const { isLoaded } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   async function submit() {
+    if (!isLoaded || isSubmitting) return;
+
     setIsSubmitting(true);
+    const restoreDiagnostics = __DEV__ ? traceClerkRequests() : undefined;
+
     try {
-      const { createdSessionId, setActive } = await startSSOFlow({
-        strategy: "oauth_google",
-      });
+      const redirectUrl = makeRedirectUri({ path: "sso-callback" });
+
+      if (__DEV__) {
+        const callback = new URL(redirectUrl);
+        console.info(
+          "[DEBUG-clerk-callback]",
+          JSON.stringify({ protocol: callback.protocol, host: callback.host }),
+        );
+      }
+
+      const { createdSessionId, setActive, authSessionResult } =
+        await startSSOFlow({
+          strategy: "oauth_google",
+          redirectUrl,
+        });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
+      } else if (authSessionResult?.type === "success") {
+        Alert.alert(
+          "Sign-in needs another step",
+          "Complete your account setup on the web, then sign in again.",
+        );
       }
     } catch (error) {
       Alert.alert(
         "Could not sign in",
-        error instanceof Error ? error.message : "Check your Clerk settings.",
+        error instanceof Error
+          ? error.message
+          : "Check your connection and try again.",
       );
     } finally {
+      restoreDiagnostics?.();
       setIsSubmitting(false);
     }
   }
@@ -37,19 +69,38 @@ export function SignInScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.authLayout}>
-          <BrandMark size={48} />
-          <View style={styles.card}>
-            <Text style={styles.eyebrow}>Investment Sync</Text>
-            <Text style={styles.title}>
-              Your household portfolio, in one view
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              alignSelf: "flex-start",
+              marginBottom: 32,
+            }}
+          >
+            <BrandMark size={40} />
+            <Text
+              style={{
+                color: theme.foreground,
+                fontWeight: "600",
+                fontSize: 16,
+              }}
+            >
+              Investment Sync
             </Text>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.eyebrow}>Your portfolio, together</Text>
+            <Text style={styles.title}>A clear view of what you own.</Text>
             <Text style={styles.description}>
-              Sign in to review committed holdings. Imports remain available on
-              the web app.
+              Stocks, funds, and retirement savings across your household. Sign
+              in to see them in one place.
             </Text>
 
+            <PortfolioIllustration />
+
             <AppButton
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isLoaded}
               label={isSubmitting ? "Signing in" : "Continue with Google"}
               onPress={() => void submit()}
             >
@@ -57,7 +108,7 @@ export function SignInScreen() {
             </AppButton>
           </View>
           <Text style={styles.privacy}>
-            Private by household · Source files retained for up to 30 days
+            Private to your household. Import statements on the web.
           </Text>
         </View>
       </ScrollView>
@@ -83,24 +134,24 @@ function createStyles(theme: Theme) {
     card: {
       backgroundColor: theme.card,
       borderColor: theme.border,
-      borderRadius: 12,
+      borderRadius: 16,
       borderWidth: 1,
-      gap: 14,
+      gap: 20,
       marginTop: 16,
-      padding: 22,
+      padding: 24,
       width: "100%",
     },
     eyebrow: {
       color: theme.primary,
       fontSize: 13,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     title: {
       color: theme.foreground,
-      fontSize: 29,
-      fontWeight: "700",
+      fontSize: 36,
+      fontWeight: "600",
       letterSpacing: -1,
-      lineHeight: 34,
+      lineHeight: 43,
     },
     description: {
       color: theme.mutedForeground,

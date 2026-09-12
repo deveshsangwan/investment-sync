@@ -33,7 +33,7 @@ def main():
                 raise ValueError(f"Conflicting security identifiers for {symbol}")
             identifiers[symbol] = isin
 
-    target = Path(__file__).resolve().parents[1] / "apps/web/src/lib/logo-data/nse.json"
+    target = Path(__file__).resolve().parents[1] / "packages/instruments/src/logo-data/nse.json"
     payload = {"retrievedAt": datetime.now(timezone.utc).date().isoformat(),
                "sources": [source[0] for source in SOURCES],
                "identifiers": dict(sorted(identifiers.items()))}

@@ -1,30 +1,80 @@
+import { assetClassLabel, formatDate } from "../src/format";
+import { InstrumentMark, LogoAttribution } from "../src/instrument-mark";
+import { useAmounts } from "../src/amounts";
+import { FilterField } from "../src/filter-field";
+import { AppText as Text } from "../src/app-text";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMemo } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppButton, PageHeader, StatePanel } from "../src/mobile-ui";
+import {
+  AppButton,
+  PageHeader,
+  PortfolioToolbar,
+  StatePanel,
+} from "../src/mobile-ui";
 import { type Theme, useTheme } from "../src/theme";
 import { trpc } from "../src/trpc";
-
-const inrCurrency = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-});
 
 const percentage = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 });
 
 export default function HoldingsScreen() {
-  const holdings = trpc.portfolio.holdings.useQuery();
+  const holdings = trpc.portfolio.positions.useQuery();
+  const { formatAmount } = useAmounts();
+  const [search, setSearch] = useState("");
+  const [assetClass, setAssetClass] = useState("all");
+  const [account, setAccount] = useState("all");
+  const [status, setStatus] = useState("current");
+  const [sort, setSort] = useState("value");
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const data = holdings.data ?? [];
+  const positions = [
+    ...(holdings.data?.current ?? []).map((item) => ({
+      ...item,
+      isExited: false,
+    })),
+    ...(holdings.data?.exited ?? []).map((item) => ({
+      ...item,
+      isExited: true,
+    })),
+  ];
+  const normalizedSearch = search.trim().toLowerCase();
+  const data = positions
+    .filter(
+      (item) =>
+        (status === "all" || item.isExited === (status === "exited")) &&
+        (assetClass === "all" || item.assetClass === assetClass) &&
+        (account === "all" || item.accountName === account) &&
+        [item.instrumentName, item.symbol, item.accountName].some((value) =>
+          value?.toLowerCase().includes(normalizedSearch),
+        ),
+    )
+    .sort((left, right) =>
+      sort === "name"
+        ? left.instrumentName.localeCompare(right.instrumentName)
+        : right.currentValueInInr - left.currentValueInInr,
+    );
+
+  function resetFilters() {
+    setSearch("");
+    setAssetClass("all");
+    setAccount("all");
+    setStatus("current");
+    setSort("value");
+  }
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
         data={data}
         keyExtractor={(item) => item.id}
@@ -32,12 +82,102 @@ export default function HoldingsScreen() {
         refreshing={holdings.isFetching && !holdings.isLoading}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <PageHeader
-            description="Latest committed position in each account."
-            eyebrow="Current positions"
-            title="Holdings"
-          />
+          <View>
+            <PortfolioToolbar />
+            <PageHeader
+              title="Holdings"
+              description="Every position, across your accounts."
+            />
+            <View
+              style={[
+                styles.search,
+                { borderColor: theme.input, backgroundColor: theme.card },
+              ]}
+            >
+              <Ionicons
+                name="search-outline"
+                color={theme.mutedForeground}
+                size={18}
+              />
+              <TextInput
+                accessibilityLabel="Search holdings"
+                placeholder="Search holdings"
+                placeholderTextColor={theme.mutedForeground}
+                value={search}
+                onChangeText={setSearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                style={{
+                  flex: 1,
+                  color: theme.foreground,
+                  minHeight: 44,
+                  fontFamily: "PublicSans_400Regular",
+                }}
+              />
+            </View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingVertical: 12 }}
+            >
+              <FilterField
+                label="Position status"
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { value: "current", label: "Current" },
+                  { value: "exited", label: "Exited" },
+                  { value: "all", label: "All positions" },
+                ]}
+              />
+              <FilterField
+                label="Asset class"
+                value={assetClass}
+                onChange={setAssetClass}
+                options={[
+                  { value: "all", label: "All assets" },
+                  ...[...new Set(positions.map((item) => item.assetClass))]
+                    .sort()
+                    .map((value) => ({ value, label: assetClassLabel(value) })),
+                ]}
+              />
+              <FilterField
+                label="Account"
+                value={account}
+                onChange={setAccount}
+                options={[
+                  { value: "all", label: "All accounts" },
+                  ...[...new Set(positions.map((item) => item.accountName))]
+                    .sort()
+                    .map((value) => ({ value, label: value })),
+                ]}
+              />
+              <FilterField
+                label="Sort holdings"
+                value={sort}
+                onChange={setSort}
+                options={[
+                  { value: "value", label: "Highest value" },
+                  { value: "name", label: "Name" },
+                ]}
+              />
+            </ScrollView>
+            <Text
+              style={{
+                color: theme.mutedForeground,
+                fontSize: 12,
+                marginBottom: 16,
+              }}
+            >
+              {holdings.isLoading
+                ? "Loading positions"
+                : `${data.length} positions`}
+            </Text>
+          </View>
         }
+        ListFooterComponent={<LogoAttribution />}
         ListEmptyComponent={
           holdings.isLoading ? (
             <LoadingList styles={styles} />
@@ -58,8 +198,27 @@ export default function HoldingsScreen() {
             />
           ) : (
             <StatePanel
-              description="Import portfolio data from the web app first."
-              title="No committed holdings"
+              description={
+                positions.length
+                  ? "Try another search or clear your filters."
+                  : "Import a statement on the web to see your holdings here."
+              }
+              title={
+                positions.length
+                  ? "No matching holdings"
+                  : "Your portfolio starts here"
+              }
+              action={
+                positions.length ? (
+                  <AppButton
+                    label="Clear filters"
+                    variant="secondary"
+                    onPress={resetFilters}
+                  >
+                    Clear filters
+                  </AppButton>
+                ) : undefined
+              }
             />
           )
         }
@@ -78,14 +237,15 @@ export default function HoldingsScreen() {
                 ? theme.negative
                 : theme.mutedForeground;
           const name = item.symbol ?? item.instrumentName;
-          const formattedReturn = `${percentage.format(
-            Number(item.pnlPercent ?? 0),
-          )}%`;
+          const formattedReturn =
+            item.pnlPercent == null
+              ? "N/A"
+              : `${percentage.format(Number(item.pnlPercent))}%`;
 
           return (
             <View
               accessible
-              accessibilityLabel={`${name}, ${inrCurrency.format(
+              accessibilityLabel={`${name}, ${formatAmount(
                 item.currentValueInInr,
               )}, return ${formattedReturn}`}
               style={[
@@ -95,19 +255,32 @@ export default function HoldingsScreen() {
               ]}
             >
               <View style={styles.holdingHeader}>
-                <Text numberOfLines={1} style={styles.symbol}>
-                  {name}
-                </Text>
+                <InstrumentMark
+                  name={item.instrumentName}
+                  symbol={item.symbol}
+                  assetClass={item.assetClass}
+                  isin={item.isin}
+                  exchange={item.exchange}
+                />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={styles.symbol}>
+                    {name}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.meta}>
+                    {item.instrumentName}
+                  </Text>
+                </View>
                 <Text
                   adjustsFontSizeToFit
                   numberOfLines={1}
                   style={styles.value}
                 >
-                  {inrCurrency.format(item.currentValueInInr)}
+                  {formatAmount(item.currentValueInInr)}
                 </Text>
               </View>
               <Text numberOfLines={1} style={styles.meta}>
-                {item.accountName} · {labelize(item.assetClass)}
+                {item.accountName} · {assetClassLabel(item.assetClass)}
+                {item.isExited ? " · Exited" : ""}
               </Text>
               <View style={styles.holdingFooter}>
                 <Text style={styles.date}>
@@ -152,45 +325,41 @@ function LoadingList({ styles }: { styles: ReturnType<typeof createStyles> }) {
   );
 }
 
-function labelize(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function formatDate(value: string | Date) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
 function createStyles(theme: Theme) {
   return StyleSheet.create({
     screen: { backgroundColor: theme.background, flex: 1 },
-    content: { padding: 18, paddingBottom: 28 },
+    content: {
+      padding: 20,
+      paddingBottom: 32,
+      width: "100%",
+      maxWidth: 760,
+      alignSelf: "center",
+    },
+    search: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderRadius: 8,
+    },
     holdingRow: {
       backgroundColor: theme.surface,
       borderBottomColor: theme.border,
       borderBottomWidth: 1,
       borderLeftColor: theme.border,
-      borderLeftWidth: 1,
+      borderLeftWidth: 0,
       borderRightColor: theme.border,
-      borderRightWidth: 1,
+      borderRightWidth: 0,
       minHeight: 108,
-      padding: 16,
+      paddingVertical: 18,
     },
     firstHoldingRow: {
       borderTopColor: theme.border,
-      borderTopLeftRadius: 12,
-      borderTopRightRadius: 12,
+
       borderTopWidth: 1,
     },
-    lastHoldingRow: {
-      borderBottomLeftRadius: 12,
-      borderBottomRightRadius: 12,
-    },
+    lastHoldingRow: {},
     holdingHeader: {
       alignItems: "flex-start",
       flexDirection: "row",
@@ -201,7 +370,7 @@ function createStyles(theme: Theme) {
       color: theme.foreground,
       flex: 1,
       fontSize: 16,
-      fontWeight: "700",
+      fontWeight: "600",
       minWidth: 0,
     },
     value: {
@@ -209,7 +378,7 @@ function createStyles(theme: Theme) {
       flexShrink: 1,
       fontSize: 15,
       fontVariant: ["tabular-nums"],
-      fontWeight: "700",
+      fontWeight: "600",
       textAlign: "right",
     },
     meta: {
@@ -229,7 +398,7 @@ function createStyles(theme: Theme) {
     returnValue: {
       fontSize: 13,
       fontVariant: ["tabular-nums"],
-      fontWeight: "700",
+      fontWeight: "600",
     },
     positive: { color: theme.positive },
     negative: { color: theme.negative },
@@ -237,7 +406,7 @@ function createStyles(theme: Theme) {
     loadingList: {
       backgroundColor: theme.surface,
       borderColor: theme.border,
-      borderRadius: 12,
+      borderRadius: 16,
       borderWidth: 1,
       overflow: "hidden",
     },
@@ -245,7 +414,7 @@ function createStyles(theme: Theme) {
       borderBottomColor: theme.border,
       borderBottomWidth: 1,
       height: 108,
-      padding: 16,
+      paddingVertical: 18,
     },
     loadingBar: { backgroundColor: theme.skeleton, borderRadius: 5 },
     loadingName: { height: 15, width: "44%" },

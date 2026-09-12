@@ -13,6 +13,7 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 - `packages/db`: Drizzle schema and database client.
 - `packages/importers`: Tickertape, Vested/DriveWealth, and spreadsheet import contracts.
 - `packages/analytics`: portfolio summary, allocation, and XIRR helpers.
+- `packages/instruments`: shared display identities and logo lookup for web and mobile.
 
 ## Local Setup
 
@@ -21,7 +22,7 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 3. Create a private Supabase Storage bucket named `portfolio-imports`.
 4. Run `pnpm db:generate` and apply migrations with `pnpm db:migrate`.
 5. Start the web app with `pnpm dev:web`.
-6. Start the Expo app with `pnpm dev:mobile`.
+6. Configure `apps/mobile/.env.local` and start the Expo app with `pnpm dev:mobile`. See [mobile development](docs/mobile-development.md) for iPhone networking and Expo Go setup.
 
 Original uploaded files are retained for 30 days by default. Normalized portfolio data remains until deleted from the app.
 

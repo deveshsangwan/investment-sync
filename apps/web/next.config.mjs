@@ -5,6 +5,7 @@ const nextConfig = {
     "@investment-sync/db",
     "@investment-sync/importers",
     "@investment-sync/analytics",
+    "@investment-sync/instruments",
   ],
 };
 
