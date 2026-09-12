@@ -337,6 +337,46 @@ describeDb("import lifecycle integration", () => {
       );
     });
 
+    it("records the storage path even when it was never persisted", async () => {
+      const fixture = await createFixture(db, []);
+      const supabase = fakeSupabase({ removeError: { message: "locked" } });
+      // Fail the update that writes storagePath, so the column is still null
+      // when compensation runs. markImportFailed's own update must still work.
+      let updates = 0;
+      const failing = dbWith(db, {
+        update: (...args: unknown[]) => {
+          updates += 1;
+          if (updates === 1) throw new Error("could not record the upload");
+          return (db.update as unknown as (...a: unknown[]) => unknown)(
+            ...args,
+          );
+        },
+      });
+      const ctx = contextFor(db, fixture, supabase.client);
+
+      await expect(
+        runImportEffect(
+          uploadAndProcessImport(
+            { db: failing, supabase: ctx.supabase },
+            fixture.membership,
+            {
+              fileName: "holdings.csv",
+              mimeType: "text/csv",
+              content: Buffer.from(tickertapeCsv(1)),
+            },
+          ),
+        ),
+      ).rejects.toThrow("Import operation failed");
+
+      // Without the path the cleanup cron cannot find the row -- it filters on
+      // a non-null storagePath -- and the uploaded file leaks forever.
+      const failed = await onlyFailedBatch(db, fixture.membership.householdId);
+      expect(failed?.storagePath).toBe(
+        `${fixture.membership.userId}/${failed?.id}/holdings.csv`,
+      );
+      expect(failed?.expiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
     it("rejects when the batch status changes while it is being parsed", async () => {
       const fixture = await createFixture(db, []);
       const supabase = fakeSupabase();
