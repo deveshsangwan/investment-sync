@@ -18,7 +18,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   EmptyState,
   PageHeader,
@@ -45,11 +45,14 @@ import {
 import { ConvexSessionGate } from "../convex-provider";
 import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
+import {
+  useHoldingsNavigation,
+  type PositionStatus,
+  type SortKey,
+} from "@/components/holdings-navigation";
+
 type Positions = FunctionReturnType<typeof api.portfolio.positions>;
 type Position = Positions["current" | "exited"][number] & { isExited: boolean };
-
-type PositionStatus = "current" | "exited" | "all";
-type SortKey = "value" | "pnl" | "return" | "name";
 
 const controlClass =
   "h-11 rounded-[8px] border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
@@ -86,12 +89,46 @@ export function HoldingsClient() {
 function HoldingsData() {
   const { formatInr } = useAmountFormatters();
   const positions = useCachedQuery(api.portfolio.positions);
-  const [search, setSearch] = useState("");
-  const [assetClass, setAssetClass] = useState("all");
-  const [account, setAccount] = useState("all");
-  const [currency, setCurrency] = useState("all");
-  const [status, setStatus] = useState<PositionStatus>("current");
-  const [sort, setSort] = useState<SortKey>("value");
+  const { savedView, saveView, isReturningToHoldings } =
+    useHoldingsNavigation();
+  const initialView = isReturningToHoldings ? savedView : null;
+  const [search, setSearch] = useState(initialView?.search ?? "");
+  const [assetClass, setAssetClass] = useState(
+    initialView?.assetClass ?? "all",
+  );
+  const [account, setAccount] = useState(initialView?.account ?? "all");
+  const [currency, setCurrency] = useState(initialView?.currency ?? "all");
+  const [status, setStatus] = useState<PositionStatus>(
+    initialView?.status ?? "current",
+  );
+  const [sort, setSort] = useState<SortKey>(initialView?.sort ?? "value");
+
+  const hasRestoredScroll = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!positions || !initialView || hasRestoredScroll.current) return;
+
+    const restoreScroll = () =>
+      window.scrollTo({ top: initialView.scrollY, behavior: "instant" });
+    restoreScroll();
+    const frame = requestAnimationFrame(() => {
+      restoreScroll();
+      hasRestoredScroll.current = true;
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [positions, initialView]);
+
+  const rememberView = () =>
+    saveView({
+      search,
+      assetClass,
+      account,
+      currency,
+      status,
+      sort,
+      scrollY: window.scrollY,
+    });
 
   const allPositions: Position[] = [
     ...(positions?.current.map((item) => ({
@@ -282,6 +319,7 @@ function HoldingsData() {
               <TableBody>
                 {visiblePositions.map((position) => (
                   <PositionTableRow
+                    onOpen={rememberView}
                     key={`${position.id}-${position.isExited}`}
                     position={position}
                   />
@@ -292,6 +330,7 @@ function HoldingsData() {
           <div className="divide-y md:hidden">
             {visiblePositions.map((position) => (
               <PositionCard
+                onOpen={rememberView}
                 key={`${position.id}-${position.isExited}`}
                 position={position}
               />
@@ -324,7 +363,13 @@ function Summary({
   );
 }
 
-function PositionTableRow({ position }: { position: Position }) {
+function PositionTableRow({
+  position,
+  onOpen,
+}: {
+  position: Position;
+  onOpen: () => void;
+}) {
   const { formatInr } = useAmountFormatters();
 
   const tone =
@@ -336,6 +381,7 @@ function PositionTableRow({ position }: { position: Position }) {
           <Link
             className="min-w-0 max-w-72"
             href={`/dashboard/holdings/${encodeURIComponent(position.id)}`}
+            onNavigate={onOpen}
           >
             <InstrumentIdentity
               name={position.instrumentName}
@@ -377,7 +423,13 @@ function PositionTableRow({ position }: { position: Position }) {
   );
 }
 
-function PositionCard({ position }: { position: Position }) {
+function PositionCard({
+  position,
+  onOpen,
+}: {
+  position: Position;
+  onOpen: () => void;
+}) {
   const { formatInr } = useAmountFormatters();
 
   const tone =
@@ -385,6 +437,7 @@ function PositionCard({ position }: { position: Position }) {
   return (
     <Link
       href={`/dashboard/holdings/${encodeURIComponent(position.id)}`}
+      onNavigate={onOpen}
       className="block p-4 transition-colors hover:bg-muted/35"
     >
       <div className="flex items-center justify-between gap-3">

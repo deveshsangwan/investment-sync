@@ -16,6 +16,7 @@ import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { usePathname } from "next/navigation";
 import { ErrorState, PageShell } from "@/components/portfolio-ui";
+import { HoldingsNavigationProvider } from "@/components/holdings-navigation";
 import { QueryCacheProvider } from "./query-cache-provider";
 
 type ConvexSessionStatus =
@@ -271,7 +272,11 @@ function ProvisionCurrentUser({
   return (
     <ConvexSessionContext.Provider value={value}>
       <QueryCacheProvider enabled={exposedStatus === "ready"}>
-        {children}
+        <HoldingsNavigationProvider
+          key={exposedStatus === "ready" ? "ready" : "unavailable"}
+        >
+          {children}
+        </HoldingsNavigationProvider>
       </QueryCacheProvider>
     </ConvexSessionContext.Provider>
   );
