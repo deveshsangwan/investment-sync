@@ -111,6 +111,7 @@ export interface PortfolioProjection {
   projectorVersion: "portfolio-v1";
   asOfDate: string | null;
   positions: PositionProjection[];
+  detailPositions?: PositionProjection[];
   totals: NativeTotal[];
   assetClasses: Array<{
     assetClass: AssetClass;

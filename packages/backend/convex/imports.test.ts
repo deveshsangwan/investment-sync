@@ -1,4 +1,5 @@
 import { convexTest } from "convex-test";
+import { parserGoldenFixtures } from "../../importers/src/golden-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import {
@@ -154,6 +155,42 @@ afterEach(() => {
 });
 
 describe("import lifecycle", () => {
+  it("rejects an oversized parsed file before writing any staging chunks", async () => {
+    const state = await setup();
+    const fixture = parserGoldenFixtures()[0];
+    if (!fixture) throw new Error("Missing CSV parser fixture");
+    const lines = fixture.file.content.toString("utf8").split("\n");
+    const data = lines.pop();
+    if (!data) throw new Error("Missing CSV fixture row");
+    const content = [
+      ...lines,
+      ...Array.from({ length: 1101 }, () => data),
+    ].join("\n");
+    const blob = new Blob([content]);
+    const { batchId } = await state.owner.mutation(api.imports.createUpload, {
+      fileName: "fake-oversized.csv",
+      sizeBytes: blob.size,
+    });
+    const storageId = await state.t.run((ctx) => ctx.storage.store(blob));
+    await state.owner.mutation(api.imports.attachUpload, {
+      batchId,
+      storageId,
+    });
+    await state.t.action(internal.actions.parseImport.parseImport, {
+      batchId,
+      attempt: 1,
+    });
+    await expect(
+      state.owner.query(api.imports.get, { batchId }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      rowCount: 0,
+      errorMessage: "Import exceeds 1100 rows or 512 KiB of normalized data",
+    });
+    await state.t.run(async (ctx) => {
+      expect(await ctx.db.query("importRowChunks").collect()).toHaveLength(0);
+    });
+  });
   it("exposes availability without exposing storage IDs or download URLs", async () => {
     const state = await stage();
     const view = await state.owner.query(api.imports.get, {

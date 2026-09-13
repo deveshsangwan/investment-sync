@@ -14,6 +14,15 @@ import {
   sourceFile,
 } from "./model/imports";
 import { batchView } from "./model/importValidators";
+import { commitBatch } from "./model/publication";
+import { commitResultValidator } from "./model/portfolioValidators";
+
+export const commit = mutation({
+  args: { batchId: v.id("importBatches") },
+  returns: commitResultValidator,
+  handler: async (ctx, { batchId }) =>
+    commitBatch(ctx, await requireBatch(ctx, batchId, true)),
+});
 
 export const createUpload = mutation({
   args: {
@@ -198,5 +207,22 @@ export const list = query({
         result.page.map((batch) => batchToView(ctx, batch)),
       ),
     };
+  },
+});
+
+export const latestCommitted = query({
+  args: {},
+  returns: v.union(batchView, v.null()),
+  handler: async (ctx) => {
+    const { household } = await requireCurrentMembership(ctx);
+    const batch = await ctx.db
+      .query("importBatches")
+      .withIndex("by_householdId_and_status_and_committedAt", (query) =>
+        query.eq("householdId", household._id).eq("status", "committed"),
+      )
+      .order("desc")
+      .first();
+
+    return batch ? batchToView(ctx, batch) : null;
   },
 });

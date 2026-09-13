@@ -253,9 +253,10 @@ function selectedHoldingDetail(
   quote: ValuationQuote,
   positionKey: string,
 ) {
-  const position = projection.positions.find(
-    (candidate) => candidate.positionKey === positionKey,
-  );
+  const position = [
+    ...projection.positions,
+    ...(projection.detailPositions ?? []),
+  ].find((candidate) => candidate.positionKey === positionKey);
   if (!position) return null;
 
   const rate = requiredRate(

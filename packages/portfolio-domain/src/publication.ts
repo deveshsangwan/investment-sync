@@ -26,6 +26,7 @@ import type {
   PublicationInput,
   TransactionFact,
   ValuationRow,
+  PositionProjection,
 } from "./types";
 
 export function buildPortfolioPublication(
@@ -88,23 +89,33 @@ export function buildPortfolioPublication(
   const transactionsByAccountInstrument = groupBy(transactions, (fact) =>
     JSON.stringify([fact.accountKey, fact.instrumentKey]),
   );
+  const projectPosition = (holding: HoldingFact): PositionProjection => ({
+    positionKey: holding.positionKey,
+    status: currentFacts.has(holding)
+      ? ("current" as const)
+      : ("exited" as const),
+    holding,
+    history: historyByPosition.get(holding.positionKey) ?? [],
+    transactions:
+      transactionsByAccountInstrument.get(
+        JSON.stringify([holding.accountKey, holding.instrumentKey]),
+      ) ?? [],
+    instrumentHistory: historyByInstrument.get(holding.instrumentKey) ?? [],
+    instrumentTransactions:
+      transactionsByInstrument.get(holding.instrumentKey) ?? [],
+  });
   const positions = [...selected.current, ...selected.exited].map(
-    (holding) => ({
-      positionKey: holding.positionKey,
-      status: currentFacts.has(holding)
-        ? ("current" as const)
-        : ("exited" as const),
-      holding,
-      history: historyByPosition.get(holding.positionKey) ?? [],
-      transactions:
-        transactionsByAccountInstrument.get(
-          JSON.stringify([holding.accountKey, holding.instrumentKey]),
-        ) ?? [],
-      instrumentHistory: historyByInstrument.get(holding.instrumentKey) ?? [],
-      instrumentTransactions:
-        transactionsByInstrument.get(holding.instrumentKey) ?? [],
-    }),
+    projectPosition,
   );
+  const visiblePositionKeys = new Set(
+    positions.map((position) => position.positionKey),
+  );
+  const latestByPosition = new Map(
+    datedHoldings.map((holding) => [holding.positionKey, holding]),
+  );
+  const detailPositions = [...latestByPosition.values()]
+    .filter((holding) => !visiblePositionKeys.has(holding.positionKey))
+    .map(projectPosition);
   const totals = nativeTotals(selected.current.map((fact) => fact.row));
   const assetClasses = [...new Set(eligible.map((fact) => fact.row.assetClass))]
     .sort()
@@ -123,6 +134,7 @@ export function buildPortfolioPublication(
     projectorVersion: "portfolio-v1" as const,
     asOfDate: selected.current[0]?.snapshotDate ?? null,
     positions,
+    detailPositions,
     totals,
     assetClasses,
     timeline: valuations.length
@@ -153,7 +165,16 @@ export function buildPortfolioPublication(
     projection,
     reconciliation,
     digest: bytesToHex(
-      sha256(stableJson({ facts, projection, reconciliation })),
+      // Derived histories repeat immutable facts. Hash the versioned inputs
+      // and reconciliation once so digest work scales with source history.
+      sha256(
+        stableJson({
+          format: "portfolio-input-v2",
+          projectorVersion: projection.projectorVersion,
+          facts,
+          reconciliation,
+        }),
+      ),
     ),
   };
 }

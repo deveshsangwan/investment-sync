@@ -45,7 +45,7 @@ export const storeChunk = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await currentAttempt(ctx, args.batchId, args.attempt);
+    const batch = await currentAttempt(ctx, args.batchId, args.attempt);
     const bytes = utf8Bytes(args.rowsJson);
     if (
       !Number.isSafeInteger(args.index) ||
@@ -81,7 +81,41 @@ export const storeChunk = internalMutation({
       return null;
     }
 
+    let stagedRows = batch.stagedRows ?? 0;
+    let stagedBytes = batch.stagedBytes ?? 0;
+    let stagedChunks = batch.stagedChunks ?? 0;
+    if (batch.stagedRows === undefined) {
+      const prior = ctx.db
+        .query("importRowChunks")
+        .withIndex("by_batchId_and_attempt_and_index", (q) =>
+          q.eq("batchId", args.batchId).eq("attempt", args.attempt),
+        );
+      for await (const chunk of prior) {
+        stagedRows += chunk.count;
+        stagedBytes += chunk.bytes;
+        stagedChunks++;
+        if (
+          stagedRows > importLimits.rows ||
+          stagedBytes - stagedChunks + 1 > importLimits.normalizedBytes
+        )
+          throw new Error("Import capacity exceeded");
+      }
+    }
+    stagedRows += args.count;
+    stagedBytes += bytes;
+    stagedChunks++;
+    if (
+      stagedRows > importLimits.rows ||
+      stagedBytes - stagedChunks + 1 > importLimits.normalizedBytes
+    )
+      throw new Error("Import capacity exceeded");
+
     await ctx.db.insert("importRowChunks", { ...args, bytes });
+    await ctx.db.patch("importBatches", batch._id, {
+      stagedRows,
+      stagedBytes,
+      stagedChunks,
+    });
     return null;
   },
 });

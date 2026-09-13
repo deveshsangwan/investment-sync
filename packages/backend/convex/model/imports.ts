@@ -24,7 +24,11 @@ export async function sourceFile(ctx: QueryCtx, batchId: Id<"importBatches">) {
     .query("sourceFiles")
     .withIndex("by_batchId", (q) => q.eq("batchId", batchId))
     .unique();
-  if (!file) throw new Error("Missing source file reservation");
+  if (!file)
+    throw new ConvexError({
+      code: "NOT_FOUND",
+      message: "Source file reservation not found",
+    });
   return file;
 }
 
@@ -42,6 +46,7 @@ export async function currentAttempt(
 export async function readVerifiedRows(
   ctx: QueryCtx,
   batch: Doc<"importBatches">,
+  limits: { rows: number; normalizedBytes: number } = importLimits,
 ) {
   if (!batch.manifest) throw new Error("Missing chunk manifest");
   const chunks = await ctx.db
@@ -74,8 +79,8 @@ export async function readVerifiedRows(
     rows.push(...values);
     bytes += chunk.bytes;
     if (
-      rows.length > importLimits.rows ||
-      bytes > importLimits.normalizedBytes + importLimits.chunks
+      rows.length > limits.rows ||
+      bytes > limits.normalizedBytes + importLimits.chunks
     )
       throw new Error("Import capacity exceeded");
   }
@@ -105,6 +110,7 @@ export async function batchToView(ctx: QueryCtx, batch: Doc<"importBatches">) {
     expiresAt: file.expiresAt,
     processedAt: batch.processedAt ?? null,
     committedAt: batch.committedAt ?? null,
+    committedVersionId: batch.committedVersionId ?? null,
   };
 }
 
@@ -122,6 +128,9 @@ export async function beginParse(
     manifest: undefined,
     rowCount: 0,
     normalizedBytes: 0,
+    stagedRows: 0,
+    stagedBytes: 0,
+    stagedChunks: 0,
     previewRowsJson: "[]",
     warnings: [],
   });

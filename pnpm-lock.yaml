@@ -278,12 +278,18 @@ importers:
       '@investment-sync/importers':
         specifier: workspace:*
         version: link:../importers
+      '@investment-sync/portfolio-domain':
+        specifier: workspace:*
+        version: link:../portfolio-domain
       '@noble/hashes':
         specifier: 1.8.0
         version: 1.8.0
       convex:
         specifier: ^1.45.0
         version: 1.45.0(@clerk/clerk-react@5.61.8(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(bufferutil@4.1.0)(react@19.2.6)(utf-8-validate@6.0.6)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@edge-runtime/vm':
         specifier: ^5.0.0

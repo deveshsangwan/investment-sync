@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 export const batchStatus = v.union(
+  v.literal("publishing"),
   v.literal("awaiting_upload"),
   v.literal("uploaded"),
   v.literal("parsing"),
@@ -35,4 +36,5 @@ export const batchView = v.object({
   expiresAt: v.number(),
   processedAt: v.union(v.number(), v.null()),
   committedAt: v.union(v.number(), v.null()),
+  committedVersionId: v.union(v.id("portfolioVersions"), v.null()),
 });

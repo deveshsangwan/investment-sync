@@ -74,6 +74,55 @@ const quote = {
 };
 
 describe("portfolio publication", () => {
+  it("hashes canonical immutable inputs, including metadata and provenance", () => {
+    const first = publish([
+      holding({ metadata: { note: "first", nested: { a: 1, b: 2 } } }),
+    ]);
+    const reordered = publish([
+      holding({ metadata: { nested: { b: 2, a: 1 }, note: "first" } }),
+    ]);
+    const changedMetadata = publish([
+      holding({ metadata: { note: "second", nested: { a: 1, b: 2 } } }),
+    ]);
+    const changedValue = publish([
+      holding({
+        currentValue: 121,
+        metadata: { note: "first", nested: { a: 1, b: 2 } },
+      }),
+    ]);
+    const changedProvenance = buildPortfolioPublication({
+      existingFacts: first.facts.map((fact) => ({
+        ...fact,
+        provenance: { ...fact.provenance, parserVersion: "fake-v2" },
+      })),
+    });
+
+    expect(reordered.digest).toBe(first.digest);
+    expect(reordered.projection).toEqual(first.projection);
+    expect(changedMetadata.reconciliation).toEqual(first.reconciliation);
+    expect(changedMetadata.digest).not.toBe(first.digest);
+    expect(changedValue.digest).not.toBe(first.digest);
+    expect(changedProvenance.digest).not.toBe(first.digest);
+  });
+
+  it("resolves details for a position suppressed by cross-account ranking", () => {
+    const publication = publish([
+      holding({ accountName: "First account" }),
+      holding({ accountName: "Second account", sourceDate: "2025-02-01" }),
+    ]);
+    expect(publication.projection.positions).toHaveLength(1);
+    const suppressed = publication.projection.detailPositions?.[0];
+    if (!suppressed) throw new Error("Expected a detail-only position");
+    const detail = valuePortfolioPublication(publication.projection, quote, {
+      view: "holdingDetail",
+      positionKey: suppressed.positionKey,
+    });
+    expect(detail?.holding).toMatchObject({
+      accountName: "First account",
+      isCurrent: false,
+    });
+    expect(detail?.history).toHaveLength(1);
+  });
   it("publishes exact native totals and keeps raw source precision", () => {
     const first = holding();
     const second = holding({ symbol: "BETA", instrumentName: "BETA" });

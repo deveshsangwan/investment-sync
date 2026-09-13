@@ -90,7 +90,10 @@ export const expireParseLeases = internalMutation({
     const batches = await ctx.db
       .query("importBatches")
       .withIndex("by_status_and_leaseExpiresAt", (q) =>
-        q.eq("status", "parsing").lte("leaseExpiresAt", Date.now()),
+        q
+          .eq("status", "parsing")
+          .gt("leaseExpiresAt", 0)
+          .lte("leaseExpiresAt", Date.now()),
       )
       .take(50);
     for (const batch of batches)

@@ -1,7 +1,7 @@
 import { exactNormalizedImportRowSchema } from "@investment-sync/importers/exact-types";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
-import { Base64 } from "convex/values";
+import { Base64, ConvexError } from "convex/values";
 
 export const importLimits = {
   fileBytes: 262144,
@@ -26,8 +26,17 @@ export function digest(value: string) {
 }
 
 export function storageChecksumToHex(value: string) {
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(value))
+    throw new ConvexError({
+      code: "VALIDATION",
+      message: "Invalid storage SHA-256 checksum",
+    });
   const bytes = Base64.toByteArray(value);
-  if (bytes.length !== 32) throw new Error("Invalid storage SHA-256 checksum");
+  if (bytes.length !== 32)
+    throw new ConvexError({
+      code: "VALIDATION",
+      message: "Invalid storage SHA-256 checksum",
+    });
   return bytesToHex(bytes);
 }
 
