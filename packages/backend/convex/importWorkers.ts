@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import {
   digest,
@@ -23,7 +23,7 @@ export const parseInput = internalQuery({
     const batch = await currentAttempt(ctx, args.batchId, args.attempt);
     const file = await sourceFile(ctx, batch._id);
     if (!file.storageId || !file.contentHash || file.status !== "stored")
-      throw new Error("Source file is unavailable");
+      throw new ConvexError("Source file is unavailable");
     return {
       storageId: file.storageId,
       fileName: batch.fileName,
@@ -53,7 +53,7 @@ export const storeChunk = internalMutation({
       args.index >= importLimits.chunks ||
       bytes > importLimits.chunkBytes
     )
-      throw new Error("Chunk capacity exceeded");
+      throw new ConvexError("Chunk capacity exceeded");
     const rows = parseRows(args.rowsJson);
     if (
       !rows.length ||
@@ -98,7 +98,7 @@ export const storeChunk = internalMutation({
           stagedRows > importLimits.rows ||
           stagedBytes - stagedChunks + 1 > importLimits.normalizedBytes
         )
-          throw new Error("Import capacity exceeded");
+          throw new ConvexError("Import capacity exceeded");
       }
     }
     stagedRows += args.count;
@@ -108,7 +108,7 @@ export const storeChunk = internalMutation({
       stagedRows > importLimits.rows ||
       stagedBytes - stagedChunks + 1 > importLimits.normalizedBytes
     )
-      throw new Error("Import capacity exceeded");
+      throw new ConvexError("Import capacity exceeded");
 
     await ctx.db.insert("importRowChunks", { ...args, bytes });
     await ctx.db.patch("importBatches", batch._id, {
@@ -143,12 +143,12 @@ export const finishParse = internalMutation({
       args.warnings.length > 100 ||
       utf8Bytes(JSON.stringify(args.warnings)) > 16384
     )
-      throw new Error("Import capacity exceeded");
+      throw new ConvexError("Import capacity exceeded");
     const rows = await readVerifiedRows(ctx, { ...batch, ...args });
     validateIdentityCapacity(rows);
     const file = await sourceFile(ctx, batch._id);
     if (file.contentHash !== args.contentHash)
-      throw new Error("Source file checksum mismatch");
+      throw new ConvexError("Source file checksum mismatch");
     const duplicate = await ctx.db
       .query("importDedupeKeys")
       .withIndex("by_householdId_and_key", (q) =>
@@ -158,7 +158,7 @@ export const finishParse = internalMutation({
       )
       .unique();
     if (duplicate)
-      throw new Error(
+      throw new ConvexError(
         "This file and parser version have already been committed",
       );
 

@@ -82,7 +82,7 @@ export async function readVerifiedRows(
       rows.length > limits.rows ||
       bytes > limits.normalizedBytes + importLimits.chunks
     )
-      throw new Error("Import capacity exceeded");
+      throw new ConvexError("Import capacity exceeded");
   }
 
   if (
@@ -111,6 +111,7 @@ export async function batchToView(ctx: QueryCtx, batch: Doc<"importBatches">) {
     processedAt: batch.processedAt ?? null,
     committedAt: batch.committedAt ?? null,
     committedVersionId: batch.committedVersionId ?? null,
+    publicationAttempt: batch.publicationAttempt ?? 0,
   };
 }
 

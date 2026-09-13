@@ -21,6 +21,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./import-validation": "./src/import-validation.ts",
     "./types": "./src/types.ts",
     "./exact-types": "./src/exact-types.ts",
     "./numeric": "./src/numeric.ts",

@@ -10,8 +10,8 @@ The current ignored backend configuration selects personal cloud development dep
 | ----- | ------------------------------------------------------ | ------------------------------------- | -------------- | ----------------------------------------------------------------- |
 | 2     | Exact import contract and pure portfolio publication   | Root                                  | Committed      | `a59b0b2`; Phase 2 verification record                            |
 | 3     | Upload, parsing, preview, retries and source retention | `phase3_backend` and root web work    | Committed      | `ad6b170`; final checks, live transport and both reviews approved |
-| 4     | Atomic publication, queries and FX refresh             | Backend and isolated read workstreams | Verified | Codex approved; checks and live parity passed; owner permits deferred Opus         |
-| 5     | Convex web conversion and browser parity               | Pending                               | Planned        | Authenticated synthetic-data browser checks pending               |
+| 4     | Atomic publication, queries and FX refresh             | Backend and isolated read workstreams | Committed | `f5bfcb2`; Codex and deferred Opus approved         |
+| 5     | Convex web conversion and browser parity               | `phase5_web` and root                 | Committed | Phase 5 web conversion commit; 24 checks, eight builds, browser parity and both final reviews approved |
 
 Unrelated untracked installed agent instructions, skills and the original handoff remain excluded from implementation commits.
 
@@ -130,3 +130,125 @@ All five accepted Codex findings are fixed. The independent GPT-5.6 Sol reviewer
 - `CONVEX_DEPLOYMENT=dev:hardy-barracuda-115 node /tmp/phase4-document-size-check.mjs`: exit 0. Largest stored UTF-8 JSON document was 79490 bytes, below 524288. The final candidate used 139 receipts, down from 192 before scope packing. Log `/tmp/phase4-final-fixes-documents.log` and receipts `/tmp/phase4-document-size-receipts.json`.
 
 The owner explicitly answered "Proceed now; run Opus when available." Phase 4 may be committed and Phase 5 may begin while the deferred Opus review awaits its quota reset. That review remains required, and any findings will be addressed before closing Phase 5.
+
+Phase 4 commit: `f5bfcb2`. Phase 5 review base is that commit. The web implementation workstream `phase5_web` owns `/tmp/investment-sync-phase5-web`; root owns integration, development configuration, browser verification and the deferred Opus review. The ignored web Convex URL now selects personal development `hardy-barracuda-115`.
+
+## Phase 5 integration and browser verification
+
+The complete web conversion is integrated against `f5bfcb2`, still uncommitted pending browser fixes and independent reviews. Generated Convex queries now drive dashboard, holdings, holding detail, asset-class detail and settings. The original upload flow uses direct Storage transfer and subscribed parsing/publication/history. The temporary development-only provider and upload UI, web tRPC provider and unused client dependencies are removed. ThemeProvider remains at the application root. Public import limits are shared with the backend without changing their values. Batch views expose the existing publication attempt counter so the UI correlates an asynchronous attempt with its outcome without a fixed delay.
+
+Initial integrated checks:
+
+- `TEST_DATABASE_URL=postgresql://investment_sync:investment_sync@127.0.0.1:54329/investment_sync_test pnpm exec turbo run lint typecheck test --force --concurrency=2`: exit 0, all 24 tasks passed, including 97 backend and 37 web tests and the synthetic Postgres integration suites. Log `/tmp/phase5-full-checks.log`.
+- `pnpm exec turbo run build --force --concurrency=2`: exit 0, all eight builds passed. Log `/tmp/phase5-full-build.log`.
+- `CONVEX_DEPLOYMENT=dev:hardy-barracuda-115 pnpm --filter @investment-sync/backend exec convex dev --once`: exit 0, functions ready. Log `/tmp/phase5-backend-deploy.log`.
+- Web production build repeated after restoring ThemeProvider: exit 0. Log `/tmp/phase5-theme-web-build.log`.
+
+Browser uses `agent-browser --session convex-dev`, local `next start --port 3000`, the explicit personal-development Convex URL, and the owner's authorized development Clerk account. This verifies a production-mode build against development data; it does not claim a separately provisioned preview deployment or production cutover. Generated inputs live under `/tmp/convex-browser-fixtures/`; credentials and sign-in tickets stay outside committed files and command output.
+
+Confirmed browser behavior before final review:
+
+- Empty dashboard, holdings and settings render; theme toggles dark/light/dark. Screenshots `/tmp/phase5-empty-dashboard.png`, `/tmp/phase5-empty-holdings.png`, `/tmp/phase5-empty-settings.png`.
+- The original previously parsed stock history entry applies successfully. Applying changes to Done through its subscription. Already-open dashboard and holdings tabs change from empty to FAKECO quantity 2, current value INR 250 without refresh. Screenshots `/tmp/phase5-publishing-import.png`, `/tmp/phase5-populated-dashboard.png`.
+- All five supported formats pass select/review/apply/done through the original UI: stock CSV, mutual-fund CSV, NPS CSV, investment XLSX and Vested XLSX. Open dashboard and accounts react to the resulting data. Screenshots `/tmp/phase5-all-formats-dashboard.png`, `/tmp/phase5-populated-settings.png`.
+- Unsupported TXT and a 262145-byte CSV show the expected validation errors and disable Review before upload.
+- A malformed supported CSV reaches a parsing failure; retry returns the same valid parser rejection. This exposed a missing replacement-file action, which is being fixed before closure.
+- A real development FX-unavailable transition reaches the dashboard query boundary. The test restores the actual provider quote in `finally`, and Try again restores the portfolio without refresh. `node /tmp/phase5-fx-browser-check.mjs`: exit 0; log `/tmp/phase5-fx-browser-check.log`; screenshots `/tmp/phase5-fx-error.png`, `/tmp/phase5-fx-recovered.png`.
+
+Browser findings remain tracked until reverified: holding links passed an encoded route parameter into the raw-key query; the route now decodes a canonical pathname segment exactly once, with UUID, encoded delimiter, Unicode and literal-percent regressions. A longer offline period spanning JWT expiry left Convex unauthenticated despite an active Clerk session; targeted authentication recovery is in progress. Neither failing scenario is counted as passed.
+
+Further browser receipts:
+
+- Stock detail now passes both an actual Holdings link click and hard reload of the encoded URL. It shows quantity 6 and current value INR 750 after the generated reconnect import. The Indian-stock asset page and NPS holding detail also render, including NPS allocation, contribution/redemption and statement activity. Screenshots `/tmp/phase5-stock-detail-fixed.png`, `/tmp/phase5-stock-asset-detail.png`, `/tmp/phase5-nps-detail.png`, inspected after data loaded.
+- `pnpm --filter @investment-sync/web exec vitest run src/lib/holding-route.test.ts src/features/imports/use-import-workflow.test.ts`: exit 0, eight tests passed. Log `/tmp/phase5-browser-fix-tests.log`.
+- Signing out only the automation Clerk session removes portfolio content and protected navigation redirects to Clerk sign-in. A fresh authorized short-lived development ticket signs in successfully again. Screenshot `/tmp/phase5-signedout.png`; ticket helper receipt `/tmp/phase5-reauth-ticket.log` contains no ticket value.
+- Aborting only the Convex Storage upload request produces the visible transfer error. Removing that interception and retrying transfers successfully; the duplicate already-committed file then receives the expected duplicate rejection from the backend. No second holding is published. Screenshot `/tmp/phase5-upload-transport-error.png`. The duplicate rejection currently includes development worker-location text; this is a presentation follow-up, not a failed duplicate guard.
+- Deferred Phase 4 Opus review started at its quota reset. Claude Code confirmed `claude-opus-5`, session `a49dc778-3327-4f72-abeb-8d758b8195a8`, reviewing isolated `ad6b170..f5bfcb2`. Verdict remains pending.
+
+The final integrated reconnect candidate passed `TEST_DATABASE_URL=postgresql://investment_sync:investment_sync@127.0.0.1:54329/investment_sync_test pnpm exec turbo run lint typecheck test --force --concurrency=2`: exit 0, all 24 tasks, 97 backend tests and 42 web tests. Log `/tmp/phase5-final-checks.log`. The authentication bridge retries only failed authentication once per online event, handles late failures, resets across Clerk identity/session changes, and exposes manual retry. Healthy pages remain mounted. Final expired-token browser verification is still required.
+
+### Final Phase 5 browser candidate
+
+- `pnpm exec turbo run build --force --concurrency=2`: exit 0, all eight builds passed. Log `/tmp/phase5-final-build.log`.
+- `node /tmp/phase5-reconnect-browser-check.mjs`: exit 0. The browser stayed offline for 80 seconds, beyond the Clerk token lifetime, while a generated stock import committed on personal development. The signed-in session reached the new authentication error state. Reconnecting recovered authentication and FAKECO's INR 1000 value automatically; a document marker remained unchanged, proving no page refresh. Receipts `/tmp/phase5-reconnect-browser-check.log`, `/tmp/phase5-reconnect-browser-receipt.json`; inspected screenshots `/tmp/phase5-expired-token-offline.png`, `/tmp/phase5-reconnected-dashboard-fixed.png`.
+- The failed-parser panel's Choose another file action returns to Select. A valid replacement file then reaches Review and applies successfully. A healthy `online` event preserves the selected file and Select state. The replacement was an older stock snapshot; it did not replace the later current holding. Screenshot `/tmp/phase5-replacement-import-done.png`.
+- No forbidden web imports remain outside the retained API routes. `git diff --check` passes.
+
+The implementation and required browser scenarios now pass on the local production-mode preview connected to personal development. The complete uncommitted Phase 5 surface is frozen against `f5bfcb2` for independent Codex and Opus 5 review. A separately provisioned preview deployment and the remaining Phase 1 infrastructure gates are still external follow-ups; no production environment changed.
+
+Phase 5 review dispatch: independent Codex workstream `phase5_review`, GPT-5.6 Sol with extra-high reasoning, and Claude Code `claude-opus-5` session `1624311f-0d0a-4c1c-9b66-bddc524efa70`. Both received `/tmp/phase5-final-review-prompt.txt` and the identical isolated uncommitted snapshot in `/tmp/investment-sync-phase5-review`, pinned by `/tmp/phase5-review-manifest.json`. Root is only performing additional development-mode smoke checks and recording receipts while the source snapshot remains fixed.
+
+## Deferred Phase 4 Opus verdict and triage
+
+Claude Opus 5 session `a49dc778-3327-4f72-abeb-8d758b8195a8` completed read-only review of `ad6b170..f5bfcb2`, exit 0, **Approved**. Full result `/tmp/phase4-opus-result.md`. It independently confirmed all five Codex fixes, atomic activation, source/partial-exit parity, cleanup guards, FX fences and the measured staged capacity path. The temporary review-order exception is now closed.
+
+Root checked the non-blocking findings against the code:
+
+- M1 accepted as a pre-production robustness requirement: add a bounded recurring sweep for expired building publications, with a missed-one-shot regression. Current per-attempt expiration works and is directly callable internally, but there is no recurring publication-lease sweep comparable to parsing. This is required before Phase 7, not an unresolved Phase 4/5 approval blocker.
+- L1 accepted for the same readiness work: translate the public publishing-branch stale-lease failure to an actionable ConvexError. Internal worker fence failures may remain internal errors.
+- L2 recorded as a capacity distinction: the chosen realistic fixture meets the measured 50% document headroom target. The sum of independent configured read ceilings is approximately 21.3k documents, below the 32k platform limit but above a theoretical 16k half-limit. The existing byte budget is not an explicit document-count budget. Tightening the public contract is not silently introduced during parity conversion; evaluate it with the next capacity/production rehearsal.
+- L3 accepted as a presentation/capacity follow-up: derived escaped records can exceed a staging payload even when a normalized row passed parsing. Commit rejects safely with the old portfolio intact. Validate the derived size earlier or make the rejection actionable before production.
+- L4 accepted as bounded cleanup overhead: active expired versions are reconsidered on each paginated sweep. This does not starve later pages because the sweep continues by cursor. Exclude retained active versions from repeated scheduling during production hardening.
+- L5 deferred to schema/migration compatibility work: partially annotated scopes are not produced by the current writer; a mixed-format future version needs complete required-scope checking before choosing the indexed asset read.
+- L6 accepted: gate publication metrics on development before production cutover, matching public-read metrics. This remains a development-only run.
+- L7 confirmed: `readVerifiedRows` has one caller and an unused optional limits override. Remove the unused flexibility when the backend readiness follow-ups are implemented.
+
+Suggestions triaged: retain the safely development-gated forced-failure hook for the current capacity regression rather than changing the verified publication architecture now. Phase 6 must preserve exact immutable-fact counts in migrated version roots so the first subsequent import satisfies the manifest invariant. Initial FX refresh remains an explicit environment setup check; do not add query-side scheduling. Current cash-flow consumers sort/aggregate and field-for-field parity passes, so changing their order is not required for this phase.
+
+Development-mode follow-up also passed on the frozen source: `pnpm dev:web` started without watcher errors, and authenticated browser navigation rendered dashboard, holdings, holding detail, asset class, settings and uploads. Every route returned HTTP 200. Log `/tmp/phase5-dev-web-smoke.log`; inspected screenshots `/tmp/phase5-dev-dashboard.png`, `/tmp/phase5-dev-holding-detail.png`, `/tmp/phase5-dev-uploads.png`. This supplements the complete production-mode browser workflow checks rather than replacing them.
+
+## Phase 5 review follow-up
+
+Independent Codex reviewer `phase5_review`, GPT-5.6 Sol, approved the frozen Phase 5 candidate. It verified the diff/status and every manifest hash. Its sole Low finding matched the recorded duplicate-error presentation issue. Root accepted it and is resolving it at the parser error boundary, alongside the two documentation corrections described below.
+
+`docs/local-development.md` and `apps/web/.env.example` still described the Phase 1 optional Convex provider and Postgres dashboard reads. They now explain that converted pages require the Convex URL, that Postgres remains for legacy comparisons, and that browser data comes from imports in the signed-in development Household. These are documentation additions to the final follow-up surface; the frozen initial review snapshot is unchanged.
+
+Claude Opus 5 also approved the same initial Phase 5 snapshot, session `1624311f-0d0a-4c1c-9b66-bddc524efa70`, exit 0. Full review `/tmp/phase5-opus-result.md`. No Critical or High findings. Root triage:
+
+- M1 accepted and implemented now: expected duplicate, capacity, checksum and unavailable-source failures use string `ConvexError` data across worker calls. The parsing action preserves these safe messages and the known unsupported-format rejection; unexpected diagnostics are logged server-side and stored as a fixed user-facing sentence. A duplicate-worker regression failed before the change, and an actual action-boundary regression reproduced internal diagnostic leakage before passing. The backend now passes 98 tests.
+- L2, L3, L4 accepted and implemented: Imports owns one PageShell around authentication and query errors; holding loading/missing/error states regain a fallback h1 without adding a second success heading; the dashboard import summary has its own compact error boundary so its failure leaves portfolio data visible.
+- S12 accepted: expired source files offer Choose another file without a misleading retry button.
+- L5 is a recorded browser verification gap for a same-tab switch between two different users. The authorized Google-only development account supports same-user sign-out/re-authentication tests, which passed; backend foreign-Household isolation also passes. No cache leak was demonstrated. Add the two-user browser scenario before production, without speculatively reconstructing the Convex client.
+- L6 deferred as maintenance: consolidate public-route matching when changing those routes. This phase does not change the middleware authorization scope.
+- L7 and S10 do not justify changing the verified authentication recovery now. Identity keys intentionally fence sessions; dependent pages are gated during initial authentication/provisioning. No lost ready-state workflow was reproduced.
+- S8 and S9 are optional dead-export/fragment cleanup for Phase 8. S11 proposes a different publication correlation contract; current parsed-only Apply guard plus attempt correlation is correct and tested, so retain it.
+- S13 and S14 are small future UX improvements: a long-publication hint and distinct empty-file validation copy. Neither changes publication correctness or the existing public capacity contract.
+
+The accepted fixes and documentation additions will receive focused follow-up from both reviewers before the Phase 5 commit.
+
+Final accepted-fix receipts:
+
+- Full workspace lint/typecheck/tests: exit 0, 24/24 tasks, including 98 backend, 42 web, 113 API and the real synthetic Postgres integration tests. `/tmp/phase5-approved-fixes-checks.log`.
+- Full build: exit 0, 8/8 tasks. `/tmp/phase5-approved-fixes-build.log`.
+- Explicit personal-development deploy: exit 0, functions ready on `hardy-barracuda-115`. `/tmp/phase5-approved-fixes-deploy.log`.
+- In the final production-mode browser build, retrying the generated duplicate file shows the exact duplicate rejection with no `Uncaught Error` or `importWorkers.ts` text anywhere in the page. The malformed-file retry retains the known unsupported-format message. Inspected `/tmp/phase5-clean-duplicate-error.png`.
+- A missing holding has exactly one h1, Holding. Following the real FAKECO link produces exactly one h1, FAKECO, and the expected INR 1000 value.
+- `/tmp/phase5-fallback-browser-check.mjs` exited 0. Browser-local boundary-state injection verifies the holding error heading and retry, compact History unavailable while portfolio data stays visible, and contained Imports error/retry. These are rendering probes, not fabricated backend query failures. The real FX failure and expired-token reconnect receipts above still cover runtime failure/recovery. Inspected screenshots `/tmp/phase5-holding-error-heading.png`, `/tmp/phase5-dashboard-import-error-isolated.png`, `/tmp/phase5-uploads-error-container.png`.
+
+The final follow-up is pinned by `/tmp/phase5-review-v2-manifest.json`, diff and status. The initial snapshot artifacts are retained with the `phase5-review-v1` prefix. Source and tests are frozen during the focused reviews; only the review verdict and final commit receipt may be added afterward.
+
+### Final focused-review corrections
+
+The V2 focused reviews requested two further corrections. Codex found that the compact dashboard history fallback discarded the boundary's retry action. Opus found that the single unsupported-format allow-list hid other parser validation messages, such as a detected Tickertape file with missing headers. Root accepted both findings.
+
+The boundary now passes its retry callback to custom fallbacks, and the compact import summary renders Try again. The parser call has its own validation boundary that preserves parser Error messages as ConvexError data, matching the legacy upload response. Worker/internal errors still use the fixed generic public message. A new real-action regression for a detected malformed stock CSV failed with the generic message before the correction. The follow-up changes only four implementation/test files.
+
+Opus also noted that the publication action can persist wrapped worker errors in rare races. This is unchanged from the initial candidate and is a non-blocking pre-production follow-up, alongside the Phase 4 public lease-error work. Apply the same expected-error versus internal-diagnostic separation before Phase 7.
+
+The additional real Imports authentication test also passed: `/tmp/phase5-uploads-reconnect-check.log` records 80 seconds offline with an active Clerk identity, the expected auth error, then automatic recovery without a page refresh. Root inspected `/tmp/phase5-uploads-auth-error-container.png` and confirmed PageShell padding.
+
+V3 final correction receipts:
+
+- `/tmp/phase5-v3-checks.log`: exit 0, 24/24 workspace lint/typecheck/test tasks, backend 99 and web 42 tests. `/tmp/phase5-v3-build.log`: exit 0, 8/8 builds. `/tmp/phase5-v3-deploy.log`: exit 0 on explicit personal development.
+- `/tmp/phase5-dashboard-retry-check.log`: exit 0. The compact history fallback's Try again restores the committed import while portfolio content stays mounted and a document marker remains unchanged. Browser-local boundary injection is used only to trigger the rendering state. Inspected `/tmp/phase5-dashboard-history-retry.png`.
+- A real browser upload of generated `browser-test-detected-malformed-stock.csv` now shows `Could not find Tickertape stock holdings header row`, with no generic replacement or stack text. `/tmp/phase5-detected-parser-browser-receipt.json`; inspected `/tmp/phase5-detected-parser-error.png`. No portfolio was published by this failed import.
+
+The four-file correction plus this ledger update is frozen as V3 for narrow final approval. Full candidate: `/tmp/phase5-review-v3-manifest.json`, `/tmp/phase5-review-v3.diff`, `/tmp/phase5-review-v3-status.txt`; changes since V2: `/tmp/phase5-review-v3-followup.diff`. No other implementation changed.
+
+## Phase 5 closure
+
+Both independent reviewers approved the exact final V3 candidate for commit. Codex reviewer `phase5_review`, GPT-5.6 Sol with extra-high reasoning, returned Approved with zero Standards or Spec findings. Claude Code `claude-opus-5`, resumed session `1624311f-0d0a-4c1c-9b66-bddc524efa70`, returned Approved for committing Phase 5, exit 0. Full final Opus result: `/tmp/phase5-opus-v3-result.md`. Both verified the declared correction and retained their conclusions for unchanged files. Root verified every staged implementation/test blob against the V3 manifest. Only these verdict/status receipts were added afterward.
+
+Implementation through Phase 5 is complete and verified in personal development, including the local production-mode web build. The converted web application uses Convex for portfolio data and imports. Production configuration and Postgres/Supabase data remain unchanged. Generated browser-test imports remain in the authorized development Household.
+
+Remaining work begins with Phase 6 migration tooling and generated-data rehearsal, followed by separately authorized Phase 7 production cutover and Phase 8 cleanup after the rollback window. The separately provisioned preview deployment, remaining Phase 1 infrastructure/CI gates and the specifically triaged pre-production checks above remain open. This record does not claim those environments or production migration are complete.

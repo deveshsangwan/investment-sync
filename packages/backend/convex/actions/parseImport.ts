@@ -1,8 +1,11 @@
 "use node";
 
 import { createHash } from "node:crypto";
-import { parseExactImportFile } from "@investment-sync/importers";
-import { v } from "convex/values";
+import {
+  parseExactImportFile,
+  type ImportFile,
+} from "@investment-sync/importers";
+import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
 import {
@@ -25,14 +28,14 @@ export const parseImport = internalAction({
         blob.size !== input.sizeBytes ||
         blob.size > importLimits.fileBytes
       )
-        throw new Error(
+        throw new ConvexError(
           "Source file is unavailable or exceeds the import limit",
         );
       const content = Buffer.from(await blob.arrayBuffer());
       const contentHash = createHash("sha256").update(content).digest("hex");
       if (contentHash !== input.contentHash)
-        throw new Error("Source file checksum mismatch");
-      const result = parseExactImportFile({
+        throw new ConvexError("Source file checksum mismatch");
+      const result = parseSourceFile({
         fileName: input.fileName,
         mimeType: input.mimeType,
         content,
@@ -43,7 +46,7 @@ export const parseImport = internalAction({
         result.rows.length > importLimits.rows ||
         normalizedBytes > importLimits.normalizedBytes
       )
-        throw new Error(
+        throw new ConvexError(
           "Import exceeds 1100 rows or 512 KiB of normalized data",
         );
 
@@ -78,12 +81,31 @@ export const parseImport = internalAction({
         warnings: result.warnings,
       });
     } catch (error) {
+      console.error("Import parsing failed", error);
+
       await ctx.runMutation(internal.importWorkers.failParse, {
         ...args,
-        errorMessage:
-          error instanceof Error ? error.message : "Import parsing failed",
+        errorMessage: parseFailureMessage(error),
       });
     }
     return null;
   },
 });
+
+function parseSourceFile(file: ImportFile) {
+  try {
+    return parseExactImportFile(file);
+  } catch (error) {
+    // Preserve the parser messages exposed by the legacy upload response.
+    throw new ConvexError(
+      error instanceof Error ? error.message : "Import file is invalid",
+    );
+  }
+}
+
+function parseFailureMessage(error: unknown) {
+  if (error instanceof ConvexError && typeof error.data === "string")
+    return error.data;
+
+  return "This file could not be parsed. Try again or choose another file.";
+}

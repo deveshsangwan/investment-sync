@@ -22,14 +22,13 @@ import {
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
-import { EmptyPortfolio, SetupRequired } from "@/components/dashboard-states";
+import { EmptyPortfolio } from "@/components/dashboard-states";
 import {
   AllocationDonutChart,
   PortfolioTimelineChart,
 } from "@/components/portfolio-charts";
 import {
   EmptyState,
-  ErrorState,
   PageHeader,
   PageShell,
   PortfolioContentSkeleton,
@@ -49,62 +48,37 @@ import {
   sourceLabel,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { trpc } from "../providers";
+import { api } from "@investment-sync/backend/api";
+import { useQuery } from "convex/react";
+import { ConvexSessionGate } from "../convex-provider";
+import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
-export function DashboardClient({
-  isDataConfigured,
-}: {
-  isDataConfigured: boolean;
-}) {
-  const { formatInr } = useAmountFormatters();
-
-  const overview = trpc.portfolio.overview.useQuery(undefined, {
-    enabled: isDataConfigured,
-  });
-  const importHistory = trpc.imports.list.useQuery(undefined, {
-    enabled: isDataConfigured,
-  });
-
-  if (!isDataConfigured) {
-    return (
-      <PageShell>
-        <DashboardHeader />
-        <SetupRequired />
-      </PageShell>
-    );
-  }
-
-  if (overview.isError) {
-    return (
-      <PageShell>
-        <DashboardHeader />
-        <ErrorState
+export function DashboardClient() {
+  return (
+    <PageShell>
+      <DashboardHeader />
+      <ConvexSessionGate loading={<PortfolioContentSkeleton />}>
+        <ConvexQueryBoundary
           title="Portfolio overview is unavailable"
           description="We could not load your latest portfolio data. Your saved holdings have not changed."
-          onRetry={() => void overview.refetch()}
-        />
-      </PageShell>
-    );
-  }
+        >
+          <DashboardData />
+        </ConvexQueryBoundary>
+      </ConvexSessionGate>
+    </PageShell>
+  );
+}
 
-  if (overview.isLoading || !overview.data) {
-    return (
-      <PageShell>
-        <DashboardHeader />
-        <PortfolioContentSkeleton />
-      </PageShell>
-    );
-  }
+function DashboardData() {
+  const { formatInr } = useAmountFormatters();
+  const overview = useQuery(api.portfolio.overview);
 
-  const { holdings, performance, summary, timeline } = overview.data;
+  if (!overview) return <PortfolioContentSkeleton />;
+
+  const { holdings, performance, summary, timeline } = overview;
 
   if (holdings.length === 0) {
-    return (
-      <PageShell>
-        <DashboardHeader />
-        <EmptyPortfolio />
-      </PageShell>
-    );
+    return <EmptyPortfolio />;
   }
 
   const latestSnapshotDate = holdings.reduce<string | null>(
@@ -112,15 +86,6 @@ export function DashboardClient({
       !latest || holding.snapshotDate > latest ? holding.snapshotDate : latest,
     null,
   );
-  const latestCommittedImport = importHistory.data
-    ? [...importHistory.data]
-        .filter((batch) => batch.committedAt)
-        .sort(
-          (left, right) =>
-            (right.committedAt?.getTime() ?? 0) -
-            (left.committedAt?.getTime() ?? 0),
-        )[0]
-    : undefined;
   const topHoldings = [...holdings]
     .sort((left, right) => right.currentValueInInr - left.currentValueInInr)
     .slice(0, 5);
@@ -128,9 +93,7 @@ export function DashboardClient({
     performance.xirr !== undefined && Number.isFinite(performance.xirr);
 
   return (
-    <PageShell>
-      <DashboardHeader />
-
+    <>
       <div className="space-y-8">
         <section
           aria-label="Portfolio summary"
@@ -289,7 +252,7 @@ export function DashboardClient({
             {topHoldings.map((holding) => (
               <li key={holding.id}>
                 <Link
-                  href={`/dashboard/holdings/${holding.id}`}
+                  href={`/dashboard/holdings/${encodeURIComponent(holding.id)}`}
                   className="flex items-center justify-between gap-4 rounded-lg py-4 transition-colors hover:bg-muted/40"
                 >
                   <InstrumentIdentity
@@ -438,23 +401,42 @@ export function DashboardClient({
               </SectionCard>
             </section>
             <div className="mt-5">
-              <ImportSummary
-                isLoading={importHistory.isLoading && !importHistory.data}
-                isError={importHistory.isError && !importHistory.data}
-                source={latestCommittedImport?.sourceType}
-                fileName={latestCommittedImport?.originalFileName}
-                committedAt={latestCommittedImport?.committedAt}
-                sourceFileExpired={
-                  latestCommittedImport
-                    ? !latestCommittedImport.sourceFileAvailable
-                    : false
-                }
-              />
+              <ConvexQueryBoundary
+                title="Import history is unavailable"
+                description="Your portfolio remains available while import history is reloaded."
+                renderFallback={(_fallback, retry) => (
+                  <ImportSummary
+                    isLoading={false}
+                    isError
+                    sourceFileExpired={false}
+                    onRetry={retry}
+                  />
+                )}
+              >
+                <LatestImportSummary />
+              </ConvexQueryBoundary>
             </div>
           </div>
         </details>
       </div>
-    </PageShell>
+    </>
+  );
+}
+
+function LatestImportSummary() {
+  const latestCommittedImport = useQuery(api.imports.latestCommitted);
+
+  return (
+    <ImportSummary
+      isLoading={latestCommittedImport === undefined}
+      isError={false}
+      source={latestCommittedImport?.sourceType ?? undefined}
+      fileName={latestCommittedImport?.fileName}
+      committedAt={latestCommittedImport?.committedAt}
+      sourceFileExpired={
+        latestCommittedImport ? !latestCommittedImport.fileAvailable : false
+      }
+    />
   );
 }
 
@@ -481,13 +463,15 @@ function ImportSummary({
   fileName,
   committedAt,
   sourceFileExpired,
+  onRetry,
 }: {
   isLoading: boolean;
   isError: boolean;
   source?: string;
   fileName?: string;
-  committedAt?: Date | null;
+  committedAt?: number | null;
   sourceFileExpired: boolean;
+  onRetry?: () => void;
 }) {
   const Icon = isError ? CircleAlert : committedAt ? CheckCircle2 : Database;
 
@@ -511,7 +495,19 @@ function ImportSummary({
         {isLoading ? (
           <p className="mt-1 text-sm font-semibold">Checking import history</p>
         ) : isError ? (
-          <p className="mt-1 text-sm font-semibold">History unavailable</p>
+          <>
+            <p className="mt-1 text-sm font-semibold">History unavailable</p>
+            {onRetry ? (
+              <Button
+                className="mt-2"
+                size="sm"
+                variant="ghost"
+                onClick={onRetry}
+              >
+                Try again
+              </Button>
+            ) : null}
+          </>
         ) : committedAt ? (
           <>
             <p className="mt-1 text-sm font-semibold">

@@ -37,4 +37,5 @@ export const batchView = v.object({
   processedAt: v.union(v.number(), v.null()),
   committedAt: v.union(v.number(), v.null()),
   committedVersionId: v.union(v.id("portfolioVersions"), v.null()),
+  publicationAttempt: v.number(),
 });

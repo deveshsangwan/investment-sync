@@ -1,14 +1,13 @@
+import { publicImportLimits } from "../../src/import-limits";
 import { exactNormalizedImportRowSchema } from "@investment-sync/importers/exact-types";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 import { Base64, ConvexError } from "convex/values";
 
 export const importLimits = {
-  fileBytes: 262144,
-  rows: 1100,
+  ...publicImportLimits,
   accounts: 64,
   instruments: 512,
-  normalizedBytes: 524288,
   chunkRows: 100,
   chunkBytes: 65536,
   chunks: 1100,
@@ -70,7 +69,7 @@ export function validateIdentityCapacity(rows: ReturnType<typeof parseRows>) {
     accounts.size > importLimits.accounts ||
     instruments.size > importLimits.instruments
   )
-    throw new Error("Import exceeds 64 accounts or 512 instruments");
+    throw new ConvexError("Import exceeds 64 accounts or 512 instruments");
 }
 
 export function chunkRows(rows: ReturnType<typeof parseRows>) {
@@ -82,7 +81,7 @@ export function chunkRows(rows: ReturnType<typeof parseRows>) {
     const encoded = JSON.stringify(row);
     const rowBytes = utf8Bytes(encoded);
     if (rowBytes + 2 > importLimits.chunkBytes)
-      throw new Error("A normalized row exceeds the chunk byte limit");
+      throw new ConvexError("A normalized row exceeds the chunk byte limit");
 
     if (
       pending.length === importLimits.chunkRows ||

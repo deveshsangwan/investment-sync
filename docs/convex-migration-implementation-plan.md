@@ -1,8 +1,8 @@
 # Convex migration implementation plan
 
-Status: Phase 2 committed; Phases 3–5 implementation authorized for development only; remaining Phase 1 external gates tracked separately
+Status: Implementation through Phase 5 committed, reviewed and verified in personal development; separate preview and remaining Phase 1 external gates tracked separately; Phase 6 onward not started
 
-Review findings, fixes, verification, and pending gates: [`convex-phase-1-review.md`](convex-phase-1-review.md).
+Phase 1 review and external gates: [`convex-phase-1-review.md`](convex-phase-1-review.md). Phases 3–5 changes, review findings and verification: [`convex-phases-3-5-verification.md`](convex-phases-3-5-verification.md).
 
 Decision: migrate the web application fully to a Convex-native backend on a separate branch, prove behavior against the current Postgres and Supabase production system, then perform a one-shot production cutover.
 

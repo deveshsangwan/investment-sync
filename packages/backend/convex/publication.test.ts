@@ -329,6 +329,9 @@ describe("staged publication fences", () => {
       { runId, index: 1 },
     );
     await expect(
+      owner.query(api.imports.get, { batchId: other.batchId }),
+    ).resolves.toMatchObject({ publicationAttempt: 0 });
+    await expect(
       owner.mutation(api.imports.commit, { batchId: other.batchId }),
     ).rejects.toThrow("Another import is publishing");
     await stageAll();
@@ -343,7 +346,7 @@ describe("staged publication fences", () => {
     await t.mutation(internal.publicationWorkers.expire, args);
     await expect(
       owner.query(api.imports.get, { batchId: prepared.batchId }),
-    ).resolves.toMatchObject({ status: "parsed" });
+    ).resolves.toMatchObject({ status: "parsed", publicationAttempt: 1 });
     const retry = await owner.mutation(api.imports.commit, {
       batchId: prepared.batchId,
     });
@@ -357,7 +360,7 @@ describe("staged publication fences", () => {
     });
     await expect(
       owner.query(api.imports.get, { batchId: prepared.batchId }),
-    ).resolves.toMatchObject({ status: "publishing" });
+    ).resolves.toMatchObject({ status: "publishing", publicationAttempt: 2 });
     await t.action(internal.actions.publishPortfolio.publishPortfolio, {
       versionId: retry.versionId,
       attempt: 2,
@@ -367,6 +370,7 @@ describe("staged publication fences", () => {
     ).resolves.toMatchObject({
       status: "committed",
       committedVersionId: retry.versionId,
+      publicationAttempt: 2,
     });
   });
 

@@ -1,12 +1,12 @@
 "use client";
 
-import type { AppRouter } from "@investment-sync/api";
-import type { inferRouterOutputs } from "@trpc/server";
+import { api } from "@investment-sync/backend/api";
+import type { FunctionReturnType } from "convex/server";
+import { useQuery } from "convex/react";
 import { Check, Database, FileUp, Lock } from "lucide-react";
 import Link from "next/link";
 import {
   EmptyState,
-  ErrorState,
   PageHeader,
   PageShell,
   Panel,
@@ -27,12 +27,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { labelize } from "@/lib/format";
-import { trpc } from "../providers";
+import { ConvexSessionGate } from "../convex-provider";
+import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
 export function SettingsClient() {
-  const me = trpc.auth.me.useQuery();
-  const accounts = trpc.accounts.list.useQuery();
-
   return (
     <PageShell>
       <PageHeader
@@ -48,28 +46,39 @@ export function SettingsClient() {
         }
       />
 
+      <ConvexSessionGate loading={<SettingsSkeleton />}>
+        <ConvexQueryBoundary
+          title="Accounts could not be loaded"
+          description="Account and permission details are temporarily unavailable. Your portfolio data has not changed."
+        >
+          <SettingsData />
+        </ConvexQueryBoundary>
+      </ConvexSessionGate>
+    </PageShell>
+  );
+}
+
+function SettingsData() {
+  const current = useQuery(api.users.current);
+  const accounts = useQuery(api.accounts.list);
+  const isOwner = current?.role === "owner";
+
+  return (
+    <>
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {me.isLoading ? (
+        {!current ? (
           <>
             <ProfileSkeleton title="Household" />
             <ProfileSkeleton title="What you can do" />
           </>
-        ) : me.error ? (
-          <div className="lg:col-span-2">
-            <ErrorState
-              title="Your household profile could not be loaded"
-              description="Account and permission details are temporarily unavailable. Your portfolio data has not changed."
-              onRetry={() => void me.refetch()}
-            />
-          </div>
-        ) : me.data?.user ? (
+        ) : (
           <>
             <Panel title="Household">
               <dl className="divide-y divide-border/70 text-sm">
-                <Detail label="Name" value={me.data.user.householdName} />
+                <Detail label="Name" value={current.householdName} />
                 <Detail
                   label="Sign-in email"
-                  value={me.data.user.email ?? "Not recorded"}
+                  value={current.email ?? "Not recorded"}
                 />
               </dl>
               <p className="mt-4 text-xs leading-5 text-muted-foreground">
@@ -82,24 +91,16 @@ export function SettingsClient() {
               <ul className="divide-y divide-border/70 text-sm">
                 <Permission
                   label="Import portfolio files"
-                  isGranted={me.data.permissions.canUpload}
+                  isGranted={isOwner}
                 />
                 <Permission
                   label="Manage household settings"
-                  isGranted={me.data.permissions.canManageHousehold}
+                  isGranted={isOwner}
                 />
                 <Permission label="View portfolio data" isGranted />
               </ul>
             </Panel>
           </>
-        ) : (
-          <div className="lg:col-span-2">
-            <ErrorState
-              title="Household profile unavailable"
-              description="No household profile is attached to this session. Try loading it again."
-              onRetry={() => void me.refetch()}
-            />
-          </div>
         )}
       </section>
 
@@ -110,15 +111,9 @@ export function SettingsClient() {
         </p>
 
         <div className="mt-3">
-          {accounts.isLoading ? (
+          {!accounts ? (
             <AccountsSkeleton />
-          ) : accounts.error ? (
-            <ErrorState
-              title="Portfolio accounts could not be loaded"
-              description="The account inventory is temporarily unavailable. Your saved accounts have not changed."
-              onRetry={() => void accounts.refetch()}
-            />
-          ) : accounts.data.length === 0 ? (
+          ) : accounts.length === 0 ? (
             <EmptyState
               icon={Database}
               title="No portfolio accounts yet"
@@ -130,13 +125,27 @@ export function SettingsClient() {
               }
             />
           ) : (
-            <AccountInventory accounts={accounts.data} />
+            <AccountInventory accounts={accounts} />
           )}
         </div>
       </section>
 
       <AccountsFileInformation />
-    </PageShell>
+    </>
+  );
+}
+
+function SettingsSkeleton() {
+  return (
+    <>
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ProfileSkeleton title="Household" />
+        <ProfileSkeleton title="What you can do" />
+      </section>
+      <section className="mt-8">
+        <AccountsSkeleton />
+      </section>
+    </>
   );
 }
 
@@ -176,7 +185,7 @@ function Permission({
   );
 }
 
-type Account = inferRouterOutputs<AppRouter>["accounts"]["list"][number];
+type Account = FunctionReturnType<typeof api.accounts.list>[number];
 
 function AccountInventory({ accounts }: { accounts: Account[] }) {
   return (

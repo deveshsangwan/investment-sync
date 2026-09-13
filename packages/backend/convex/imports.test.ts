@@ -443,6 +443,64 @@ describe("import lifecycle", () => {
     });
   });
 
+  it("keeps unexpected worker diagnostics out of the public parse failure", async () => {
+    const state = await stage();
+    const duplicateId = await state.t.run(async (ctx) => {
+      const file = await ctx.db.query("sourceFiles").unique();
+      if (!file) throw new Error("Missing test source file");
+
+      const { _id, _creationTime, ...duplicate } = file;
+      return await ctx.db.insert("sourceFiles", duplicate);
+    });
+    const diagnostics = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await state.t.action(internal.actions.parseImport.parseImport, {
+        batchId: state.batchId,
+        attempt: 1,
+      });
+      await state.t.run((ctx) => ctx.db.delete("sourceFiles", duplicateId));
+
+      await expect(
+        state.owner.query(api.imports.get, { batchId: state.batchId }),
+      ).resolves.toMatchObject({
+        status: "failed",
+        errorMessage:
+          "This file could not be parsed. Try again or choose another file.",
+      });
+      expect(diagnostics).toHaveBeenCalled();
+    } finally {
+      diagnostics.mockRestore();
+    }
+  });
+
+  it("preserves the parser explanation for a detected malformed statement", async () => {
+    const { t, owner } = await setup();
+    const content =
+      "https://tickertape.in/portfolio?tab=holdings\nWrong,Headers\n";
+    const { batchId } = await owner.mutation(api.imports.createUpload, {
+      fileName: "malformed-stock.csv",
+      sizeBytes: utf8Bytes(content),
+    });
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob([content], { type: "text/csv" })),
+    );
+    await owner.mutation(api.imports.attachUpload, { batchId, storageId });
+
+    await t.action(internal.actions.parseImport.parseImport, {
+      batchId,
+      attempt: 1,
+    });
+
+    await expect(
+      owner.query(api.imports.get, { batchId }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      rowCount: 0,
+      errorMessage: "Could not find Tickertape stock holdings header row",
+    });
+  });
+
   it("sweeps old unclaimed blobs while preserving attached and recent blobs", async () => {
     const state = await stage();
     const orphan = await state.t.run((ctx) =>
@@ -688,7 +746,9 @@ describe("import lifecycle", () => {
         batchId: state.batchId,
       });
     });
-    await expect(finish(state)).rejects.toThrow("already been committed");
+    await expect(finish(state)).rejects.toMatchObject({
+      data: "This file and parser version have already been committed",
+    });
     await expect(
       state.owner.query(api.imports.get, { batchId: state.batchId }),
     ).resolves.toMatchObject({ status: "parsing" });

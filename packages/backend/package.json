@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./api": "./src/api.ts"
+    "./api": "./src/api.ts",
+    "./import-limits": "./src/import-limits.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
