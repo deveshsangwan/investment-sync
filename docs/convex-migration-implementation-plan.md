@@ -4,6 +4,8 @@ Status: Implementation through Phase 5 committed, reviewed and verified in perso
 
 Phase 1 review and external gates: [`convex-phase-1-review.md`](convex-phase-1-review.md). Phases 3–5 changes, review findings and verification: [`convex-phases-3-5-verification.md`](convex-phases-3-5-verification.md).
 
+Deferred product work outside this migration: [realized sales and accurate exited-position gains](realized-sales-todo.md).
+
 Decision: migrate the web application fully to a Convex-native backend on a separate branch, prove behavior against the current Postgres and Supabase production system, then perform a one-shot production cutover.
 
 This plan supersedes the final recommendation in [`convex-architecture-migration-review.md`](convex-architecture-migration-review.md). That recommendation treated the code's 25,000-row import allowance and installed mobile clients as real product requirements. The owner later clarified that the limit was arbitrary, the application has no outside users, the family is not using the incomplete mobile app, local data is disposable test data, and the only important dataset is in production Postgres and Supabase.
