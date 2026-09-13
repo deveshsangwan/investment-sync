@@ -48,3 +48,16 @@ pnpm dlx agent-browser --session cache-production eval 'window.detailDwellCheck'
 Independent Codex review approved the final fallback changes with no actionable findings. The review confirmed that both views preserve the existing Clerk session gate, query error boundaries, and query-argument validation.
 
 The requested Claude Code Opus 5 review was retried for this fix and again returned the session limit, resetting at 02:40 Asia/Kolkata. Receipt: `/tmp/detail-cache-opus-review.txt`. Opus approval remains pending under the existing authorization to proceed with verified changes.
+
+## Holding entry from another main page
+
+A fresh Holdings → holding-detail navigation exposed an additional ancestor fallback. Before the nested route's fallback arrived, `/dashboard/loading.tsx` always rendered the Overview skeleton. The browser observed headings `Portfolio` → `Holding` → the stock name while the destination was a holding route. Earlier checks started from Overview, where the ancestor was already loaded, so they missed this entry path.
+
+The shared dashboard fallback now chooses the existing holding or asset-class loading view from the destination pathname. Those views continue using the authenticated Convex queries, including retained results. Overview keeps its own fallback.
+
+The regression below starts from a freshly opened `/holdings` page in an authenticated production-build browser. It failed with `wrongOverviewSeen: true` before the fix and passed with `wrongOverviewSeen: false` afterward at a 390 × 844 viewport. Web typecheck and the isolated production build passed. Build receipt: `/tmp/holding-entry-build.log`.
+
+```sh
+pnpm dlx agent-browser --session cache-production open http://localhost:3100/holdings
+pnpm dlx agent-browser --session cache-production eval --stdin < apps/web/scripts/verify-holding-entry.browser.js
+```
