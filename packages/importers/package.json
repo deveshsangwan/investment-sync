@@ -11,11 +11,22 @@
   },
   "dependencies": {
     "csv-parse": "^5.6.0",
+    "decimal.js": "10.6.0",
     "xlsx": "^0.18.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./import-validation": "./src/import-validation.ts",
+    "./types": "./src/types.ts",
+    "./exact-types": "./src/exact-types.ts",
+    "./numeric": "./src/numeric.ts",
+    "./source": "./src/source.ts",
+    "./nps-details": "./src/nps-details.ts",
+    "./exact-adapter": "./src/exact-adapter.ts"
   }
 }

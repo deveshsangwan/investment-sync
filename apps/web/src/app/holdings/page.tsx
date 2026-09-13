@@ -1,4 +1,3 @@
-import { isDataConfigured } from "@investment-sync/api";
 import type { Metadata } from "next";
 import { HoldingsClient } from "./holdings-client";
 
@@ -8,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function HoldingsPage() {
-  return <HoldingsClient isDataConfigured={isDataConfigured()} />;
+  return <HoldingsClient />;
 }

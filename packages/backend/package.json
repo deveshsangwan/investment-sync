@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./api": "./src/api.ts"
+    "./api": "./src/api.ts",
+    "./import-limits": "./src/import-limits.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -13,7 +14,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "convex": "^1.45.0"
+    "convex": "^1.45.0",
+    "@investment-sync/importers": "workspace:*",
+    "@noble/hashes": "1.8.0",
+    "@investment-sync/portfolio-domain": "workspace:*",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",

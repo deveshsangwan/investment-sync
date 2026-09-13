@@ -1,11 +1,11 @@
-import { assetClassEnum } from "@investment-sync/db";
+import {
+  assetClassSchema,
+  type AssetClass,
+} from "@investment-sync/importers/types";
 
-export const assetClassValues = assetClassEnum.enumValues;
-
-export type AssetClass = (typeof assetClassValues)[number];
+export const assetClassValues = assetClassSchema.options;
+export type { AssetClass };
 
 export function parseAssetClass(value: string): AssetClass | undefined {
-  return assetClassValues.includes(value as AssetClass)
-    ? (value as AssetClass)
-    : undefined;
+  return assetClassSchema.safeParse(value).data;
 }

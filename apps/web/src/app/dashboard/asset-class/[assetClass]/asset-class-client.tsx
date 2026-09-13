@@ -1,16 +1,15 @@
 "use client";
 
-import type { AppRouter } from "@investment-sync/api";
-import type { inferRouterOutputs } from "@trpc/server";
+import { api } from "@investment-sync/backend/api";
+import type { FunctionReturnType } from "convex/server";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import Link from "next/link";
 import { ArrowLeft, LineChart, Rows3 } from "lucide-react";
 import { DisplayAmount, HideAmountsButton, Money } from "@/components/amounts";
-import { SetupRequired } from "@/components/dashboard-states";
 import { InstrumentMark } from "@/components/instrument-mark";
 import { PortfolioTimelineChart } from "@/components/portfolio-charts";
 import {
   EmptyState,
-  ErrorState,
   Outcome,
   PageShell,
   Panel,
@@ -39,25 +38,17 @@ import {
   numberOrUndefined,
   qualityLabel,
 } from "@/lib/format";
-import { trpc } from "../../../providers";
+import { ConvexSessionGate } from "../../../convex-provider";
+import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
-type AssetClassDetail =
-  inferRouterOutputs<AppRouter>["portfolio"]["assetClassDetail"];
+type AssetClassDetail = FunctionReturnType<
+  typeof api.portfolio.assetClassDetail
+>;
 type AssetPosition =
   | AssetClassDetail["holdings"][number]
   | AssetClassDetail["exitedHoldings"][number];
 
-export function AssetClassClient({
-  assetClass,
-  isDataConfigured,
-}: {
-  assetClass: AssetClass;
-  isDataConfigured: boolean;
-}) {
-  const detail = trpc.portfolio.assetClassDetail.useQuery(
-    { assetClass },
-    { enabled: isDataConfigured },
-  );
+export function AssetClassClient({ assetClass }: { assetClass: AssetClass }) {
   const meta = assetClassMeta(assetClass);
   const Icon = meta.icon;
 
@@ -80,22 +71,26 @@ export function AssetClassClient({
         </h1>
       </header>
 
-      {!isDataConfigured ? <SetupRequired /> : null}
-
-      {isDataConfigured && detail.isLoading ? (
-        <PortfolioContentSkeleton variant="asset" />
-      ) : null}
-
-      {isDataConfigured && detail.isError ? (
-        <ErrorState
+      <ConvexSessionGate loading={<PortfolioContentSkeleton variant="asset" />}>
+        <ConvexQueryBoundary
+          key={assetClass}
           title="This asset class could not be loaded"
           description="The saved positions are unchanged. Try loading this allocation again."
-          onRetry={() => void detail.refetch()}
-        />
-      ) : null}
-
-      {detail.data ? <AssetClassContent data={detail.data} /> : null}
+        >
+          <AssetClassData assetClass={assetClass} />
+        </ConvexQueryBoundary>
+      </ConvexSessionGate>
     </PageShell>
+  );
+}
+
+function AssetClassData({ assetClass }: { assetClass: AssetClass }) {
+  const detail = useCachedQuery(api.portfolio.assetClassDetail, { assetClass });
+
+  return detail ? (
+    <AssetClassContent data={detail} />
+  ) : (
+    <PortfolioContentSkeleton variant="asset" />
   );
 }
 
@@ -176,7 +171,7 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
               {data.holdings.slice(0, 5).map((holding) => (
                 <li key={holding.id}>
                   <Link
-                    href={`/dashboard/holdings/${holding.id}`}
+                    href={`/dashboard/holdings/${encodeURIComponent(holding.id)}`}
                     className="-mx-2 block rounded-lg px-2 py-1.5 transition-colors duration-150 hover:bg-secondary/70 motion-reduce:transition-none"
                   >
                     <span className="flex items-center justify-between gap-4">
@@ -304,7 +299,7 @@ function PositionRow({
     <TableRow>
       <TableCell>
         <Link
-          href={`/dashboard/holdings/${holding.id}`}
+          href={`/dashboard/holdings/${encodeURIComponent(holding.id)}`}
           className="flex items-center gap-3"
         >
           <InstrumentMark
@@ -384,7 +379,7 @@ function PositionCard({
 }) {
   return (
     <Link
-      href={`/dashboard/holdings/${holding.id}`}
+      href={`/dashboard/holdings/${encodeURIComponent(holding.id)}`}
       className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 py-3.5"
     >
       <InstrumentMark

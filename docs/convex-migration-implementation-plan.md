@@ -1,8 +1,10 @@
 # Convex migration implementation plan
 
-Status: Phase 0 committed; Phase 1 repository milestone verified and Opus 5 approved; external gates pending
+Status: Implementation through Phase 5 committed, reviewed and verified in personal development; separate preview and remaining Phase 1 external gates tracked separately; Phase 6 onward not started
 
-Review findings, fixes, verification, and pending gates: [`convex-phase-1-review.md`](convex-phase-1-review.md).
+Phase 1 review and external gates: [`convex-phase-1-review.md`](convex-phase-1-review.md). Phases 3–5 changes, review findings and verification: [`convex-phases-3-5-verification.md`](convex-phases-3-5-verification.md).
+
+Deferred product work outside this migration: [realized sales and accurate exited-position gains](realized-sales-todo.md).
 
 Decision: migrate the web application fully to a Convex-native backend on a separate branch, prove behavior against the current Postgres and Supabase production system, then perform a one-shot production cutover.
 
@@ -53,9 +55,9 @@ The current mobile source should not force the old backend to remain. Preserve i
 
 ## 3. Execution rules for a fresh agent
 
-1. Work continues on `feat/convex-native-backend`, branched from base commit `aacb583`. Commit Phase 0 before starting Phase 1.
+1. `feat/convex-native-backend` is the migration integration branch. Phase 2 was committed as `a59b0b2`. On 2026-09-13 the owner broadened the work through Phase 5 and authorized periodic commits on one branch. The branch is now `feat/convex-phases-2-through-5` and targets the integration branch. PR #49 stays open against `main`; do not merge it, enable auto-merge, or push migration changes directly to `main`. Preserve the redesigned UI already integrated from `c4e0e73` through `5ff5253`. Production migration and cutover require separate explicit authorization.
 2. Read this plan, the two linked architecture notes, repository instructions, and the current schema and import integration tests before editing code.
-3. Execute in dependency order. Report repository verification and external deployment verification separately. While the owner completes cloud setup, Phase 2 pure-domain work may proceed after Phase 1 repository checks and review pass. Do not claim Phase 1 complete or advance dependent deployment work until its external gates pass.
+3. Execute in dependency order. Report repository verification and external deployment verification separately. While the owner completes cloud setup, Phase 2 pure-domain work may proceed after Phase 1 repository checks and review pass. The owner has confirmed development Clerk setup and authorized development implementation and testing through Phase 5. Remaining billing, production relationship, preview availability, and trusted-main CI gates must be reported separately; they do not authorize production operations and do not block testing on the established personal development deployment.
 4. Keep the current backend runnable until the production rollback window closes.
 5. Treat current Postgres outputs as the behavioral reference, not as the target code structure.
 6. Keep production credentials out of committed files and command output.
@@ -64,6 +66,8 @@ The current mobile source should not force the old backend to remain. Preserve i
 9. Preserve unrelated working-tree changes.
 10. Record any deliberate behavior difference in this document before implementing it.
 11. After each phase or separately tracked repository milestone passes its local completion checks, run a read-only Claude Code review with Claude Opus 5 against the complete diff and its completion criteria. Verify and resolve every blocking finding, rerun affected checks, and obtain an Opus 5 follow-up approval before committing or starting dependent work. The Phase 1 repository milestone may be committed with its external gates explicitly pending, as allowed by rule 3.
+    On 2026-09-13, the owner explicitly approved a narrow exception to rule 11 after Phase 4 passed its final checks, live capacity/parity checks and Codex follow-up: commit Phase 4 and begin Phase 5 while Claude Opus 5 is quota-limited, then run the deferred Opus review when available. This does not waive that review or authorize production changes.
+
 12. Review approvals are evidence, not proof. Record the reviewed revision, actual checks, accepted findings, and outstanding deployment gates. Never describe checked-in generated bindings as proof that codegen or real Clerk sign-in has succeeded on a clean deployment.
 
 ## 4. Target dependency structure
@@ -690,6 +694,18 @@ Old code deleted: none.
 ### Phase 2: explicit import and portfolio domain
 
 Goal: replace hidden SQL inference with one pure publication module while preserving results.
+
+Implementation decisions, recorded for the new contract:
+
+- The existing `parseImportFile` entry point, numeric Normalized Rows, golden outputs, and parser versions remain unchanged. `parseExactImportFile` uses the same supported parsers and appends `-decimal-v1` to each parser version because retaining decimal text changes precision. Adapting historical normalized rows preserves their recorded parser version and labels their numeric origin `legacy_float64`.
+- Exact rows preserve canonical decimal strings for money, quantity, and price, with per-field provenance for source text, numeric XLSX cells, derived decimals, and defaults. Numeric XLSX cells cannot regain precision already lost in the file. Source strings have a 128-character bound. Decimal arithmetic uses decimal.js with 256-digit precision. Source values retain their scale apart from removing redundant zeros; publication rounds effective money facts to four decimals and quantity/price to ten, using HALF_UP to match Postgres. Percentages remain approximate numbers and effective holding percentages round to six decimals. Effective facts enforce Postgres numeric(28,4), numeric(28,10), and numeric(12,6) capacity after rounding. Existing NPS detail and other display metadata retain their numeric contract.
+- Exact workbook duplicate checks compare retained decimals; the old entry point retains its Float64 tolerance. This is part of the new precision contract and parser version. It can report a conflict where distinct high-precision values previously collapsed to the same number.
+- The historical adapter explicitly marks all holding source snapshots complete, including manual/unknown sources, matching existing omission behavior. New callers can supply partial source metadata. Account, asset class, currency, and source sheet define source groups. NPS portal priority is 100; other sources use 0. The publisher uses source metadata instead of inferring aggregate or complete status from payloads.
+- Keys encode tuples as JSON, distinguishing name-based from symbol-based instruments and avoiding separator collisions. Stable position keys include account, instrument, and source group so overlapping entries retain separate links and histories. Current and Exited ranking preserves the legacy cross-account symbol-or-name grouping. Same-date holding conflicts preserve portal priority and otherwise publication order. Transaction fingerprints include the source stream and an occurrence number within each batch. Repeated statements dedupe matching occurrences while two identical same-day occurrences remain distinct, as already approved in section 10.
+- Owner decision, 2026-09-13: "Preserve both legacy entries" when overlapping source groups place the same holding in Current and Exited. Select the two lists independently. Partial sales remain Current at the remaining quantity, with source histories and sale transactions retained. Suppressing the Exited entry is not an approved bug fix.
+- Exact native totals and dated projections do not depend on FX. `valuePortfolioPublication` takes an explicit fresh/stale/unavailable quote. Typed per-view selection scopes missing-quote failures to the currencies used by that legacy endpoint; unsupported currencies retain native totals but contribute zero to INR display. Ratios and XIRR remain approximate analytics, with parity comparisons allowing 1e-8 absolute numeric tolerance and exact comparison after canonicalization for decimal strings.
+
+Verification and open follow-ups are tracked in `docs/convex-phase-2-verification.md`. Phase 2 does not deploy backend functions or change production reads.
 
 Major areas:
 
