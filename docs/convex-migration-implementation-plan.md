@@ -66,7 +66,7 @@ The current mobile source should not force the old backend to remain. Preserve i
 9. Preserve unrelated working-tree changes.
 10. Record any deliberate behavior difference in this document before implementing it.
 11. After each phase or separately tracked repository milestone passes its local completion checks, run a read-only Claude Code review with Claude Opus 5 against the complete diff and its completion criteria. Verify and resolve every blocking finding, rerun affected checks, and obtain an Opus 5 follow-up approval before committing or starting dependent work. The Phase 1 repository milestone may be committed with its external gates explicitly pending, as allowed by rule 3.
-On 2026-09-13, the owner explicitly approved a narrow exception to rule 11 after Phase 4 passed its final checks, live capacity/parity checks and Codex follow-up: commit Phase 4 and begin Phase 5 while Claude Opus 5 is quota-limited, then run the deferred Opus review when available. This does not waive that review or authorize production changes.
+    On 2026-09-13, the owner explicitly approved a narrow exception to rule 11 after Phase 4 passed its final checks, live capacity/parity checks and Codex follow-up: commit Phase 4 and begin Phase 5 while Claude Opus 5 is quota-limited, then run the deferred Opus review when available. This does not waive that review or authorize production changes.
 
 12. Review approvals are evidence, not proof. Record the reviewed revision, actual checks, accepted findings, and outstanding deployment gates. Never describe checked-in generated bindings as proof that codegen or real Clerk sign-in has succeeded on a clean deployment.
 

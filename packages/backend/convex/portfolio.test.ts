@@ -635,7 +635,9 @@ describe("public portfolio reads", () => {
     );
 
     const accounts = await state.owner.query(api.accounts.list, {});
-    expect(accounts.map(({ name, accountType }) => ({ name, accountType }))).toEqual([
+    expect(
+      accounts.map(({ name, accountType }) => ({ name, accountType })),
+    ).toEqual([
       { name: "Default Broker", accountType: "broker" },
       { name: "Fake Insurance", accountType: "ulip" },
       { name: "Fake Stocks", accountType: "indian_stock" },

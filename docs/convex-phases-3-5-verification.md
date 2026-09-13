@@ -6,11 +6,11 @@ Phase 2 was committed as `a59b0b2` after passing the recorded checks and indepen
 
 The current ignored backend configuration selects personal cloud development deployment `hardy-barracuda-115`, not the anonymous localhost backend from the earlier troubleshooting. Real development Clerk sign-in was already verified in the Phase 1 cloud record; the owner has confirmed dashboard setup. Remaining Phase 1 external gates are retained in that record.
 
-| Phase | Objective                                              | Owner                                 | State          | Completion evidence                                               |
-| ----- | ------------------------------------------------------ | ------------------------------------- | -------------- | ----------------------------------------------------------------- |
-| 2     | Exact import contract and pure portfolio publication   | Root                                  | Committed      | `a59b0b2`; Phase 2 verification record                            |
-| 3     | Upload, parsing, preview, retries and source retention | `phase3_backend` and root web work    | Committed      | `ad6b170`; final checks, live transport and both reviews approved |
-| 4     | Atomic publication, queries and FX refresh             | Backend and isolated read workstreams | Committed | `f5bfcb2`; Codex and deferred Opus approved         |
+| Phase | Objective                                              | Owner                                 | State     | Completion evidence                                                                                    |
+| ----- | ------------------------------------------------------ | ------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------ |
+| 2     | Exact import contract and pure portfolio publication   | Root                                  | Committed | `a59b0b2`; Phase 2 verification record                                                                 |
+| 3     | Upload, parsing, preview, retries and source retention | `phase3_backend` and root web work    | Committed | `ad6b170`; final checks, live transport and both reviews approved                                      |
+| 4     | Atomic publication, queries and FX refresh             | Backend and isolated read workstreams | Committed | `f5bfcb2`; Codex and deferred Opus approved                                                            |
 | 5     | Convex web conversion and browser parity               | `phase5_web` and root                 | Committed | Phase 5 web conversion commit; 24 checks, eight builds, browser parity and both final reviews approved |
 
 Unrelated untracked installed agent instructions, skills and the original handoff remain excluded from implementation commits.
@@ -100,7 +100,6 @@ The ordinary `pnpm dev:backend` command also reached "Convex functions ready" ag
 
 The initial Phase 4 candidate passed its recorded implementation and measured backend checks. The complete uncommitted change against `ad6b170` went to independent Codex and Claude Opus 5 reviews. No Phase 4 commit or dependent Phase 5 implementation has started yet.
 
-
 ### Phase 4 review and fixes
 
 Independent Codex reviewer `phase4_review`, GPT-5.6 Sol, requested changes with five findings. All five were verified and accepted:
@@ -114,7 +113,6 @@ Independent Codex reviewer `phase4_review`, GPT-5.6 Sol, requested changes with 
 The first two fixes passed all 89 backend tests, lint and typecheck in the isolated fix checkout. The combined account and commit-time fixes passed 15 portfolio tests. The final combined checks and live remeasurement passed as recorded below.
 
 Claude Code actually selected `claude-opus-5`, session `3e1930a9-6644-41f9-b3df-c3f8cf65e2a7`, but exited 1 before producing a review verdict because the account reached its usage limit. It reported reset at 2026-09-13 21:40 Asia/Kolkata. This is a tooling quota, not an approval or a code finding. The complete Opus review and any necessary follow-up approval remain pending under implementation-plan rule 11. Phase 4 is uncommitted and dependent Phase 5 implementation has not begun.
-
 
 ### Final Phase 4 follow-up receipts
 
