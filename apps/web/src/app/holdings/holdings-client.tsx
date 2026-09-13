@@ -7,7 +7,7 @@ import { Money, useAmountFormatters } from "@/components/amounts";
 import { InstrumentIdentity } from "@/components/instrument-identity";
 import { api } from "@investment-sync/backend/api";
 import type { FunctionReturnType } from "convex/server";
-import { useQuery } from "convex/react";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -85,7 +85,7 @@ export function HoldingsClient() {
 
 function HoldingsData() {
   const { formatInr } = useAmountFormatters();
-  const positions = useQuery(api.portfolio.positions);
+  const positions = useCachedQuery(api.portfolio.positions);
   const [search, setSearch] = useState("");
   const [assetClass, setAssetClass] = useState("all");
   const [account, setAccount] = useState("all");

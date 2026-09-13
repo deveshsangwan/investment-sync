@@ -16,6 +16,7 @@ import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { usePathname } from "next/navigation";
 import { ErrorState, PageShell } from "@/components/portfolio-ui";
+import { QueryCacheProvider } from "./query-cache-provider";
 
 type ConvexSessionStatus =
   | "auth-loading"
@@ -53,8 +54,7 @@ export function ConvexSessionGate({
   errorHeader,
   loading,
 }: ConvexSessionGateProps) {
-  const { status, retryAuthentication, retryProvisioning } =
-    useConvexSession();
+  const { status, retryAuthentication, retryProvisioning } = useConvexSession();
 
   if (status === "auth-error") {
     return (
@@ -168,11 +168,7 @@ function RecoverableConvexProvider({
   }, [generation, remountAuthentication]);
 
   return (
-    <ConvexProviderWithClerk
-      key={generation}
-      client={client}
-      useAuth={useAuth}
-    >
+    <ConvexProviderWithClerk key={generation} client={client} useAuth={useAuth}>
       <ProvisionAuthenticatedUser
         onAuthenticationFailure={reportAuthenticationFailure}
         retryAuthentication={retryAuthentication}
@@ -259,13 +255,14 @@ function ProvisionCurrentUser({
     setStatus("provisioning");
     setAttempt((current) => current + 1);
   }, []);
-  const exposedStatus: ConvexSessionStatus = !isLoaded || isLoading
-    ? "auth-loading"
-    : !clerkIsAuthenticated
-      ? "signed-out"
-      : !isAuthenticated
-        ? "auth-error"
-        : status;
+  const exposedStatus: ConvexSessionStatus =
+    !isLoaded || isLoading
+      ? "auth-loading"
+      : !clerkIsAuthenticated
+        ? "signed-out"
+        : !isAuthenticated
+          ? "auth-error"
+          : status;
   const value = useMemo(
     () => ({ status: exposedStatus, retryAuthentication, retryProvisioning }),
     [exposedStatus, retryAuthentication, retryProvisioning],
@@ -273,7 +270,9 @@ function ProvisionCurrentUser({
 
   return (
     <ConvexSessionContext.Provider value={value}>
-      {children}
+      <QueryCacheProvider enabled={exposedStatus === "ready"}>
+        {children}
+      </QueryCacheProvider>
     </ConvexSessionContext.Provider>
   );
 }

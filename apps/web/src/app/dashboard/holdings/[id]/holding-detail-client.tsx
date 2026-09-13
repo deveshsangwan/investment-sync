@@ -2,7 +2,7 @@
 
 import { api } from "@investment-sync/backend/api";
 import type { FunctionReturnType } from "convex/server";
-import { useQuery } from "convex/react";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, LineChart, ReceiptText } from "lucide-react";
@@ -93,7 +93,7 @@ export function HoldingDetailClient() {
 }
 
 function HoldingData({ positionKey }: { positionKey: string }) {
-  const detail = useQuery(api.portfolio.holdingDetail, { positionKey });
+  const detail = useCachedQuery(api.portfolio.holdingDetail, { positionKey });
 
   if (detail === undefined)
     return (
@@ -152,9 +152,7 @@ function HoldingData({ positionKey }: { positionKey: string }) {
 
 function HoldingFallbackHeading() {
   return (
-    <h1 className="mb-8 text-2xl font-semibold tracking-[-0.02em]">
-      Holding
-    </h1>
+    <h1 className="mb-8 text-2xl font-semibold tracking-[-0.02em]">Holding</h1>
   );
 }
 

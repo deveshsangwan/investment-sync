@@ -49,7 +49,7 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api } from "@investment-sync/backend/api";
-import { useQuery } from "convex/react";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import { ConvexSessionGate } from "../convex-provider";
 import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
@@ -71,7 +71,7 @@ export function DashboardClient() {
 
 function DashboardData() {
   const { formatInr } = useAmountFormatters();
-  const overview = useQuery(api.portfolio.overview);
+  const overview = useCachedQuery(api.portfolio.overview);
 
   if (!overview) return <PortfolioContentSkeleton />;
 
@@ -424,7 +424,7 @@ function DashboardData() {
 }
 
 function LatestImportSummary() {
-  const latestCommittedImport = useQuery(api.imports.latestCommitted);
+  const latestCommittedImport = useCachedQuery(api.imports.latestCommitted);
 
   return (
     <ImportSummary

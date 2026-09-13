@@ -2,7 +2,7 @@
 
 import { api } from "@investment-sync/backend/api";
 import type { FunctionReturnType } from "convex/server";
-import { useQuery } from "convex/react";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import Link from "next/link";
 import { ArrowLeft, LineChart, Rows3 } from "lucide-react";
 import { DisplayAmount, HideAmountsButton, Money } from "@/components/amounts";
@@ -85,7 +85,7 @@ export function AssetClassClient({ assetClass }: { assetClass: AssetClass }) {
 }
 
 function AssetClassData({ assetClass }: { assetClass: AssetClass }) {
-  const detail = useQuery(api.portfolio.assetClassDetail, { assetClass });
+  const detail = useCachedQuery(api.portfolio.assetClassDetail, { assetClass });
 
   return detail ? (
     <AssetClassContent data={detail} />

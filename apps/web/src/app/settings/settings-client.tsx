@@ -2,7 +2,7 @@
 
 import { api } from "@investment-sync/backend/api";
 import type { FunctionReturnType } from "convex/server";
-import { useQuery } from "convex/react";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import { Check, Database, FileUp, Lock } from "lucide-react";
 import Link from "next/link";
 import {
@@ -59,8 +59,8 @@ export function SettingsClient() {
 }
 
 function SettingsData() {
-  const current = useQuery(api.users.current);
-  const accounts = useQuery(api.accounts.list);
+  const current = useCachedQuery(api.users.current);
+  const accounts = useCachedQuery(api.accounts.list);
   const isOwner = current?.role === "owner";
 
   return (
