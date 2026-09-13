@@ -275,6 +275,12 @@ importers:
 
   packages/backend:
     dependencies:
+      '@investment-sync/importers':
+        specifier: workspace:*
+        version: link:../importers
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
       convex:
         specifier: ^1.45.0
         version: 1.45.0(@clerk/clerk-react@5.61.8(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(bufferutil@4.1.0)(react@19.2.6)(utf-8-validate@6.0.6)

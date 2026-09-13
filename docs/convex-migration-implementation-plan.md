@@ -1,6 +1,6 @@
 # Convex migration implementation plan
 
-Status: Phase 2 implementation in progress; Phase 1 external gates remain pending
+Status: Phase 2 committed; Phases 3–5 implementation authorized for development only; remaining Phase 1 external gates tracked separately
 
 Review findings, fixes, verification, and pending gates: [`convex-phase-1-review.md`](convex-phase-1-review.md).
 
@@ -53,9 +53,9 @@ The current mobile source should not force the old backend to remain. Preserve i
 
 ## 3. Execution rules for a fresh agent
 
-1. `feat/convex-native-backend` is the migration integration branch. Phase 2 starts at `54fee909b7b646d3dcfda465f26e1565a49fba34` on `feat/convex-phase-2-portfolio-domain`; its PR targets the integration branch. Later phase branches also start from and target the integration branch. PR #49 stays open against `main`; do not merge it, enable auto-merge, or push migration changes directly to `main`. Preserve the redesigned UI already integrated from `c4e0e73` through `5ff5253`. Production migration and cutover require separate explicit authorization.
+1. `feat/convex-native-backend` is the migration integration branch. Phase 2 was committed as `a59b0b2`. On 2026-09-13 the owner broadened the work through Phase 5 and authorized periodic commits on one branch. The branch is now `feat/convex-phases-2-through-5` and targets the integration branch. PR #49 stays open against `main`; do not merge it, enable auto-merge, or push migration changes directly to `main`. Preserve the redesigned UI already integrated from `c4e0e73` through `5ff5253`. Production migration and cutover require separate explicit authorization.
 2. Read this plan, the two linked architecture notes, repository instructions, and the current schema and import integration tests before editing code.
-3. Execute in dependency order. Report repository verification and external deployment verification separately. While the owner completes cloud setup, Phase 2 pure-domain work may proceed after Phase 1 repository checks and review pass. Do not claim Phase 1 complete or advance dependent deployment work until its external gates pass.
+3. Execute in dependency order. Report repository verification and external deployment verification separately. While the owner completes cloud setup, Phase 2 pure-domain work may proceed after Phase 1 repository checks and review pass. The owner has confirmed development Clerk setup and authorized development implementation and testing through Phase 5. Remaining billing, production relationship, preview availability, and trusted-main CI gates must be reported separately; they do not authorize production operations and do not block testing on the established personal development deployment.
 4. Keep the current backend runnable until the production rollback window closes.
 5. Treat current Postgres outputs as the behavioral reference, not as the target code structure.
 6. Keep production credentials out of committed files and command output.
