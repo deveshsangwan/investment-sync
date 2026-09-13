@@ -1,3 +1,4 @@
+import { withSourceDecimals } from "./source-decimals";
 import type { ImportFile, ParseResult, PortfolioImporter } from "./types";
 import {
   findHeaderRow,
@@ -59,33 +60,42 @@ export const tickertapeStockImporter: PortfolioImporter = {
       if (currentValue === 0 && investedAmount === 0) return [];
 
       return [
-        {
-          kind: "holding" as const,
-          sourceType: "tickertape_stock_csv" as const,
-          sourceDate,
-          accountName: "Indian Stocks",
-          provider: "Tickertape",
-          instrumentName: symbol,
-          symbol,
-          assetClass: "indian_stock" as const,
-          currency: "INR" as const,
-          quantity: parseNumber(record.quantity),
-          investedAmount,
-          currentValue,
-          pnlAmount: parseNumber(record["p & l rs"] ?? record["p & l"]),
-          pnlPercent: parseNumber(record["net change %"]),
-          metadata: {
-            averageCost: parseNumber(
-              record["average cost rs"] ?? record["average cost"],
-            ),
-            ltp: parseNumber(record["ltp rs"] ?? record.ltp),
-            portfolioWeight: parseNumber(record["portfolio weight %"]),
-            dailyChangeAmount: parseNumber(
-              record["daily change rs"] ?? record["daily change"],
-            ),
-            dailyChangePercent: parseNumber(record["daily change %"]),
+        withSourceDecimals(
+          {
+            kind: "holding" as const,
+            sourceType: "tickertape_stock_csv" as const,
+            sourceDate,
+            accountName: "Indian Stocks",
+            provider: "Tickertape",
+            instrumentName: symbol,
+            symbol,
+            assetClass: "indian_stock" as const,
+            currency: "INR" as const,
+            quantity: parseNumber(record.quantity),
+            investedAmount,
+            currentValue,
+            pnlAmount: parseNumber(record["p & l rs"] ?? record["p & l"]),
+            pnlPercent: parseNumber(record["net change %"]),
+            metadata: {
+              averageCost: parseNumber(
+                record["average cost rs"] ?? record["average cost"],
+              ),
+              ltp: parseNumber(record["ltp rs"] ?? record.ltp),
+              portfolioWeight: parseNumber(record["portfolio weight %"]),
+              dailyChangeAmount: parseNumber(
+                record["daily change rs"] ?? record["daily change"],
+              ),
+              dailyChangePercent: parseNumber(record["daily change %"]),
+            },
           },
-        },
+          {
+            quantity: record.quantity,
+            investedAmount:
+              record["invested value rs"] ?? record["invested value"],
+            currentValue: record["current value rs"] ?? record["current value"],
+            pnlAmount: record["p & l rs"] ?? record["p & l"],
+          },
+        ),
       ];
     });
 
@@ -146,36 +156,44 @@ export const tickertapeMutualFundImporter: PortfolioImporter = {
       if (!fundName || fundName.toLowerCase() === "total") return [];
 
       return [
-        {
-          kind: "holding" as const,
-          sourceType: "tickertape_mutual_fund_csv" as const,
-          sourceDate,
-          accountName: "Mutual Funds",
-          provider: "Tickertape",
-          instrumentName: fundName,
-          assetClass: "mutual_fund" as const,
-          currency: "INR" as const,
-          quantity: parseNumber(record.units),
-          investedAmount: parseRequiredNumber(
-            record["invested amt rs"] ?? record["invested amt"],
-          ),
-          currentValue: parseRequiredNumber(
-            record["current value rs"] ?? record["current value"],
-          ),
-          pnlAmount: parseNumber(record["p&l rs"] ?? record["p&l"]),
-          pnlPercent: parseNumber(record["p&l %"]),
-          metadata: {
-            amcName: record["amc name"],
-            category: record.category,
-            subCategory: record["sub-category"],
-            planType: record["plan type"],
-            optionType: record["option type"],
-            nav: parseNumber(record["nav rs"] ?? record.nav),
-            weight: parseNumber(record["weight %"]),
-            xirr: parseNumber(record["xirr %"]),
-            investedSince: record["invested since"],
+        withSourceDecimals(
+          {
+            kind: "holding" as const,
+            sourceType: "tickertape_mutual_fund_csv" as const,
+            sourceDate,
+            accountName: "Mutual Funds",
+            provider: "Tickertape",
+            instrumentName: fundName,
+            assetClass: "mutual_fund" as const,
+            currency: "INR" as const,
+            quantity: parseNumber(record.units),
+            investedAmount: parseRequiredNumber(
+              record["invested amt rs"] ?? record["invested amt"],
+            ),
+            currentValue: parseRequiredNumber(
+              record["current value rs"] ?? record["current value"],
+            ),
+            pnlAmount: parseNumber(record["p&l rs"] ?? record["p&l"]),
+            pnlPercent: parseNumber(record["p&l %"]),
+            metadata: {
+              amcName: record["amc name"],
+              category: record.category,
+              subCategory: record["sub-category"],
+              planType: record["plan type"],
+              optionType: record["option type"],
+              nav: parseNumber(record["nav rs"] ?? record.nav),
+              weight: parseNumber(record["weight %"]),
+              xirr: parseNumber(record["xirr %"]),
+              investedSince: record["invested since"],
+            },
           },
-        },
+          {
+            quantity: record.units,
+            investedAmount: record["invested amt rs"] ?? record["invested amt"],
+            currentValue: record["current value rs"] ?? record["current value"],
+            pnlAmount: record["p&l rs"] ?? record["p&l"],
+          },
+        ),
       ];
     });
 

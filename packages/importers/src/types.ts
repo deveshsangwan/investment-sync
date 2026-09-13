@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidCalendarDateParts } from "./utils";
+import { isValidCalendarDateParts } from "./calendar";
 
 export type ImportSourceType =
   | "investment_portfolio_xlsx"
@@ -105,7 +105,10 @@ export interface PortfolioImporter {
   sourceType: ImportSourceType;
   parserVersion: string;
   detect(file: ImportFile): DetectionResult;
-  parse(file: ImportFile): ParseResult;
+  parse(
+    file: ImportFile,
+    options?: { preserveDecimalMeaning?: boolean },
+  ): ParseResult;
 }
 
 export const importSourceTypeSchema = z.enum([

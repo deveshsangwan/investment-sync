@@ -1,3 +1,4 @@
+import { withSourceDecimals } from "./source-decimals";
 import { npsDetailsSchema, type NpsDetails } from "./nps-details";
 import type { ImportFile, ParseResult, PortfolioImporter } from "./types";
 import {
@@ -75,28 +76,31 @@ export const npsPortalCsvImporter: PortfolioImporter = {
       sourceType: NPS_SOURCE_TYPE,
       parserVersion: this.parserVersion,
       rows: [
-        {
-          kind: "holding",
-          sourceType: NPS_SOURCE_TYPE,
-          sourceDate: summary.sourceDate,
-          accountName: "NPS",
-          provider: "NPS",
-          instrumentName: "NPS",
-          assetClass: "nps",
-          currency: "INR",
-          investedAmount,
-          currentValue: summary.currentValue,
-          pnlAmount: summary.pnlAmount,
-          pnlPercent:
-            investedAmount > 0
-              ? (summary.pnlAmount / investedAmount) * 100
-              : undefined,
-          metadata: {
-            sourceSheet: NPS_SOURCE_SHEET,
-            ...(summary.xirr !== undefined ? { xirr: summary.xirr } : {}),
-            npsDetails: details,
+        withSourceDecimals(
+          {
+            kind: "holding",
+            sourceType: NPS_SOURCE_TYPE,
+            sourceDate: summary.sourceDate,
+            accountName: "NPS",
+            provider: "NPS",
+            instrumentName: "NPS",
+            assetClass: "nps",
+            currency: "INR",
+            investedAmount,
+            currentValue: summary.currentValue,
+            pnlAmount: summary.pnlAmount,
+            pnlPercent:
+              investedAmount > 0
+                ? (summary.pnlAmount / investedAmount) * 100
+                : undefined,
+            metadata: {
+              sourceSheet: NPS_SOURCE_SHEET,
+              ...(summary.xirr !== undefined ? { xirr: summary.xirr } : {}),
+              npsDetails: details,
+            },
           },
-        },
+          { ...summary.sourceDecimals },
+        ),
       ],
       warnings,
     };
@@ -104,6 +108,7 @@ export const npsPortalCsvImporter: PortfolioImporter = {
 };
 
 type Summary = {
+  sourceDecimals: Record<string, unknown>;
   sourceDate: string;
   currentValue: number;
   contributionCount?: number;
@@ -206,6 +211,12 @@ function parseSummary(rows: string[][], warnings: string[]): Summary {
     .find(Boolean);
 
   return {
+    sourceDecimals: {
+      currentValue: values[currentIndex],
+      pnlAmount: values[pnlIndex],
+      totalContribution: values[contributionIndex],
+      totalWithdrawal: values[withdrawalIndex] || "0",
+    },
     sourceDate,
     currentValue,
     ...(contributionCount !== undefined ? { contributionCount } : {}),
