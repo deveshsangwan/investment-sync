@@ -7,6 +7,8 @@
     "dev": "turbo dev --parallel",
     "dev:web": "pnpm --filter @investment-sync/web dev",
     "dev:mobile": "pnpm --filter @investment-sync/mobile dev",
+    "dev:backend": "pnpm --filter @investment-sync/backend exec convex dev",
+    "backend:codegen": "pnpm --filter @investment-sync/backend codegen",
     "lint": "turbo lint",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
@@ -18,9 +20,15 @@
     "db:local:down": "docker compose down",
     "db:local:migrate": "DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_dev pnpm --filter @investment-sync/db migrate",
     "db:container:up": "node scripts/local-postgres-container.cjs up",
+    "db:container:test:prepare": "node scripts/local-postgres-container.cjs prepare-test",
     "db:container:down": "node scripts/local-postgres-container.cjs down",
     "db:container:logs": "node scripts/local-postgres-container.cjs logs",
-    "db:seed:fake": "ALLOW_FAKE_DEV_SEED=1 DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_dev node scripts/seed-fake-dev-data.cjs"
+    "db:seed:fake": "ALLOW_FAKE_DEV_SEED=1 DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_dev node scripts/seed-fake-dev-data.cjs",
+    "test:db:integration": "pnpm db:container:up && pnpm db:container:test:prepare && TEST_DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_test DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_test pnpm --filter @investment-sync/db migrate && TEST_DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_test pnpm --filter @investment-sync/db test && TEST_DATABASE_URL=postgresql://investment_sync:investment_sync@localhost:54329/investment_sync_test pnpm --filter @investment-sync/api test",
+    "migration:inventory:postgres": "node scripts/convex-migration/inventory-postgres.cjs",
+    "migration:inventory:storage": "node scripts/convex-migration/inventory-storage.cjs",
+    "migration:capacity-note": "node scripts/convex-migration/generate-capacity-note.cjs",
+    "test:migration-tools": "node --test scripts/convex-migration/*.test.cjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
@@ -31,6 +39,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "prettier": "^3.4.2",
+    "tsx": "^4.22.4",
     "turbo": "^2.3.3",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.60.1",
