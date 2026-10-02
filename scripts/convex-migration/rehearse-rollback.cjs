@@ -9,6 +9,7 @@ const {
   deterministicUuid,
   verifyNoConvexWrites,
 } = require("./reverse-replay.cjs");
+const { orderedHoldingUuid } = require("./reverse-replay-facts.cjs");
 const {
   TABLE_COLUMNS,
   applyReverseReplay,
@@ -376,7 +377,9 @@ async function verifySemanticViews(
       const fact = target.tables.holdingSnapshots.find(
         (row) =>
           row.householdId === household._id &&
-          deterministicUuid("holding_snapshots", row._id) === detail.legacyId,
+          !row.legacyId &&
+          orderedHoldingUuid(row, JSON.parse(row.factJson).provenance) ===
+            detail.legacyId,
       );
       const positionKey = alias?.legacyId ?? fact?.positionKey;
       assert.ok(

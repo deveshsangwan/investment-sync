@@ -14,6 +14,407 @@ const {
   verifyNoConvexWrites,
 } = require("./reverse-replay.cjs");
 const { normalizeSqlTables } = require("./reverse-replay-postgres.cjs");
+const { orderedHoldingUuid } = require("./reverse-replay-facts.cjs");
+
+function appendChartBatch(
+  fixture,
+  batchId,
+  sequence,
+  values,
+  committedAt,
+  { householdId = "household-new", startIndex = 0, investedValues } = {},
+) {
+  const tables = fixture.targetSnapshot.tables;
+  const accountId = `chart-account-${householdId}`;
+  if (!tables.accounts.some((row) => row._id === accountId))
+    tables.accounts.push({
+      _id: accountId,
+      _creationTime: committedAt,
+      householdId,
+      name: "Generated chart",
+      provider: "Synthetic",
+      accountType: "broker",
+      currency: "INR",
+    });
+  const rows = values.map((amount, index) => {
+    const symbol = `CHART${startIndex + index}`;
+    if (
+      !tables.instruments.some(
+        (row) => row.householdId === householdId && row.symbol === symbol,
+      )
+    )
+      tables.instruments.push({
+        _id: `chart-instrument-${householdId}-${symbol}`,
+        _creationTime: committedAt,
+        householdId,
+        name: symbol,
+        symbol,
+        assetClass: "indian_stock",
+        currency: "INR",
+      });
+    return {
+      ...holding("2026-01-04", investedValues?.[index] ?? amount, amount),
+      accountName: "Generated chart",
+      instrumentName: symbol,
+      symbol,
+      assetClass: "indian_stock",
+      currency: "INR",
+    };
+  });
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    batchId,
+    householdId,
+    householdId === "household-old" ? "user-old" : "user-new",
+    sequence,
+    rows,
+    committedAt,
+  );
+}
+
+function compareChartHelpers(
+  fixture,
+  plan,
+  householdTargetId = "household-new",
+  overrideIds,
+) {
+  require("tsx/cjs");
+  const {
+    buildPortfolioPublication,
+    valuePortfolioPublication,
+  } = require("../../packages/portfolio-domain/src/index.ts");
+  const {
+    aggregateSnapshotTotalsByDate,
+    roundMoney,
+  } = require("../../packages/api/src/services/portfolio/utils.ts");
+  const facts = [
+    "holdingSnapshots",
+    "transactions",
+    "portfolioValuations",
+  ].flatMap((table) =>
+    fixture.targetSnapshot.tables[table]
+      .filter((row) => row.householdId === householdTargetId)
+      .map((row) => JSON.parse(row.factJson)),
+  );
+  const publication = buildPortfolioPublication({ existingFacts: facts });
+  const native = valuePortfolioPublication(
+    publication.projection,
+    {
+      status: "fresh",
+      rate: "82.25",
+      fetchedAt: fixture.targetSnapshot.evaluationTime,
+      provider: "frankfurter",
+    },
+    { view: "assetClassDetail", assetClass: "indian_stock" },
+  );
+  const householdId =
+    fixture.targetSnapshot.mappings.find(
+      (mapping) =>
+        mapping.targetTable === "households" &&
+        mapping.targetId === householdTargetId,
+    )?.legacyId ?? deterministicUuid("households", householdTargetId);
+  const rows = plan.tables.holding_snapshots
+    .filter(
+      (row) =>
+        row.household_id === householdId && row.snapshot_date === "2026-01-04",
+    )
+    .map((row) => {
+      const account = plan.tables.accounts.find(
+        (value) => value.id === row.account_id,
+      );
+      const instrument = plan.tables.instruments.find(
+        (value) => value.id === row.instrument_id,
+      );
+      return {
+        id: overrideIds?.get(instrument.symbol) ?? row.id,
+        createdAt: `${row.created_at.replace(/Z$/, "").split(".")[0]}.${(row.created_at.replace(/Z$/, "").split(".")[1] ?? "").padEnd(6, "0")}`,
+        accountId: row.account_id,
+        instrumentId: row.instrument_id,
+        snapshotDate: row.snapshot_date,
+        investedAmount: row.invested_amount,
+        currentValue: row.current_value,
+        currency: row.currency,
+        sourcePayload: row.source_payload,
+        sourceSheet: row.source_payload.sourceSheet ?? "",
+        accountName: account.name,
+        provider: account.provider,
+        instrumentName: instrument.name,
+        assetClass: instrument.asset_class,
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.createdAt.localeCompare(right.createdAt) ||
+        left.id.localeCompare(right.id),
+    );
+  const old = aggregateSnapshotTotalsByDate(rows).get("2026-01-04");
+  return {
+    native: native.timeline.find((point) =>
+      point.snapshotDate.startsWith("2026-01-04"),
+    ),
+    legacy: {
+      investedAmount: roundMoney(old.investedAmount),
+      currentValue: roundMoney(old.currentValue),
+    },
+  };
+}
+
+test("new multi-row holding IDs preserve native chart accumulation order in independent legacy helpers", () => {
+  const fixture = createRollbackFixture();
+  appendChartBatch(
+    fixture,
+    "chart-order-7",
+    2,
+    ["1", "1", "9007199254740992"],
+    Date.parse("2026-01-03T12:00:00Z"),
+  );
+  const plan = buildReverseReplayPlan(fixture);
+  const result = compareChartHelpers(fixture, plan);
+  assert.equal(result.native.currentValue, 9007199254740994);
+  assert.equal(result.legacy.currentValue, result.native.currentValue);
+  assert.equal(result.legacy.investedAmount, result.native.investedAmount);
+  const originalIds = new Map(
+    fixture.targetSnapshot.tables.holdingSnapshots
+      .filter((row) => row.batchId === "chart-order-7")
+      .map((row) => [
+        JSON.parse(row.factJson).row.symbol,
+        deterministicUuid("holding_snapshots", row._id),
+      ]),
+  );
+  assert.equal(
+    compareChartHelpers(fixture, plan, "household-new", originalIds).legacy
+      .currentValue,
+    9007199254740992,
+  );
+  assert.equal(
+    plan.replayDigest,
+    buildReverseReplayPlan(structuredClone(fixture)).replayDigest,
+  );
+});
+
+test("holding UUID order covers equal commit clocks across batches and scopes identical row ordinals by household", () => {
+  const fixture = createRollbackFixture();
+  const committedAt = Date.parse("2026-01-03T12:00:00Z");
+  appendChartBatch(fixture, "chart-equal-clock-a", 2, ["1"], committedAt);
+  appendChartBatch(fixture, "chart-equal-clock-b", 3, ["1"], committedAt, {
+    startIndex: 1,
+  });
+  appendChartBatch(
+    fixture,
+    "chart-equal-clock-c",
+    4,
+    ["9007199254740992"],
+    committedAt,
+    { startIndex: 2 },
+  );
+  appendChartBatch(fixture, "chart-other-household", 2, ["1"], committedAt, {
+    householdId: "household-old",
+  });
+  const plan = buildReverseReplayPlan(fixture);
+  const result = compareChartHelpers(fixture, plan);
+  assert.equal(result.native.currentValue, 9007199254740994);
+  assert.equal(result.legacy.currentValue, result.native.currentValue);
+  const ids = plan.tables.holding_snapshots.map((row) => row.id);
+  assert.equal(ids.length, new Set(ids).size);
+});
+
+test("same-date corrections keep first-creation IDs and native chart order", () => {
+  const fixture = createRollbackFixture();
+  const committedAt = Date.parse("2026-01-03T12:00:00Z");
+  appendChartBatch(
+    fixture,
+    "chart-before-update",
+    2,
+    ["9007199254740992", "1", "1"],
+    committedAt,
+  );
+  const original = buildReverseReplayPlan(fixture);
+  appendChartBatch(
+    fixture,
+    "chart-after-update",
+    3,
+    ["9007199254740996"],
+    committedAt + 1000,
+    { investedValues: ["9007199254740992"] },
+  );
+  const plan = buildReverseReplayPlan(fixture);
+  const result = compareChartHelpers(fixture, plan);
+  assert.equal(result.legacy.currentValue, result.native.currentValue);
+  const originalIds = new Set(
+    original.tables.holding_snapshots.map((row) => row.id),
+  );
+  assert.ok(
+    plan.tables.holding_snapshots.every((row) => originalIds.has(row.id)),
+  );
+  const corrected = plan.tables.holding_snapshots.find(
+    (row) =>
+      row.import_batch_id ===
+      plan.newCommittedBatches.find(
+        (batch) => batch.targetBatchId === "chart-after-update",
+      ).legacyBatchId,
+  );
+  assert.equal(corrected.current_value, "9007199254740996");
+  assert.equal(
+    corrected.created_at,
+    original.tables.holding_snapshots.find((row) => row.id === corrected.id)
+      .created_at,
+  );
+});
+
+test("mapped old holding upserts preserve arbitrary archived UUIDs, microsecond timestamps, and chart order", () => {
+  const fixture = createRollbackFixture();
+  const committedAt = Date.parse("2026-01-03T12:00:00Z");
+  const batchTargetId = "chart-archived";
+  appendChartBatch(
+    fixture,
+    batchTargetId,
+    3,
+    ["9007199254740992", "1", "1"],
+    committedAt,
+    { householdId: "household-old" },
+  );
+  const initial = buildReverseReplayPlan(fixture);
+  const batch = initial.tables.import_batches.find(
+    (row) =>
+      row.id ===
+      initial.newCommittedBatches.find(
+        (value) => value.targetBatchId === batchTargetId,
+      ).legacyBatchId,
+  );
+  const register = (legacyTable, targetTable, target, source) => {
+    fixture.sourceSnapshot.tables[legacyTable].push(source);
+    fixture.targetSnapshot.mappings.push({
+      legacyTable,
+      legacyId: source.id,
+      targetTable,
+      targetId: target._id,
+      sourceJson: JSON.stringify(source),
+    });
+    target.legacyId = source.id;
+  };
+  register(
+    "import_batches",
+    "importBatches",
+    fixture.targetSnapshot.tables.importBatches.find(
+      (row) => row._id === batchTargetId,
+    ),
+    batch,
+  );
+  fixture.sourceSnapshot.tables.import_rows.push(
+    ...initial.tables.import_rows.filter(
+      (row) => row.import_batch_id === batch.id,
+    ),
+  );
+  const account = initial.tables.accounts.find(
+    (row) => row.name === "Generated chart",
+  );
+  register(
+    "accounts",
+    "accounts",
+    fixture.targetSnapshot.tables.accounts.find(
+      (row) => row._id === "chart-account-household-old",
+    ),
+    account,
+  );
+  for (const [index, doc] of fixture.targetSnapshot.tables.holdingSnapshots
+    .filter((row) => row.batchId === batchTargetId)
+    .entries()) {
+    const fact = JSON.parse(doc.factJson);
+    const instrument = initial.tables.instruments.find(
+      (row) => row.symbol === fact.row.symbol,
+    );
+    register(
+      "instruments",
+      "instruments",
+      fixture.targetSnapshot.tables.instruments.find(
+        (row) =>
+          row.householdId === doc.householdId && row.symbol === fact.row.symbol,
+      ),
+      instrument,
+    );
+    const source = {
+      ...initial.tables.holding_snapshots.find(
+        (row) => row.instrument_id === instrument.id,
+      ),
+      id: deterministicUuid("holding_snapshots", `archived-${fact.row.symbol}`),
+      created_at: `2026-01-03T12:00:00.000${index + 1}00Z`,
+    };
+    register("holding_snapshots", "holdingSnapshots", doc, source);
+    fact.provenance = {
+      ...fact.provenance,
+      legacyId: source.id,
+      batchId: batch.id,
+      sequence: Date.parse(source.created_at),
+      rowNumber: index + 1,
+    };
+    doc.factJson = JSON.stringify(fact);
+  }
+
+  const archived = normalizeSqlTables(
+    fixture.sourceSnapshot.tables,
+  ).holding_snapshots;
+  appendChartBatch(
+    fixture,
+    "chart-archived-correction",
+    committedAt + 1,
+    ["9007199254740996"],
+    committedAt + 1000,
+    { householdId: "household-old", investedValues: ["9007199254740992"] },
+  );
+  const plan = buildReverseReplayPlan(fixture);
+  const result = compareChartHelpers(fixture, plan, "household-old");
+  assert.equal(result.legacy.currentValue, result.native.currentValue);
+  assert.equal(result.legacy.investedAmount, result.native.investedAmount);
+  for (const row of archived) {
+    const restored = plan.tables.holding_snapshots.find(
+      (value) => value.id === row.id,
+    );
+    assert.equal(restored.created_at, row.created_at);
+    assert.equal(restored.invested_amount, row.invested_amount);
+  }
+});
+
+test("rejects a cross-batch clock reversal that cannot retain native chart order without changing timestamps", () => {
+  const fixture = createRollbackFixture();
+  const committedAt = Date.parse("2026-01-03T12:00:00Z");
+  appendChartBatch(fixture, "chart-clock-later", 2, ["1"], committedAt + 1000);
+  appendChartBatch(
+    fixture,
+    "chart-clock-earlier",
+    3,
+    ["9007199254740992"],
+    committedAt,
+    { startIndex: 1 },
+  );
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "holding_chart_order_not_reversible",
+  });
+});
+
+test("ordered holding UUIDs retain full safe sequences and reject row counts outside the encoded deployment bound", () => {
+  const doc = {
+    householdId: "generated-household",
+    batchId: "generated-batch",
+    _id: "generated-fact",
+  };
+  const first = orderedHoldingUuid(doc, {
+    sequence: Number.MAX_SAFE_INTEGER,
+    rowNumber: 2046,
+  });
+  const second = orderedHoldingUuid(
+    { ...doc, _id: "next-fact" },
+    { sequence: Number.MAX_SAFE_INTEGER, rowNumber: 2047 },
+  );
+  assert.match(
+    first,
+    /^[a-f0-9]{8}-[a-f0-9]{4}-5[a-f0-9]{3}-8[a-f0-9]{3}-[a-f0-9]{12}$/,
+  );
+  assert.ok(first < second);
+  assert.throws(
+    () => orderedHoldingUuid(doc, { sequence: 1, rowNumber: 2048 }),
+    { code: "holding_chart_order_not_reversible" },
+  );
+});
 
 test("replays multiple commits, a parsed expired-file batch, and a new identity without source bytes", () => {
   const fixture = createRollbackFixture();
@@ -287,7 +688,8 @@ test("validates migrated persisted facts independently of rounded normalized row
   fixture.sourceSnapshot.tables.import_rows[0].is_committed = true;
   const doc = fixture.targetSnapshot.tables.holdingSnapshots[0];
   const source = published.tables.holding_snapshots.find(
-    (row) => row.id === deterministicUuid("holding_snapshots", doc._id),
+    (row) =>
+      row.id === orderedHoldingUuid(doc, JSON.parse(doc.factJson).provenance),
   );
   source.invested_amount = "9007199254740993.1234";
   fixture.sourceSnapshot.tables.holding_snapshots.push(source);

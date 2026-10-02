@@ -157,9 +157,12 @@ function replayFacts({
       );
       if (previous?.source_type === "nps_csv" && row.sourceType !== "nps_csv")
         continue;
+      const holdingId =
+        previous?.id ?? orderedHoldingUuid(fact.doc, fact.provenance);
+      if (!previous && rowsByTable.holding_snapshots.has(holdingId))
+        reject("holding_id_collision");
       const value = {
-        id:
-          previous?.id ?? deterministicUuid("holding_snapshots", fact.doc._id),
+        id: holdingId,
         household_id: householdId,
         account_id: accountId,
         instrument_id: instrumentId,
@@ -214,6 +217,154 @@ function replayFacts({
   }
 
   rejectNewHoldingSelectionTies(rowsByTable, newCommittedBatches);
+  verifyHoldingChartOrder(facts, maps, targetTables, rowsByTable, newBatchIds);
+}
+
+function orderedHoldingUuid(doc, provenance) {
+  const sequence = integer(provenance.sequence);
+  const rowNumber = integer(provenance.rowNumber);
+  // The deployed 1,100-row limit and 1,348-row stress fixture fit 11 row bits.
+  if (rowNumber < 1 || rowNumber >= 2048)
+    reject("holding_chart_order_not_reversible");
+  const order = ((BigInt(sequence) << 11n) | BigInt(rowNumber))
+    .toString(16)
+    .padStart(16, "0");
+  const identity = deterministicUuid(
+    "holding_snapshots",
+    JSON.stringify([text(doc.householdId), text(doc.batchId), text(doc._id)]),
+  )
+    .replaceAll("-", "")
+    .slice(-14);
+  const payload = `${order}${identity}`;
+  // Inserting fixed UUID version/variant nibbles preserves the ordered payload.
+  const hex = `${payload.slice(0, 12)}5${payload.slice(12, 15)}8${payload.slice(15)}`;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function holdingLogicalKey(
+  householdId,
+  accountId,
+  instrumentId,
+  snapshotDate,
+  currency,
+) {
+  return JSON.stringify([
+    householdId,
+    accountId,
+    instrumentId,
+    snapshotDate,
+    currency,
+  ]);
+}
+
+function verifyHoldingChartOrder(
+  facts,
+  maps,
+  targetTables,
+  rowsByTable,
+  newBatchIds,
+) {
+  const sqlRows = new Map(
+    [...rowsByTable.holding_snapshots.values()].map((row) => [
+      holdingLogicalKey(
+        row.household_id,
+        row.account_id,
+        row.instrument_id,
+        row.snapshot_date,
+        row.currency,
+      ),
+      row,
+    ]),
+  );
+  const resolved = new Map();
+  for (const fact of facts) {
+    if (fact.row.kind !== "holding") continue;
+    const householdId = mapped(maps.households, fact.doc.householdId);
+    const accountId = findAccountId(fact, maps, targetTables);
+    const snapshotDate = date(
+      fact.row.sourceDate ?? fact.provenance.fallbackDate,
+    );
+    const key = holdingLogicalKey(
+      householdId,
+      accountId,
+      findInstrumentId(fact, maps, targetTables),
+      snapshotDate,
+      fact.row.currency,
+    );
+    const previous = resolved.get(key);
+    if (
+      previous &&
+      previous.fact.row.source.priority > fact.row.source.priority
+    )
+      continue;
+    const sqlRow = sqlRows.get(key);
+    if (!sqlRow) reject("holding_chart_order_not_reversible");
+    resolved.set(key, {
+      fact,
+      sqlRow,
+      creationOrder: previous?.creationOrder ?? fact.provenance,
+      groupKey: JSON.stringify([
+        householdId,
+        accountId,
+        fact.row.assetClass,
+        fact.row.currency,
+        fact.row.source.group,
+        snapshotDate,
+      ]),
+    });
+  }
+
+  const detailedGroups = new Set(
+    [...resolved.values()]
+      .filter(({ fact }) => fact.row.source.granularity === "instrument")
+      .map(({ groupKey }) => groupKey),
+  );
+  const chartGroups = new Map();
+  for (const entry of resolved.values()) {
+    if (
+      entry.fact.row.source.granularity !== "instrument" &&
+      detailedGroups.has(entry.groupKey)
+    )
+      continue;
+    const key = JSON.stringify([
+      entry.sqlRow.household_id,
+      entry.sqlRow.snapshot_date,
+    ]);
+    const group = chartGroups.get(key) ?? [];
+    group.push(entry);
+    chartGroups.set(key, group);
+  }
+
+  for (const group of chartGroups.values()) {
+    if (!group.some(({ fact }) => newBatchIds.has(fact.doc.batchId))) continue;
+    const native = [...group]
+      .sort(
+        (left, right) =>
+          left.creationOrder.sequence - right.creationOrder.sequence ||
+          left.creationOrder.rowNumber - right.creationOrder.rowNumber,
+      )
+      .map(({ sqlRow }) => sqlRow.id);
+    const sql = [...group]
+      .sort(
+        (left, right) =>
+          compareText(
+            utcMicrosecondOrder(left.sqlRow.created_at),
+            utcMicrosecondOrder(right.sqlRow.created_at),
+          ) || compareText(left.sqlRow.id, right.sqlRow.id),
+      )
+      .map(({ sqlRow }) => sqlRow.id);
+    if (stableJson(native) !== stableJson(sql))
+      reject("holding_chart_order_not_reversible");
+  }
+}
+
+function utcMicrosecondOrder(value) {
+  const [whole, fraction = ""] = value.replace(/Z$/, "").split(".");
+  return `${whole}.${fraction.padEnd(6, "0")}`;
+}
+
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function rejectNewHoldingSelectionTies(rowsByTable, newCommittedBatches) {
@@ -351,4 +502,4 @@ function validateMigratedFact({
   assertLegacyHoldingSemantics(fact.row);
 }
 
-module.exports = { replayFacts };
+module.exports = { replayFacts, orderedHoldingUuid };
