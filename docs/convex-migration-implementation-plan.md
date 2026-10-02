@@ -1,12 +1,14 @@
 # Convex migration implementation plan
 
-Status: Implementation through Phase 5 committed, reviewed and verified in personal development; Phase 6 authorized and in progress; separate preview and remaining Phase 1 external gates tracked separately; production cutover not authorized
+Status: Implementation through Phase 5 verified in personal development; Phase 6 tooling and generated local rehearsal completed, independently reviewed and verified; separate preview and remaining Phase 1 external gates tracked separately; production cutover not authorized
 
 Phase 1 review and external gates: [`convex-phase-1-review.md`](convex-phase-1-review.md). Phases 3–5 changes, review findings and verification: [`convex-phases-3-5-verification.md`](convex-phases-3-5-verification.md).
 
 Deferred product work outside this migration: [realized sales and accurate exited-position gains](realized-sales-todo.md).
 
 Phase 6 execution and reconciliation evidence: [convex-phase-6-verification.md](convex-phase-6-verification.md). On 2026-10-03 the owner authorized syncing with current Postgres changes and implementing the migration tooling and generated-data rehearsal. Opus is unavailable; independent Codex reviews replace the new Opus review for this work, with that gap recorded. This does not authorize moving real data or changing production traffic.
+
+Phase 6 completed with two fresh generated migrations with identical target semantic/report digests and zero unexplained differences, unchanged full-export replay, and an actual public-API rollback drill covering an expired parsed batch, a new identity and file, exact SQL rows, idempotency, and all household/holding/class views. Both Codex reviewers approved the final code at `7bf2ac5`; workspace checks, dedicated Postgres integration and GitHub CI passed. Production remains on Postgres. The real-data report, production writer freeze/backups, previously recorded pre-production follow-ups and cutover authorization remain Phase 7 work.
 
 Decision: migrate the web application fully to a Convex-native backend on a separate branch, prove behavior against the current Postgres and Supabase production system, then perform a one-shot production cutover.
 
@@ -838,6 +840,8 @@ Completion criteria:
 Old code deleted: web-only tRPC provider code may be deleted on the branch. Keep old backend packages and production routes for migration comparison and rollback.
 
 ### Phase 6: migration tooling and rehearsal
+
+Completed on 2026-10-03. Commands, protected receipt locations, findings and independent approvals are recorded in [the verification ledger](convex-phase-6-verification.md) and its linked runbooks. Production backup and archived-build locations must be recorded by the authorized operator before Phase 7.
 
 Goal: prove a repeatable production-shaped migration without changing production traffic.
 
