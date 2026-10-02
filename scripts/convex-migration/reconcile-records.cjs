@@ -1,4 +1,22 @@
-const { canonicalJson } = require("./phase6-artifacts.cjs");
+const { canonicalJson, requireBackend } = require("./phase6-artifacts.cjs");
+// Use the canonical typed adapters without reimplementing financial normalization.
+require("tsx/cjs/api").register();
+const { adaptLegacyRow } = requireBackend(
+  "@investment-sync/importers/exact-adapter",
+);
+const { exactNormalizedImportRowSchema } = requireBackend(
+  "@investment-sync/importers/exact-types",
+);
+const { normalizedImportRowSchema } = requireBackend(
+  "@investment-sync/importers/types",
+);
+
+function sourceNormalizedRow(payload) {
+  const exact = exactNormalizedImportRowSchema.safeParse(payload);
+  return exact.success
+    ? exact.data
+    : adaptLegacyRow(normalizedImportRowSchema.parse(payload));
+}
 
 /** Independent field checks over exported native documents, not archived copies. */
 function reconcileRecords(snapshot, target, findings) {
@@ -233,6 +251,18 @@ function reconcileRecords(snapshot, target, findings) {
               0,
             ),
             `${base}.normalizedRows`,
+          );
+          equal(
+            snapshot.tables.import_rows
+              .filter((row) => row.import_batch_id === source.id)
+              .sort(
+                (left, right) =>
+                  left.row_number - right.row_number ||
+                  left.id.localeCompare(right.id),
+              )
+              .map((row) => sourceNormalizedRow(row.normalized_payload)),
+            chunks.flatMap((chunk) => JSON.parse(chunk.rowsJson)),
+            `${base}.normalizedRowContent`,
           );
         }
       }

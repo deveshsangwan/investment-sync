@@ -2,7 +2,14 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { compare, semantic } = require("./reconcile.cjs");
 const { reconcileRecords } = require("./reconcile-records.cjs");
-const { legacyTables } = require("./phase6-artifacts.cjs");
+const {
+  legacyTables,
+  requireBackend,
+  sha256,
+} = require("./phase6-artifacts.cjs");
+const { adaptLegacyRow } = requireBackend(
+  "@investment-sync/importers/exact-adapter",
+);
 
 test("semantic comparison retains ordering, identity fields, status and exact amounts", () => {
   const expected = {
@@ -179,4 +186,116 @@ test("unexpected native rows cannot hide behind complete source mappings", () =>
     findings,
   );
   assert.equal(findings[0].reason, "unexpected_native_document");
+});
+
+test("consistently rehashed pending chunks must still equal the authoritative normalized input", () => {
+  const tables = Object.fromEntries(legacyTables.map((table) => [table, []]));
+  const payload = {
+    kind: "holding",
+    sourceType: "tickertape_stock_csv",
+    sourceDate: "2026-06-20",
+    accountName: "Generated",
+    provider: "Fake",
+    instrumentName: "ALPHA",
+    symbol: "ALPHA",
+    assetClass: "indian_stock",
+    currency: "INR",
+    investedAmount: 10,
+    currentValue: 15,
+    pnlAmount: 5,
+    quantity: 1,
+    metadata: {},
+  };
+  tables.import_batches = [
+    {
+      id: "batch",
+      household_id: "house",
+      uploaded_by_user_id: "owner",
+      original_file_name: "generated.csv",
+      source_type: "tickertape_stock_csv",
+      parser_version: "v1",
+      status: "parsed",
+      row_count: 1,
+      uploaded_at: "2026-06-20T12:00:00.000Z",
+    },
+  ];
+  tables.import_rows = [
+    {
+      id: "row",
+      import_batch_id: "batch",
+      row_number: 1,
+      normalized_payload: payload,
+    },
+  ];
+  const normalized = adaptLegacyRow(payload);
+  const batch = {
+    _id: "native-batch",
+    legacyId: "batch",
+    householdId: "native-house",
+    uploaderId: "native-owner",
+    fileName: "generated.csv",
+    sourceType: "tickertape_stock_csv",
+    parserVersion: "v1",
+    legacyStatus: "parsed",
+    legacyDeclaredRowCount: 1,
+    status: "parsed",
+    rowCount: 1,
+    attempt: 1,
+    createdAt: Date.parse(tables.import_batches[0].uploaded_at),
+  };
+  const chunk = {
+    _id: "chunk",
+    batchId: batch._id,
+    attempt: 1,
+    index: 0,
+    count: 1,
+    rowsJson: JSON.stringify([normalized]),
+  };
+  const target = {
+    tables: {
+      importBatches: [batch],
+      importRowChunks: [chunk],
+      households: [{ _id: "native-house" }],
+      users: [{ _id: "native-owner" }],
+      migrationMappings: [
+        {
+          legacyTable: "import_batches",
+          legacyId: "batch",
+          targetTable: "importBatches",
+          targetId: "native-batch",
+        },
+        {
+          legacyTable: "households",
+          legacyId: "house",
+          targetTable: "households",
+          targetId: "native-house",
+        },
+        {
+          legacyTable: "users",
+          legacyId: "owner",
+          targetTable: "users",
+          targetId: "native-owner",
+        },
+      ],
+    },
+  };
+  const clean = [];
+  reconcileRecords({ tables }, target, clean);
+  assert.equal(clean.length, 0);
+
+  normalized.currentValue = "999999";
+  chunk.rowsJson = JSON.stringify([normalized]);
+  chunk.digest = sha256(chunk.rowsJson);
+  chunk.bytes = Buffer.byteLength(chunk.rowsJson);
+  batch.manifest = [
+    { index: 0, count: 1, bytes: chunk.bytes, digest: chunk.digest },
+  ];
+  batch.normalizedBytes = chunk.bytes;
+  const findings = [];
+  reconcileRecords({ tables }, target, findings);
+  assert.equal(findings.length, 1);
+  assert.equal(
+    findings[0].path,
+    "native.importBatches.batch.normalizedRowContent",
+  );
 });
