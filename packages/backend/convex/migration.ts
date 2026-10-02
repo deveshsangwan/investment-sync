@@ -573,10 +573,11 @@ export const attachFile = internalAction({
 });
 
 export const fileState = internalQuery({
-  args: v.union(
-    v.object({ runKey: v.string(), legacyBatchId: v.string() }),
-    v.object({ runKey: v.string(), targetBatchId: v.id("importBatches") }),
-  ),
+  args: {
+    runKey: v.string(),
+    legacyBatchId: v.optional(v.string()),
+    targetBatchId: v.optional(v.id("importBatches")),
+  },
   returns: v.object({
     status: v.string(),
     storageId: v.union(v.id("_storage"), v.null()),
@@ -587,8 +588,10 @@ export const fileState = internalQuery({
   }),
   handler: async (ctx, args) => {
     const run = await requireMigration(ctx, args.runKey);
+    if (args.legacyBatchId !== undefined && args.targetBatchId !== undefined)
+      throw new Error("Choose one legacy or target batch ID");
     let file;
-    if ("legacyBatchId" in args) {
+    if (args.legacyBatchId !== undefined) {
       file = await migrationTarget(
         ctx,
         args.runKey,
@@ -596,7 +599,7 @@ export const fileState = internalQuery({
         args.legacyBatchId,
         "sourceFiles",
       );
-    } else {
+    } else if (args.targetBatchId !== undefined) {
       requireCompleteInput(run);
       const batch = await ctx.db.get("importBatches", args.targetBatchId);
       if (!batch || !(await ctx.db.get("households", batch.householdId)))
@@ -613,6 +616,8 @@ export const fileState = internalQuery({
         throw new Error(
           "Rollback source file ownership does not match its batch",
         );
+    } else {
+      throw new Error("A legacy or target batch ID is required");
     }
     const metadata = file.storageId
       ? await ctx.db.system.get("_storage", file.storageId)

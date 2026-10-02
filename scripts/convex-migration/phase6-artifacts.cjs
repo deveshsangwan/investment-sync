@@ -1,6 +1,7 @@
 const nodeCrypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { validateSemanticCoverage } = require("./view-coverage.cjs");
 const { createRequire } = require("node:module");
 const {
   createProtectedRunDirectory,
@@ -228,6 +229,7 @@ function readSnapshot(file) {
   }
 
   validateSourceFiles(snapshot);
+  validateSemanticCoverage(snapshot);
 
   const { inputDigest, tableManifest, perHouseholdCounts, ...body } = snapshot;
   const expected = sealSnapshot(body);

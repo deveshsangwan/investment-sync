@@ -84,6 +84,7 @@ async function extractSnapshot({
           transaction,
           tables.households.map((row) => row.id),
           frozenTime,
+          tables.holding_snapshots,
         );
         const sourceFiles = await captureFiles(
           tables.import_batches,

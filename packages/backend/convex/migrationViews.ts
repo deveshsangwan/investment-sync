@@ -4,7 +4,11 @@ import {
 } from "@investment-sync/portfolio-domain";
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
-import { migrationTarget, requireMigration } from "./model/migration";
+import {
+  migrationTarget,
+  requireMigration,
+  requireCompleteInput,
+} from "./model/migration";
 import {
   assetClassProjection,
   holdingDetailProjection,
@@ -26,7 +30,8 @@ const quoteValidator = v.union(
 export const portfolioView = internalQuery({
   args: {
     runKey: v.string(),
-    legacyHouseholdId: v.string(),
+    legacyHouseholdId: v.optional(v.string()),
+    targetHouseholdId: v.optional(v.id("households")),
     view: v.union(
       v.literal("overview"),
       v.literal("positions"),
@@ -39,14 +44,27 @@ export const portfolioView = internalQuery({
   },
   returns: v.string(),
   handler: async (ctx, args) => {
-    await requireMigration(ctx, args.runKey);
-    const household = await migrationTarget(
-      ctx,
-      args.runKey,
-      "households",
-      args.legacyHouseholdId,
-      "households",
-    );
+    const run = await requireMigration(ctx, args.runKey);
+    requireCompleteInput(run);
+    if (
+      args.legacyHouseholdId !== undefined &&
+      args.targetHouseholdId !== undefined
+    )
+      throw new Error("Choose one legacy or target household ID");
+    const household =
+      args.legacyHouseholdId !== undefined
+        ? await migrationTarget(
+            ctx,
+            args.runKey,
+            "households",
+            args.legacyHouseholdId,
+            "households",
+          )
+        : args.targetHouseholdId !== undefined
+          ? await ctx.db.get("households", args.targetHouseholdId)
+          : null;
+    if (!household)
+      throw new Error("A valid legacy or target household ID is required");
     const version = household.activePortfolioVersionId
       ? await ctx.db.get(
           "portfolioVersions",

@@ -14,6 +14,7 @@ export async function collectLegacyViews(
   db: Database,
   householdIds: string[],
   evaluationTime: string,
+  holdings: Array<{ id: string; household_id: string }>,
 ) {
   const originalNow = Date.now;
   const originalFetch = globalThis.fetch;
@@ -37,18 +38,13 @@ export async function collectLegacyViews(
       };
       const positions = await capture(() => buildPortfolioPositions(ctx));
       const details = [];
-      if ("current" in positions) {
-        const ids = new Set(
-          [...positions.current, ...positions.exited].map(
-            (holding) => holding.id,
-          ),
-        );
-        for (const id of ids)
-          details.push({
-            legacyId: id,
-            value: await capture(() => buildHoldingDetail(ctx, id)),
-          });
-      }
+      for (const holding of holdings.filter(
+        (row) => row.household_id === householdId,
+      ))
+        details.push({
+          legacyId: holding.id,
+          value: await capture(() => buildHoldingDetail(ctx, holding.id)),
+        });
 
       const assetClasses = [];
       for (const assetClass of assetClassEnum.enumValues) {

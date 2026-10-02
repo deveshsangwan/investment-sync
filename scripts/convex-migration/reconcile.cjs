@@ -14,6 +14,7 @@ const {
 const fs = require("node:fs");
 const { verifyStoredFile } = require("./load-snapshot.cjs");
 const { reconcileRecords } = require("./reconcile-records.cjs");
+const { validateSemanticCoverage } = require("./view-coverage.cjs");
 
 const targetTables = [
   "users",
@@ -216,6 +217,8 @@ async function reconcileSnapshot(
   runKey,
   approvedDispositions = [],
 ) {
+  validateSemanticCoverage(snapshot);
+
   const target = {
     ...(await exportTarget(connection, runKey)),
     sourceKind: snapshot.sourceKind,
@@ -223,6 +226,18 @@ async function reconcileSnapshot(
     inputDigest: snapshot.inputDigest,
   };
   const findings = [];
+  const run = target.tables.migrationRuns.find((run) => run.runKey === runKey);
+  if (
+    !run ||
+    run.inputDigest !== snapshot.inputDigest ||
+    run.sourceKind !== snapshot.sourceKind ||
+    run.evaluationTime !== snapshot.evaluationTime ||
+    !run.inputSealed
+  )
+    findings.push({
+      path: "migrationRun",
+      reason: "source_snapshot_or_run_state_mismatch",
+    });
   const dispositions = sourceDispositions(snapshot);
   if (snapshot.sourceKind === "production") {
     compare(
