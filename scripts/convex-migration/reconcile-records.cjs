@@ -40,6 +40,33 @@ function reconcileRecords(snapshot, target, findings) {
       });
   }
 
+  for (const table of [
+    "users",
+    "households",
+    "householdMembers",
+    "accounts",
+    "instruments",
+    "importBatches",
+    "sourceFiles",
+    "holdingSnapshots",
+    "transactions",
+    "portfolioValuations",
+    "currencyRates",
+  ]) {
+    const mappedIds = new Set(
+      mappings
+        .filter((mapping) => mapping.targetTable === table)
+        .map((mapping) => mapping.targetId),
+    );
+    for (const document of tables[table] ?? []) {
+      if (!mappedIds.has(document._id))
+        findings.push({
+          path: `native.${table}.${document._id}`,
+          reason: "unexpected_native_document",
+        });
+    }
+  }
+
   const fieldsByTable = {
     users: {
       target: "users",

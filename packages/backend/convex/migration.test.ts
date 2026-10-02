@@ -250,6 +250,24 @@ afterEach(() => {
 });
 
 describe("guarded migration loading", () => {
+  it("blocks reconciliation while an interrupted upload leaves an unclaimed storage object", async () => {
+    const t = await migrate();
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["unclaimed generated file"])),
+    );
+    const audit = await t.action(internal.migrationAudit.audit, { runKey });
+    expect(audit.ok).toBe(false);
+    expect(audit.findings).toContain(
+      "Unclaimed storage object remains in the migration target",
+    );
+
+    await t.run((ctx) => ctx.storage.delete(storageId));
+    expect(await t.action(internal.migrationAudit.audit, { runKey })).toEqual({
+      ok: true,
+      findings: [],
+    });
+  });
+
   it("closes operator access by default and rejects production data in development", async () => {
     vi.stubEnv("APP_ENV", "test");
     vi.stubEnv("MIGRATION_MODE", "");

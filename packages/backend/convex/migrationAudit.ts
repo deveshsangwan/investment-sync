@@ -119,6 +119,7 @@ export const audit = internalAction({
     for (const reference of [
       internal.migrationAudit.recordsPage,
       internal.migrationAudit.scopesPage,
+      internal.migrationAudit.storagePage,
     ]) {
       let cursor: string | null = null;
       do {
@@ -139,6 +140,40 @@ export const audit = internalAction({
       } while (cursor !== null);
     }
     return { ok: findings.length === 0, findings };
+  },
+});
+
+export const storagePage = internalQuery({
+  args: { runKey: v.string(), paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    findings: v.array(v.string()),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    await requireMigration(ctx, args.runKey);
+    if (args.paginationOpts.numItems > 10)
+      throw new Error("Migration storage audit page exceeds ten records");
+    const page = await ctx.db.system
+      .query("_storage")
+      .paginate(args.paginationOpts);
+    const findings: string[] = [];
+    for (const stored of page.page) {
+      const file = await ctx.db
+        .query("sourceFiles")
+        .withIndex("by_storageId", (q) => q.eq("storageId", stored._id))
+        .unique();
+      if (!file || file.status !== "stored")
+        findings.push(
+          "Unclaimed storage object remains in the migration target",
+        );
+    }
+
+    return {
+      findings,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
   },
 });
 

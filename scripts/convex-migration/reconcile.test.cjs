@@ -168,3 +168,15 @@ test("a missing mapped native row blocks verification", () => {
   );
   assert.equal(findings[0].reason, "missing_target_document");
 });
+
+test("unexpected native rows cannot hide behind complete source mappings", () => {
+  const findings = [];
+  reconcileRecords(
+    { tables: Object.fromEntries(legacyTables.map((table) => [table, []])) },
+    {
+      tables: { migrationMappings: [], users: [{ _id: "unexpected" }] },
+    },
+    findings,
+  );
+  assert.equal(findings[0].reason, "unexpected_native_document");
+});
