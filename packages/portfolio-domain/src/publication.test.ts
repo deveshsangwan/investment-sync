@@ -268,6 +268,93 @@ describe("portfolio publication", () => {
     ).toEqual([["Group A"], ["Group B"]]);
   });
 
+  it("exits workbook and Vested omissions together without combining their histories", () => {
+    const workbook = publish([
+      holding({
+        sourceType: "investment_portfolio_xlsx",
+        accountName: "US Stocks",
+        provider: "Manual Workbook",
+        assetClass: "us_stock",
+        currency: "USD",
+        metadata: { sourceSheet: "US stocks" },
+      }),
+    ]);
+    const vested = publish(
+      [
+        holding({
+          sourceType: "vested_drivewealth_xlsx",
+          accountName: "US Stocks",
+          provider: "Vested / DriveWealth",
+          assetClass: "us_stock",
+          currency: "USD",
+          sourceDate: "2025-02-01",
+        }),
+      ],
+      workbook.facts,
+      2,
+    );
+    const omitted = publish(
+      [
+        holding({
+          sourceType: "vested_drivewealth_xlsx",
+          accountName: "US Stocks",
+          provider: "Vested / DriveWealth",
+          assetClass: "us_stock",
+          currency: "USD",
+          symbol: "BETA",
+          instrumentName: "BETA",
+          sourceDate: "2025-03-01",
+        }),
+      ],
+      vested.facts,
+      3,
+    );
+
+    expect(
+      omitted.projection.positions.map((position) => [
+        position.status,
+        position.holding.row.symbol,
+      ]),
+    ).toEqual([
+      ["current", "BETA"],
+      ["exited", "ALPHA"],
+    ]);
+    expect(omitted.projection.positions[1]?.history).toHaveLength(1);
+    expect(omitted.projection.detailPositions?.[0]?.history).toHaveLength(1);
+    expect(omitted.reconciliation.holdingCount).toBe(3);
+  });
+
+  it("does not treat a partial Vested import as a complete workbook replacement", () => {
+    const workbook = publish([
+      holding({
+        sourceType: "investment_portfolio_xlsx",
+        accountName: "US Stocks",
+        provider: "Manual Workbook",
+        assetClass: "us_stock",
+        currency: "USD",
+        metadata: { sourceSheet: "US stocks" },
+      }),
+    ]);
+    const row = holding({
+      sourceType: "vested_drivewealth_xlsx",
+      accountName: "US Stocks",
+      provider: "Vested / DriveWealth",
+      assetClass: "us_stock",
+      currency: "USD",
+      symbol: "BETA",
+      instrumentName: "BETA",
+      sourceDate: "2025-02-01",
+    });
+    const partial = publish(
+      [{ ...row, source: { ...row.source, completeness: "partial" } }],
+      workbook.facts,
+      2,
+    );
+
+    expect(partial.reconciliation.currentCount).toBe(2);
+    expect(partial.reconciliation.exitedCount).toBe(0);
+  });
+
   it.each([false, true])(
     "keeps same-date NPS portal priority with reversed commit order %s",
     (portalFirst) => {

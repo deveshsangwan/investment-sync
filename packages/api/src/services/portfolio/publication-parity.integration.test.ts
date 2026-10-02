@@ -122,6 +122,20 @@ describeDb("Postgres portfolio publication parity", () => {
     );
   }
 
+  function usHolding(symbol: string, sourceDate: string, isWorkbook = false) {
+    return {
+      ...holdingRow({ symbol, instrumentName: symbol, sourceDate }),
+      sourceType: isWorkbook
+        ? "investment_portfolio_xlsx"
+        : "vested_drivewealth_xlsx",
+      accountName: "US Stocks",
+      provider: isWorkbook ? "Manual Workbook" : "Vested / DriveWealth",
+      assetClass: "us_stock",
+      currency: "USD",
+      metadata: isWorkbook ? { sourceSheet: "US stocks" } : {},
+    };
+  }
+
   async function assertParity(
     fixture: ImportFixture,
     quote: ValuationQuote = freshQuote,
@@ -286,6 +300,172 @@ describeDb("Postgres portfolio publication parity", () => {
       ]),
     );
     await assertParity(fixture);
+  });
+
+  it("matches shared workbook/Vested omissions, workbook-only symbols and re-entry", async () => {
+    const fixture = await createFixture(db, [
+      usHolding("ALPHA", "2026-01-01", true),
+      usHolding("OLD", "2026-01-01", true),
+    ]);
+    await commit(fixture);
+    await commit(
+      fixture,
+      await createBatch(db, fixture.membership, [
+        usHolding("ALPHA", "2026-02-01"),
+        usHolding("BETA", "2026-02-01"),
+      ]),
+    );
+    await commit(
+      fixture,
+      await createBatch(db, fixture.membership, [
+        usHolding("BETA", "2026-03-01"),
+      ]),
+    );
+    const omitted = await assertParity(fixture);
+
+    expect(omitted.actual.positions.current.map((row) => row.symbol)).toEqual([
+      "BETA",
+    ]);
+    expect(omitted.actual.positions.exited.map((row) => row.symbol)).toEqual([
+      "ALPHA",
+      "OLD",
+    ]);
+    expect(omitted.publication.reconciliation.holdingCount).toBe(5);
+
+    await commit(
+      fixture,
+      await createBatch(db, fixture.membership, [
+        usHolding("ALPHA", "2026-03-02", true),
+        usHolding("BETA", "2026-03-02", true),
+      ]),
+    );
+    const restored = await assertParity(fixture);
+    expect(restored.actual.positions.current.map((row) => row.symbol)).toEqual([
+      "ALPHA",
+      "BETA",
+    ]);
+    expect(restored.actual.positions.exited.map((row) => row.symbol)).toEqual([
+      "OLD",
+    ]);
+  });
+
+  it.each([false, true])(
+    "matches same-date Vested priority and omissions, workbook first=%s",
+    async (workbookFirst) => {
+      const workbook = [
+        usHolding("ALPHA", "2026-03-01", true),
+        usHolding("BETA", "2026-03-01", true),
+      ];
+      const vested = [
+        { ...usHolding("BETA", "2026-03-01"), currentValue: 250 },
+      ];
+      const fixture = await createFixture(
+        db,
+        workbookFirst ? workbook : vested,
+      );
+      await commit(fixture);
+      await commit(
+        fixture,
+        await createBatch(
+          db,
+          fixture.membership,
+          workbookFirst ? vested : workbook,
+        ),
+      );
+      const matched = await assertParity(fixture);
+
+      expect(matched.actual.positions.current).toMatchObject([
+        {
+          symbol: "BETA",
+          provider: "Vested / DriveWealth",
+          currentValue: "250",
+        },
+      ]);
+      expect(matched.actual.positions.exited.map((row) => row.symbol)).toEqual([
+        "ALPHA",
+      ]);
+    },
+  );
+
+  it.each([
+    { accountName: "Other US Account" },
+    { provider: "Other Broker" },
+    { sourceType: "manual_snapshot" },
+    { assetClass: "other" },
+    { currency: "INR" },
+    { metadata: { sourceSheet: "Other US stocks" } },
+  ])("matches an independent workbook source %j", async (overrides) => {
+    const fixture = await createFixture(db, [
+      { ...usHolding("ALPHA", "2026-01-01", true), ...overrides },
+    ]);
+    await commit(fixture);
+    await commit(
+      fixture,
+      await createBatch(db, fixture.membership, [
+        usHolding("ALPHA", "2026-02-01"),
+      ]),
+    );
+    await commit(
+      fixture,
+      await createBatch(db, fixture.membership, [
+        usHolding("BETA", "2026-03-01"),
+      ]),
+    );
+    const matched = await assertParity(fixture);
+
+    expect(matched.actual.positions.current.map((row) => row.symbol)).toEqual([
+      "BETA",
+      "ALPHA",
+    ]);
+    expect(matched.actual.positions.exited.map((row) => row.symbol)).toEqual([
+      "ALPHA",
+    ]);
+  });
+
+  it("matches Vested ranking without changing final display order", async () => {
+    const fixture = await createFixture(db, [
+      {
+        ...usHolding("ALPHA", "2026-03-01", true),
+        accountName: "Other US Account",
+        instrumentName: "Zebra",
+      },
+      {
+        ...usHolding("BETA", "2026-03-01", true),
+        accountName: "Other US Account",
+        instrumentName: "Aardvark",
+      },
+      usHolding("ALPHA", "2026-03-01"),
+    ]);
+    await commit(fixture);
+    const matched = await assertParity(fixture);
+
+    expect(matched.actual.positions.current.map((row) => row.symbol)).toEqual([
+      "BETA",
+      "ALPHA",
+    ]);
+    expect(matched.actual.positions.current[1]?.provider).toBe(
+      "Vested / DriveWealth",
+    );
+  });
+
+  it("keeps aggregate eligibility tied to physical source groups", async () => {
+    const fixture = await createFixture(db, [
+      {
+        ...usHolding("SUMMARY", "2026-03-01", true),
+        metadata: { sourceSheet: "US stocks", isAggregate: true },
+      },
+      usHolding("ALPHA", "2026-03-01"),
+    ]);
+    await commit(fixture);
+    const matched = await assertParity(fixture);
+
+    expect(matched.actual.positions.current.map((row) => row.symbol)).toEqual([
+      "ALPHA",
+    ]);
+    expect(matched.actual.positions.exited.map((row) => row.symbol)).toEqual([
+      "SUMMARY",
+    ]);
+    expect(matched.publication.reconciliation.holdingCount).toBe(2);
   });
 
   it.each(["fresh", "stale"] as const)(
