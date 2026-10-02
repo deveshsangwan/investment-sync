@@ -9,6 +9,7 @@ import {
   type PortfolioFact,
 } from "@investment-sync/portfolio-domain";
 import { z } from "zod";
+import { classifyQuoteAge, scheduleQuoteExpiry } from "./currencyRates";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
@@ -344,13 +345,10 @@ export async function loadLegacyRecord(
         row.quote === "INR" &&
         row.provider === "frankfurter"
       ) {
-        const age = Date.parse(run.evaluationTime) - Date.parse(row.fetched_at);
-        const status =
-          age > 7 * 86400000
-            ? "unavailable"
-            : age > 6 * 3600000
-              ? "stale"
-              : "fresh";
+        const status = classifyQuoteAge(
+          row.fetched_at,
+          Date.parse(run.evaluationTime),
+        );
         const existing = await ctx.db
           .query("currencyRates")
           .withIndex("by_base_and_quote_and_provider", (q) =>
@@ -368,8 +366,10 @@ export async function loadLegacyRecord(
           rate: canonicalDecimal(row.rate),
           fetchedAt: new Date(row.fetched_at).toISOString(),
           status,
-          refreshRevision: 0,
+          refreshRevision: 1,
+          quoteRevision: 1,
         });
+        await scheduleQuoteExpiry(ctx, row.fetched_at, 1);
         await mapTarget(
           ctx,
           run.runKey,

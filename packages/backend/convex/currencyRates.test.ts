@@ -1,11 +1,13 @@
 import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { internal } from "./_generated/api";
+import { currencyRatePolicy } from "./model/currencyRates";
 import schema from "./schema";
 import { modules } from "./test.setup";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.clearAllTimers();
   vi.useRealTimers();
 });
@@ -97,6 +99,8 @@ describe("USD/INR refresh", () => {
   });
 
   it("fences late responses and old expiry jobs while retaining usable quotes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-01-01T01:00:00.000Z"));
     const t = convexTest(schema, modules);
     const first = await t.mutation(internal.currencyRates.beginRefresh, {});
     const second = await t.mutation(internal.currencyRates.beginRefresh, {});
@@ -132,6 +136,7 @@ describe("USD/INR refresh", () => {
       refreshRevision: failed.requestRevision,
       quoteRevision: second.requestRevision,
     });
+    vi.setSystemTime(new Date("2025-01-01T07:00:00.000Z"));
     await t.mutation(internal.currencyRates.markStale, {
       quoteRevision: second.requestRevision,
     });
@@ -141,10 +146,85 @@ describe("USD/INR refresh", () => {
         quoteRevision: first.requestRevision,
       }),
     ).resolves.toBe("superseded");
+    vi.setSystemTime(new Date("2025-01-08T01:00:00.000Z"));
     await t.mutation(internal.currencyRates.markUnavailable, {
       quoteRevision: second.requestRevision,
     });
     await expect(readRate(t)).resolves.toMatchObject({ status: "unavailable" });
+  });
+
+  it("materializes quote expiry after a failed refresh even before delayed timers run", async () => {
+    vi.useFakeTimers();
+    const fetchedAt = "2025-06-01T00:00:00.000Z";
+    vi.setSystemTime(new Date(fetchedAt));
+    const t = convexTest(schema, modules);
+    const request = await t.mutation(internal.currencyRates.beginRefresh);
+    await t.mutation(internal.currencyRates.saveQuote, {
+      requestRevision: request.requestRevision,
+      rate: "83.25",
+      fetchedAt,
+    });
+    vi.setSystemTime(
+      new Date(Date.parse(fetchedAt) + currencyRatePolicy.freshMilliseconds),
+    );
+    const failedFresh = await t.mutation(internal.currencyRates.beginRefresh);
+    await t.mutation(internal.currencyRates.retainQuoteAfterFailure, {
+      requestRevision: failedFresh.requestRevision,
+    });
+    expect(await readRate(t)).toMatchObject({
+      status: "stale",
+      rate: "83.25",
+      quoteRevision: request.requestRevision,
+    });
+
+    vi.setSystemTime(
+      new Date(Date.parse(fetchedAt) + currencyRatePolicy.usableMilliseconds),
+    );
+    const failedStale = await t.mutation(internal.currencyRates.beginRefresh);
+    await t.mutation(internal.currencyRates.retainQuoteAfterFailure, {
+      requestRevision: failedStale.requestRevision,
+    });
+    expect(await readRate(t)).toMatchObject({
+      status: "unavailable",
+      rate: "83.25",
+      fetchedAt,
+      quoteRevision: request.requestRevision,
+    });
+  });
+
+  it("lets a delayed stale callback expire a seven-day-old quote while migration replacement stays frozen", async () => {
+    vi.useFakeTimers();
+    const fetchedAt = "2025-06-01T00:00:00.000Z";
+    vi.setSystemTime(new Date(fetchedAt));
+    const t = convexTest(schema, modules);
+    const request = await t.mutation(internal.currencyRates.beginRefresh);
+    await t.mutation(internal.currencyRates.saveQuote, {
+      requestRevision: request.requestRevision,
+      rate: "83.25",
+      fetchedAt,
+    });
+    vi.stubEnv("MIGRATION_MODE", "synthetic");
+    vi.setSystemTime(
+      new Date(Date.parse(fetchedAt) + currencyRatePolicy.usableMilliseconds),
+    );
+
+    expect(
+      await t.mutation(internal.currencyRates.markStale, {
+        quoteRevision: request.requestRevision,
+      }),
+    ).toBe("unavailable");
+    expect(await readRate(t)).toMatchObject({
+      status: "unavailable",
+      rate: "83.25",
+      fetchedAt,
+    });
+    await expect(
+      t.mutation(internal.currencyRates.saveQuote, {
+        requestRevision: request.requestRevision,
+        rate: "84",
+        fetchedAt,
+      }),
+    ).resolves.toBe("superseded");
   });
 });
 

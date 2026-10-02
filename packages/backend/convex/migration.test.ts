@@ -1,4 +1,5 @@
 import { convexTest } from "convex-test";
+import { normalizedImportRowSchema } from "@investment-sync/importers/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import {
@@ -9,7 +10,8 @@ import {
   type LegacyTable,
 } from "./model/migrationValidators";
 import { decodeFact } from "./model/portfolioEncoding";
-import { digest } from "./model/importLimits";
+import { digest, parseRows, utf8Bytes } from "./model/importLimits";
+import { currencyRatePolicy, toValuationQuote } from "./model/currencyRates";
 import schema from "./schema";
 import { modules } from "./test.setup";
 
@@ -244,12 +246,291 @@ async function migrate(tables = fixtures()) {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllEnvs();
 });
 
 describe("guarded migration loading", () => {
+  it("rejects changed pending normalized rows even when packed checksums and manifests were recomputed", async () => {
+    const t = await migrate();
+    await t.run(async (ctx) => {
+      const batch = (await ctx.db.query("importBatches").collect()).find(
+        (batch) => batch.legacyId === uuid(52),
+      );
+      if (!batch) throw new Error("Missing pending migrated batch");
+      const chunk = await ctx.db
+        .query("importRowChunks")
+        .withIndex("by_batchId_and_attempt_and_index", (q) =>
+          q
+            .eq("batchId", batch._id)
+            .eq("attempt", batch.attempt)
+            .eq("index", 0),
+        )
+        .unique();
+      if (!chunk) throw new Error("Missing pending normalized chunk");
+      const row = first(parseRows(chunk.rowsJson));
+      const changed = parseRows(
+        JSON.stringify([{ ...row, currentValue: "778" }]),
+      );
+      const rowsJson = JSON.stringify(changed);
+      const entry = {
+        index: 0,
+        count: changed.length,
+        bytes: utf8Bytes(rowsJson),
+        digest: digest(rowsJson),
+      };
+      await ctx.db.patch("importRowChunks", chunk._id, { ...entry, rowsJson });
+      await ctx.db.patch("importBatches", batch._id, {
+        manifest: [entry],
+        normalizedBytes: utf8Bytes(rowsJson),
+        previewRowsJson: rowsJson,
+      });
+    });
+
+    const audit = await t.action(internal.migrationAudit.audit, { runKey });
+    expect(audit.ok).toBe(false);
+    expect(audit.findings).toContain(
+      `import_batches/${uuid(52)}: Packed normalized rows differ from authoritative source payloads or row order`,
+    );
+  });
+
+  it("requires the complete ordered source rows when packed rows were reordered or omitted consistently", async () => {
+    const tables = fixtures();
+    const original = tables.import_rows.find(
+      (row) => row.import_batch_id === uuid(52),
+    );
+    if (!original) throw new Error("Missing normalized source fixture");
+    tables.import_rows.push({
+      ...original,
+      id: uuid(63),
+      row_number: 7,
+      normalized_payload: {
+        ...normalizedImportRowSchema.parse(original.normalized_payload),
+        currentValue: 888,
+      },
+    });
+    const t = await migrate(tables);
+    expect(await t.action(internal.migrationAudit.audit, { runKey })).toEqual({
+      ok: true,
+      findings: [],
+    });
+    const originalRows = await t.run(async (ctx) => {
+      const batch = (await ctx.db.query("importBatches").collect()).find(
+        (batch) => batch.legacyId === uuid(52),
+      );
+      if (!batch) throw new Error("Missing migrated batch");
+      const chunk = await ctx.db
+        .query("importRowChunks")
+        .withIndex("by_batchId_and_attempt_and_index", (q) =>
+          q
+            .eq("batchId", batch._id)
+            .eq("attempt", batch.attempt)
+            .eq("index", 0),
+        )
+        .unique();
+      if (!chunk) throw new Error("Missing normalized chunk");
+      return {
+        batchId: batch._id,
+        chunkId: chunk._id,
+        rows: parseRows(chunk.rowsJson),
+      };
+    });
+    for (const rows of [
+      [...originalRows.rows].reverse(),
+      originalRows.rows.slice(0, 1),
+    ]) {
+      await t.run(async (ctx) => {
+        const rowsJson = JSON.stringify(rows);
+        const entry = {
+          index: 0,
+          count: rows.length,
+          bytes: utf8Bytes(rowsJson),
+          digest: digest(rowsJson),
+        };
+        await ctx.db.patch("importRowChunks", originalRows.chunkId, {
+          ...entry,
+          rowsJson,
+        });
+        await ctx.db.patch("importBatches", originalRows.batchId, {
+          manifest: [entry],
+          rowCount: rows.length,
+          normalizedBytes: utf8Bytes(rowsJson),
+          previewRowsJson: rowsJson,
+        });
+      });
+      const audit = await t.action(internal.migrationAudit.audit, { runKey });
+      expect(audit.ok).toBe(false);
+      expect(audit.findings).toContain(
+        `import_batches/${uuid(52)}: Packed normalized rows differ from authoritative source payloads or row order`,
+      );
+    }
+  });
+
+  it("expires an imported quote reactively through a migration freeze and failed refreshes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(evaluationTime));
+    const tables = fixtures();
+    for (const account of tables.accounts) account.currency = "USD";
+    for (const instrument of tables.instruments) {
+      instrument.currency = "USD";
+      instrument.asset_class = "us_stock";
+    }
+    for (const table of [
+      "holding_snapshots",
+      "transactions",
+      "portfolio_valuations",
+    ] as const)
+      for (const row of tables[table]) row.currency = "USD";
+    tables.currency_rates.push({
+      id: uuid(100),
+      base: "USD",
+      quote: "INR",
+      rate: "83.2500000000",
+      provider: "frankfurter",
+      fetched_at: evaluationTime,
+      created_at: creationTime,
+      updated_at: evaluationTime,
+    });
+    const t = await migrate(tables);
+    const owner = t.withIdentity(ownerIdentity);
+    const readQuote = () =>
+      t.run(async (ctx) => {
+        const rate = first(await ctx.db.query("currencyRates").collect());
+        return { rate, quote: toValuationQuote(rate) };
+      });
+    expect((await readQuote()).rate).toMatchObject({
+      status: "fresh",
+      refreshRevision: 1,
+      quoteRevision: 1,
+      rate: "83.25",
+    });
+    expect(
+      (await owner.query(api.portfolio.overview)).summary.exchangeRates,
+    ).toMatchObject([{ isStale: false, rate: 83.25 }]);
+    expect(
+      await t.action(internal.actions.refreshCurrencyRate.refreshCurrencyRate),
+    ).toEqual({ outcome: "superseded", attempts: 0 });
+    await vi.advanceTimersByTimeAsync(currencyRatePolicy.freshMilliseconds - 1);
+    await t.finishInProgressScheduledFunctions();
+    expect((await readQuote()).quote.status).toBe("fresh");
+
+    await vi.advanceTimersByTimeAsync(1);
+    await t.finishInProgressScheduledFunctions();
+    expect((await readQuote()).quote.status).toBe("stale");
+    expect(
+      (await owner.query(api.portfolio.overview)).summary.exchangeRates,
+    ).toMatchObject([{ isStale: true, rate: 83.25 }]);
+    expect(await t.action(internal.migrationAudit.audit, { runKey })).toEqual({
+      ok: true,
+      findings: [],
+    });
+    vi.stubEnv("MIGRATION_MODE", "");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(null, { status: 400 })),
+    );
+    expect(
+      await t.action(internal.actions.refreshCurrencyRate.refreshCurrencyRate),
+    ).toEqual({ outcome: "failed", attempts: 1 });
+    expect((await readQuote()).rate).toMatchObject({
+      status: "stale",
+      refreshRevision: 2,
+      quoteRevision: 1,
+    });
+    vi.stubEnv("MIGRATION_MODE", "synthetic");
+    await vi.advanceTimersByTimeAsync(
+      currencyRatePolicy.usableMilliseconds -
+        currencyRatePolicy.freshMilliseconds -
+        1,
+    );
+    await t.finishInProgressScheduledFunctions();
+    expect((await readQuote()).quote.status).toBe("stale");
+
+    await vi.advanceTimersByTimeAsync(1);
+    await t.finishInProgressScheduledFunctions();
+    expect((await readQuote()).quote).toEqual({ status: "unavailable" });
+    await expect(owner.query(api.portfolio.overview)).rejects.toThrow(
+      "exchange rate is unavailable",
+    );
+    vi.stubEnv("MIGRATION_MODE", "");
+    expect(
+      await t.action(internal.actions.refreshCurrencyRate.refreshCurrencyRate),
+    ).toEqual({ outcome: "failed", attempts: 1 });
+    expect((await readQuote()).quote).toEqual({ status: "unavailable" });
+    expect((await readQuote()).rate).toMatchObject({
+      rate: "83.25",
+      fetchedAt: evaluationTime,
+      quoteRevision: 1,
+    });
+  });
+
+  it.each([
+    { age: currencyRatePolicy.freshMilliseconds, status: "stale" },
+    { age: currencyRatePolicy.usableMilliseconds, status: "unavailable" },
+  ])(
+    "classifies an imported quote as $status exactly at its age boundary",
+    async ({ age, status }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(evaluationTime));
+      const tables = fixtures();
+      tables.currency_rates.push({
+        id: uuid(100),
+        base: "USD",
+        quote: "INR",
+        rate: "83.2500000000",
+        provider: "frankfurter",
+        fetched_at: new Date(Date.parse(evaluationTime) - age).toISOString(),
+        created_at: creationTime,
+        updated_at: evaluationTime,
+      });
+      const t = await migrate(tables);
+      expect(
+        await t.run(async (ctx) =>
+          first(await ctx.db.query("currencyRates").collect()),
+        ),
+      ).toMatchObject({ status, quoteRevision: 1, refreshRevision: 1 });
+    },
+  );
+
+  it("exports a native batch source file for rollback and rejects mismatched ownership", async () => {
+    const t = await migrate();
+    vi.stubEnv("MIGRATION_MODE", "");
+    const owner = t.withIdentity(ownerIdentity);
+    const upload = await owner.mutation(api.imports.createUpload, {
+      fileName: "generated-native.csv",
+      sizeBytes: 12,
+    });
+    vi.stubEnv("MIGRATION_MODE", "synthetic");
+    expect(
+      await t.query(internal.migration.fileState, {
+        runKey,
+        targetBatchId: upload.batchId,
+      }),
+    ).toMatchObject({ status: "reserved", storageId: null });
+    await t.run(async (ctx) => {
+      const file = await ctx.db
+        .query("sourceFiles")
+        .withIndex("by_batchId", (q) => q.eq("batchId", upload.batchId))
+        .unique();
+      const other = (await ctx.db.query("households").collect()).find(
+        (household) => household.legacyId === uuid(12),
+      );
+      if (!file || !other)
+        throw new Error("Missing native rollback ownership fixture");
+      await ctx.db.patch("sourceFiles", file._id, { householdId: other._id });
+    });
+
+    await expect(
+      t.query(internal.migration.fileState, {
+        runKey,
+        targetBatchId: upload.batchId,
+      }),
+    ).rejects.toThrow("ownership does not match");
+  });
   it("blocks reconciliation while an interrupted upload leaves an unclaimed storage object", async () => {
     const t = await migrate();
     const storageId = await t.run((ctx) =>

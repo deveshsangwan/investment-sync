@@ -1,8 +1,11 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import { currencyRatePolicy, usdInrRate } from "./model/currencyRates";
+import {
+  classifyQuoteAge,
+  scheduleQuoteExpiry,
+  usdInrRate,
+} from "./model/currencyRates";
 import {
   hasMigrationWriteFreeze,
   requireApplicationWritesEnabled,
@@ -54,22 +57,12 @@ export const saveQuote = internalMutation({
       return "superseded";
 
     await ctx.db.patch("currencyRates", current._id, {
-      status: "fresh",
+      status: classifyQuoteAge(args.fetchedAt, Date.now()),
       rate: args.rate,
       fetchedAt: args.fetchedAt,
       quoteRevision: args.requestRevision,
     });
-    const fetchedAt = Date.parse(args.fetchedAt);
-    await ctx.scheduler.runAt(
-      fetchedAt + currencyRatePolicy.freshMilliseconds,
-      internal.currencyRates.markStale,
-      { quoteRevision: args.requestRevision },
-    );
-    await ctx.scheduler.runAt(
-      fetchedAt + currencyRatePolicy.usableMilliseconds,
-      internal.currencyRates.markUnavailable,
-      { quoteRevision: args.requestRevision },
-    );
+    await scheduleQuoteExpiry(ctx, args.fetchedAt, args.requestRevision);
 
     return "saved";
   },
@@ -82,29 +75,44 @@ export const retainQuoteAfterFailure = internalMutation({
     validateRefreshRevision(args.requestRevision);
     const current = await currentRate(ctx);
 
-    return current?.refreshRevision === args.requestRevision
-      ? "retained"
-      : "superseded";
+    if (!current || current.refreshRevision !== args.requestRevision)
+      return "superseded";
+    if (current.fetchedAt && current.status !== "unavailable") {
+      const status = classifyQuoteAge(current.fetchedAt, Date.now());
+      if (status !== current.status)
+        await ctx.db.patch("currencyRates", current._id, { status });
+    }
+
+    return "retained";
   },
 });
 
 export const markStale = internalMutation({
   args: { quoteRevision: v.number() },
-  returns: v.union(v.literal("stale"), v.literal("superseded")),
+  returns: v.union(
+    v.literal("stale"),
+    v.literal("unavailable"),
+    v.literal("superseded"),
+  ),
   handler: async (ctx, args) => {
-    if (hasMigrationWriteFreeze()) return "superseded";
     validateRefreshRevision(args.quoteRevision);
     const current = await currentRate(ctx);
     if (
       !current ||
       current.quoteRevision !== args.quoteRevision ||
-      current.status !== "fresh"
+      current.status !== "fresh" ||
+      !current.fetchedAt
     ) {
       return "superseded";
     }
 
-    await ctx.db.patch("currencyRates", current._id, { status: "stale" });
-    return "stale";
+    const status = classifyQuoteAge(current.fetchedAt, Date.now());
+    if (status === "fresh") return "superseded";
+
+    // Expiry changes only usability. It must still update subscriptions when
+    // migration freezes quote replacement and a deadline passes during review.
+    await ctx.db.patch("currencyRates", current._id, { status });
+    return status;
   },
 });
 
@@ -112,13 +120,14 @@ export const markUnavailable = internalMutation({
   args: { quoteRevision: v.number() },
   returns: v.union(v.literal("unavailable"), v.literal("superseded")),
   handler: async (ctx, args) => {
-    if (hasMigrationWriteFreeze()) return "superseded";
     validateRefreshRevision(args.quoteRevision);
     const current = await currentRate(ctx);
     if (
       !current ||
       current.quoteRevision !== args.quoteRevision ||
-      current.status === "unavailable"
+      current.status === "unavailable" ||
+      !current.fetchedAt ||
+      classifyQuoteAge(current.fetchedAt, Date.now()) !== "unavailable"
     ) {
       return "superseded";
     }

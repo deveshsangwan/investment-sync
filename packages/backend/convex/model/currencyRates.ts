@@ -1,6 +1,7 @@
 import type { ValuationQuote } from "@investment-sync/portfolio-domain";
 import type { Doc } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { internal } from "../_generated/api";
 
 export const usdInrRate = {
   base: "USD",
@@ -14,6 +15,32 @@ export const currencyRatePolicy = {
   requestTimeoutMilliseconds: 4000,
   retryDelayMilliseconds: 100,
 } as const;
+
+export function classifyQuoteAge(fetchedAt: string, evaluationTime: number) {
+  const age = evaluationTime - Date.parse(fetchedAt);
+  if (age >= currencyRatePolicy.usableMilliseconds) return "unavailable";
+  if (age >= currencyRatePolicy.freshMilliseconds) return "stale";
+
+  return "fresh";
+}
+
+export async function scheduleQuoteExpiry(
+  ctx: MutationCtx,
+  fetchedAt: string,
+  quoteRevision: number,
+) {
+  const fetchedInstant = Date.parse(fetchedAt);
+  await ctx.scheduler.runAt(
+    fetchedInstant + currencyRatePolicy.freshMilliseconds,
+    internal.currencyRates.markStale,
+    { quoteRevision },
+  );
+  await ctx.scheduler.runAt(
+    fetchedInstant + currencyRatePolicy.usableMilliseconds,
+    internal.currencyRates.markUnavailable,
+    { quoteRevision },
+  );
+}
 
 export async function readValuationQuote(ctx: QueryCtx) {
   const rates = await ctx.db

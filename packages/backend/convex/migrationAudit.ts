@@ -8,13 +8,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalAction, internalQuery } from "./_generated/server";
-import {
-  digest,
-  importLimits,
-  parseRows,
-  storageChecksumToHex,
-  utf8Bytes,
-} from "./model/importLimits";
+import { digest, storageChecksumToHex } from "./model/importLimits";
 import {
   migrationRecord,
   migrationTarget,
@@ -38,11 +32,13 @@ import {
   valuationSchema,
 } from "./model/migrationValidators";
 import { decodeFact } from "./model/portfolioEncoding";
+import { auditPackedNormalizedRows } from "./model/migrationRowAudit";
 
 export const recordsPage = internalQuery({
   args: { runKey: v.string(), paginationOpts: paginationOptsValidator },
   returns: v.object({
     findings: v.array(v.string()),
+    legacyBatchIds: v.array(v.string()),
     isDone: v.boolean(),
     continueCursor: v.string(),
   }),
@@ -69,6 +65,9 @@ export const recordsPage = internalQuery({
     }
     return {
       findings,
+      legacyBatchIds: page.page
+        .filter((record) => record.legacyTable === "import_batches")
+        .map((record) => record.legacyId),
       isDone: page.isDone,
       continueCursor: page.continueCursor,
     };
@@ -125,6 +124,7 @@ export const audit = internalAction({
       do {
         const result: {
           findings: string[];
+          legacyBatchIds?: string[];
           isDone: boolean;
           continueCursor: string;
         } = await ctx.runQuery(reference, {
@@ -132,6 +132,18 @@ export const audit = internalAction({
           paginationOpts: { cursor, numItems: 10, maximumBytesRead: 524288 },
         });
         findings.push(...result.findings);
+        for (const legacyBatchId of result.legacyBatchIds ?? []) {
+          try {
+            await auditPackedNormalizedRows(ctx, {
+              runKey: args.runKey,
+              legacyBatchId,
+            });
+          } catch (error) {
+            findings.push(
+              `import_batches/${legacyBatchId}: ${error instanceof Error ? error.message : "Normalized row source comparison failed"}`,
+            );
+          }
+        }
         if (findings.length > 1000)
           throw new Error(
             "Migration has more than one thousand integrity findings",
@@ -140,6 +152,128 @@ export const audit = internalAction({
       } while (cursor !== null);
     }
     return { ok: findings.length === 0, findings };
+  },
+});
+
+export const normalizedBatchState = internalQuery({
+  args: { runKey: v.string(), legacyBatchId: v.string() },
+  returns: v.object({
+    rowCount: v.number(),
+    normalizedBytes: v.number(),
+    previewRowsJson: v.string(),
+    manifestJson: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    await requireMigration(ctx, args.runKey);
+    const batch = await migrationTarget(
+      ctx,
+      args.runKey,
+      "import_batches",
+      args.legacyBatchId,
+      "importBatches",
+    );
+    if (!batch.manifest || !batch.migrationRowsFinalized)
+      throw new Error("Normalized batch staging is incomplete");
+
+    return {
+      rowCount: batch.rowCount,
+      normalizedBytes: batch.normalizedBytes,
+      previewRowsJson: batch.previewRowsJson,
+      manifestJson: JSON.stringify(batch.manifest),
+    };
+  },
+});
+
+export const sourceNormalizedRowsPage = internalQuery({
+  args: {
+    runKey: v.string(),
+    legacyBatchId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    rowsJson: v.string(),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    await requireMigration(ctx, args.runKey);
+    if (args.paginationOpts.numItems > 20)
+      throw new Error("Normalized source audit page exceeds twenty records");
+    const page = await ctx.db
+      .query("migrationRecords")
+      .withIndex(
+        "by_runKey_and_legacyTable_and_batchLegacyId_and_rowNumber",
+        (q) =>
+          q
+            .eq("runKey", args.runKey)
+            .eq("legacyTable", "import_rows")
+            .eq("batchLegacyId", args.legacyBatchId),
+      )
+      .paginate(args.paginationOpts);
+    const rows = page.page.map((record) => {
+      if (digest(record.sourceJson) !== record.digest)
+        throw new Error("Normalized source checksum changed");
+      const source = importRowSchema.parse(parseJson(record.sourceJson));
+      if (
+        source.import_batch_id !== args.legacyBatchId ||
+        source.row_number !== record.rowNumber ||
+        source.id !== record.legacyId
+      )
+        throw new Error("Normalized source row identity or order changed");
+      const exact = exactNormalizedImportRowSchema.safeParse(
+        source.normalized_payload,
+      );
+      const row = exact.success
+        ? exact.data
+        : adaptLegacyRow(
+            normalizedImportRowSchema.parse(source.normalized_payload),
+          );
+
+      return { rowNumber: source.row_number, row };
+    });
+
+    return {
+      rowsJson: JSON.stringify(rows),
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
+  },
+});
+
+export const packedChunksPage = internalQuery({
+  args: {
+    runKey: v.string(),
+    legacyBatchId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    chunksJson: v.string(),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    await requireMigration(ctx, args.runKey);
+    if (args.paginationOpts.numItems > 10)
+      throw new Error("Normalized chunk audit page exceeds ten records");
+    const batch = await migrationTarget(
+      ctx,
+      args.runKey,
+      "import_batches",
+      args.legacyBatchId,
+      "importBatches",
+    );
+    const page = await ctx.db
+      .query("importRowChunks")
+      .withIndex("by_batchId_and_attempt_and_index", (q) =>
+        q.eq("batchId", batch._id).eq("attempt", batch.attempt),
+      )
+      .paginate(args.paginationOpts);
+
+    return {
+      chunksJson: JSON.stringify(page.page),
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
   },
 });
 
@@ -441,39 +575,6 @@ async function auditRecord(
             : row.status;
       if (target.status !== expectedStatus || !target.migrationRowsFinalized)
         throw new Error("Migrated batch workflow state mismatch");
-      const chunks = await ctx.db
-        .query("importRowChunks")
-        .withIndex("by_batchId_and_attempt_and_index", (q) =>
-          q.eq("batchId", target._id).eq("attempt", target.attempt),
-        )
-        .take(importLimits.chunks + 1);
-      if (
-        !target.manifest ||
-        chunks.length !== target.manifest.length ||
-        chunks.length > importLimits.chunks
-      )
-        throw new Error("Normalized chunk manifest incomplete");
-      const rows = [];
-      for (const [index, chunk] of chunks.entries()) {
-        const expected = target.manifest[index];
-        if (
-          !expected ||
-          chunk.index !== index ||
-          expected.index !== index ||
-          chunk.digest !== digest(chunk.rowsJson) ||
-          chunk.digest !== expected.digest ||
-          chunk.bytes !== utf8Bytes(chunk.rowsJson) ||
-          chunk.bytes !== expected.bytes ||
-          chunk.count !== expected.count
-        )
-          throw new Error("Normalized chunk integrity mismatch");
-        rows.push(...parseRows(chunk.rowsJson));
-      }
-      if (
-        rows.length !== target.rowCount ||
-        utf8Bytes(JSON.stringify(rows)) !== target.normalizedBytes
-      )
-        throw new Error("Normalized row or byte totals mismatch");
       const file = await migrationTarget(
         ctx,
         run.runKey,
@@ -534,6 +635,10 @@ async function auditRecord(
             normalizedImportRowSchema.parse(row.normalized_payload),
           );
       assertEqual(parseJson(record.normalizedRowJson ?? "null"), normalized);
+      assertEqual(
+        [record.batchLegacyId, record.rowNumber],
+        [row.import_batch_id, row.row_number],
+      );
       await migrationRecord(
         ctx,
         run.runKey,
