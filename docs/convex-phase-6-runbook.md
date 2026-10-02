@@ -30,24 +30,24 @@ pnpm migration:export \
 
 pnpm migration:rehearse \
   --snapshot .migration/generated-source-complete/snapshot.json \
-  --first-target-env-file .migration/local-backends/phase6-d/operator.env \
-  --second-target-env-file .migration/local-backends/phase6-e/operator.env \
-  --run-id rehearsal-complete
+  --first-target-env-file .migration/local-backends/phase6-f/operator.env \
+  --second-target-env-file .migration/local-backends/phase6-g/operator.env \
+  --run-id rehearsal-verified
 ```
 
 The last command is restricted to two distinct disposable local targets. It loads the same snapshot twice, executes independent reconciliation, and requires identical target semantic digests and table counts. Expected output is `Both local migrations passed independent reconciliation with identical semantic digests`.
 
-The rehearsed targets are `local:phase6-d` at `127.0.0.1:3220` and `local:phase6-e` at `127.0.0.1:3222`. Each receives 3 Households, 4 users, 20 accounts, 25 historical batches, 43 normalized rows, 36 holdings, 2 transactions, 2 valuations, and 5 available generated files. Twenty-five global legacy instruments map to 27 household-scoped instruments. Unreferenced global data remains in the source archive. No duplicate identity is silently merged.
+The rehearsed targets are `local:phase6-f` at `127.0.0.1:3224` and `local:phase6-g` at `127.0.0.1:3226`. Each receives 3 Households, 4 users, 20 accounts, 25 historical batches, 43 normalized rows, 36 holdings, 2 transactions, 2 valuations, and 5 available generated files. Twenty-five global legacy instruments map to 27 household-scoped instruments. Unreferenced global data remains in the source archive. No duplicate identity is silently merged.
 
-A load plus independent reconciliation of this small fixture takes seconds locally. The measured repeat load plus full reconciliation took 4.750 seconds. This is not a production downtime estimate. Measure production-sized rehearsals and restore backups before assigning a cutover window.
+A load plus independent reconciliation of this small fixture takes seconds locally. The measured repeat load plus full reconciliation took 7.301 seconds and left the entire exported packet unchanged. This is not a production downtime estimate. Measure production-sized rehearsals and restore backups before assigning a cutover window.
 
 ## Individual loading and reconciliation
 
 ```sh
 pnpm migration:load \
   --snapshot .migration/generated-source-complete/snapshot.json \
-  --target-env-file .migration/local-backends/phase6-e/operator.env \
-  --run-id rehearsal-complete-b
+  --target-env-file .migration/local-backends/phase6-g/operator.env \
+  --run-id rehearsal-verified-b
 ```
 
 Without `--apply yes`, loading checks the source checksums, source bytes, and target classification without writing. Add that flag only for the already authorized target. Loading in the same run is idempotent; changing a source record or reusing the run with different input stops execution. An interrupted load leaves the target inactive. Correct the failure and resume the same input; do not reset or silently overwrite it.
@@ -55,9 +55,9 @@ Without `--apply yes`, loading checks the source checksums, source bytes, and ta
 ```sh
 pnpm migration:reconcile \
   --snapshot .migration/generated-source-complete/snapshot.json \
-  --target-env-file .migration/local-backends/phase6-e/operator.env \
-  --run-id rehearsal-complete-b \
-  --report-id rehearsal-complete-b-verified
+  --target-env-file .migration/local-backends/phase6-g/operator.env \
+  --run-id rehearsal-verified-b \
+  --report-id rehearsal-verified-b-checked
 ```
 
 Expected output is `Reconciliation complete: 0 unexplained differences`. Every report is immutable. Use a new report ID after a code fix while retaining the failed report as evidence. `target.json` contains the actual native records and enriched mappings needed for reverse replay. Failures produce protected diagnostics and exit nonzero.
@@ -66,7 +66,7 @@ Expected output is `Reconciliation complete: 0 unexplained differences`. Every r
 
 One read-only repeatable-read transaction captures every SQL table and executes the retained Postgres readers. UUIDs, numeric values, dates, and UTC timestamps retain their source representations. The source manifest contains whole-table digests and household counts, including normalized rows reached through their batch and shared instruments reached through facts. Available file bytes are checked against their stored SHA-256 and copied unchanged. Expired and missing files retain their unavailable metadata.
 
-The independent target checker verifies native records, ID mappings and household relationships, normalized chunks, import workflow states, dedupe keys, all legacy holding aliases, source-file metadata and actual downloaded bytes. Exact monetary and quantity strings compare after decimal canonicalization. Orphan uploads, unexpected native documents, incomplete exports, and unsupported source facts block the result. Source archives alone cannot prove a correct target.
+The independent target checker verifies native records, ID mappings and household relationships, normalized chunks, import workflow states, dedupe keys, all legacy holding aliases, source-file metadata and actual downloaded bytes. It reconstructs each complete committed fact from its SQL source and parents, including metadata, parser/source rules, publication ordering and stored identity keys. This check remains necessary when already-published views have not reacted to corruption. Exact monetary and quantity strings compare after decimal canonicalization. Orphan uploads, unexpected native documents, incomplete exports, and unsupported source facts block the result. Source archives alone cannot prove a correct target.
 
 Portfolio comparison calls the retained Postgres implementation and the Convex read models independently. It covers Overview, Current and Exited positions, every asset class, every legacy holding detail, including older and suppressed UUIDs, histories, transactions, timelines, XIRR and quality labels. Both use the same persisted exchange-rate quote and evaluation time. Approximate numeric analytics allow only the plan's absolute tolerance of `1e-8`; persisted financial values remain exact.
 

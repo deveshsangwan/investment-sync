@@ -111,13 +111,13 @@ Run from the repository root with protected generated inputs and the explicit op
 ```sh
 node scripts/convex-migration/rehearse-rollback.cjs \
   --snapshot .migration/generated-source-complete/snapshot.json \
-  --baseline .migration/rehearsal-complete-a/target.json \
+  --baseline .migration/rehearsal-verified-a/target.json \
   --fixture-metadata .migration/generated-source-v2/fixture-metadata.json \
-  --target-env-file .migration/local-backends/phase6-d/operator.env \
+  --target-env-file .migration/local-backends/phase6-f/operator.env \
   --source-env-file .migration/generated-source-v2/database.env \
-  --run-key rehearsal-complete-a \
-  --run-id live-rollback-complete-a \
-  --database-name investment_sync_rollback_live_complete_a
+  --run-key rehearsal-verified-a \
+  --run-id live-rollback-verified-a \
+  --database-name investment_sync_rollback_live_verified_a
 ```
 
 The default database is `investment_sync_rollback_live`; an explicit name may only add a lowercase alphanumeric/underscore suffix. Existing databases are retained and must already match the frozen source or exact replay. Use a new dedicated name for a new clean target. `--mode capture` resumes after both protected commit receipts exist, without creating another identity or import. `--mode replay` reuses the frozen packet. `--mode semantic` repeats only the exact SQL check and independent read-model comparison. Any comparison finding causes a nonzero exit and remains in a protected diagnostic artifact; the drill does not approve differences.
@@ -128,4 +128,6 @@ The independent comparison covered all 4 households, all 38 holding UUIDs, and a
 
 The final `local:phase6-d` drill passed after `5cc11f8` restored ordered per-row chart arithmetic. Stored facts and exact native totals were unchanged, and the comparison tolerance remains `1e-8`. All SQL tables exactly match replay digest `e1dd307b48075e2916a94d3598b7ffb87655931c6ad712a22ffb47a7be284a59`; the repeated application is idempotent. Counts match the first drill. Independent portfolio verification covers 4 households, all 38 holding UUIDs and all 32 asset-class views, with zero unexplained differences. The restored new file has matching bytes, hash and size. Before-write recovery refuses the changed target. The final protected receipts are `.migration/live-rollback-complete-a/rollback-receipt.json` and `semantic-receipt.json`. The earlier failed semantic receipt remains preserved, and its chart finding is now resolved. No production action was taken.
 
-The targeted review also reproduced a supported three-row INR Commit whose values are `[1, 1, 9007199254740992]`. Arbitrary hashed holding IDs reversed the SQL accumulation order and changed the chart by 2 INR. Ordered holding IDs now match the actual publication/value helpers and the independent legacy aggregation helper. Regressions cover equal Commit timestamps across batches, household scope, same-date corrections, arbitrary archived UUIDs with microsecond creation timestamps, and a clock reversal that must stop before writes. The full migration-tool suite, including the dedicated Postgres integration test, passed 61 tests. A fresh suffixed rehearsal database is required for another live drill with this revised new-holding ID format; prior receipts and restored proof databases remain preserved.
+The targeted review also reproduced a supported three-row INR Commit whose values are `[1, 1, 9007199254740992]`. Arbitrary hashed holding IDs reversed the SQL accumulation order and changed the chart by 2 INR. Ordered holding IDs now match the actual publication/value helpers and the independent legacy aggregation helper. Regressions cover equal Commit timestamps across batches, household scope, same-date corrections, arbitrary archived UUIDs with microsecond creation timestamps, and a clock reversal that must stop before writes. The full migration-tool suite, including the dedicated Postgres integration test, passed 62 tests. Prior receipts and restored proof databases remain preserved.
+
+The final fresh drill on `local:phase6-f` included the complete committed-fact checks, original snapshot creation order and ordered reverse UUIDs. The actual public expired-file Commit and new uploaded import succeeded, and downloaded file bytes matched. Replay into `investment_sync_rollback_live_verified_a` matched every SQL row with digest `a4f45839d813db2df98843b3757a85142d05490d344b7a76b128e34e2e7c7d91`. Repeated replay made no writes. The independent SQL/native comparison had zero unexplained differences across 4 households, all 38 holding UUIDs and 32 asset classes. Counts match the preceding drills. Protected receipts are `.migration/live-rollback-verified-a/rollback-receipt.json` and `semantic-receipt.json`. Production remained unchanged.
