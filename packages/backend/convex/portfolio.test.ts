@@ -762,6 +762,7 @@ describe("public portfolio reads", () => {
 
     expect(before.summary.currentValue).toBe(960);
     expect(after.summary.currentValue).toBe(1080);
+    vi.setSystemTime(new Date("2025-04-01T07:00:00.000Z"));
     await state.t.mutation(internal.currencyRates.markStale, {
       quoteRevision: beginning.requestRevision,
     });
@@ -770,6 +771,7 @@ describe("public portfolio reads", () => {
     ).resolves.toMatchObject({
       summary: { exchangeRates: [{ rate: 90, isStale: true }] },
     });
+    vi.setSystemTime(new Date("2025-04-08T01:00:00.000Z"));
     await state.t.mutation(internal.currencyRates.markUnavailable, {
       quoteRevision: beginning.requestRevision,
     });
