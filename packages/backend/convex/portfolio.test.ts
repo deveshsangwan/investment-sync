@@ -228,6 +228,57 @@ afterEach(() => {
 });
 
 describe("public portfolio reads", () => {
+  it("preserves portfolio summation order when hydrating detail views", async () => {
+    const state = await setupPortfolio([
+      holding({
+        instrumentName: "A",
+        symbol: "A",
+        currentValue: 2 ** 53,
+        investedAmount: 2 ** 53,
+        pnlAmount: 0,
+      }),
+      holding({
+        instrumentName: "B",
+        symbol: "B",
+        assetClass: "mutual_fund",
+        currentValue: 2,
+        investedAmount: 0,
+        pnlAmount: 2,
+      }),
+      holding({
+        instrumentName: "C",
+        symbol: "C",
+        currentValue: 1,
+        investedAmount: 0,
+        pnlAmount: 1,
+      }),
+    ]);
+
+    for (const position of state.publication.projection.positions) {
+      await expect(
+        state.owner.query(api.portfolio.holdingDetail, {
+          positionKey: position.positionKey,
+        }),
+      ).resolves.toEqual(
+        valuePortfolioPublication(state.publication.projection, quote, {
+          view: "holdingDetail",
+          positionKey: position.positionKey,
+        }),
+      );
+    }
+
+    for (const assetClass of ["indian_stock", "mutual_fund"] as const) {
+      await expect(
+        state.owner.query(api.portfolio.assetClassDetail, { assetClass }),
+      ).resolves.toEqual(
+        valuePortfolioPublication(state.publication.projection, quote, {
+          view: "assetClassDetail",
+          assetClass,
+        }),
+      );
+    }
+  });
+
   it.each(parserGoldenFixtures())(
     "matches pure-domain views for the $name parser golden",
     async ({ file }) => {

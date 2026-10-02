@@ -135,17 +135,16 @@ export async function holdingDetailProjection(
   }
   const source = scopeFactSource(facts, historyScopes);
   const selectedProjection = decodePosition(selected, source);
-  const currentProjections = current
-    .filter((doc) => doc.positionKey !== selected.positionKey)
-    .map(decodePositionHeader);
+  const currentProjections = current.map((doc) =>
+    doc.positionKey === selected.positionKey
+      ? selectedProjection
+      : decodePositionHeader(doc),
+  );
 
   return {
     projection: projection({
       summary,
-      positions:
-        selected.status === "current"
-          ? [...currentProjections, selectedProjection]
-          : currentProjections,
+      positions: currentProjections,
       detailPositions:
         selected.status === "current" ? [] : [selectedProjection],
     }),
@@ -203,17 +202,10 @@ export async function assetClassProjection(
     fallbackRanges = 2;
   }
   const source = scopeFactSource(facts, scopes);
-  const currentAssetPositions = current.filter(
-    (doc) => doc.assetClass === assetClass,
-  );
-  const currentAssetKeys = new Set(
-    currentAssetPositions.map((doc) => doc.positionKey),
-  );
-  const globalCurrent = current
-    .filter((doc) => !currentAssetKeys.has(doc.positionKey))
-    .map(decodePositionHeader);
-  const hydratedCurrent = currentAssetPositions.map((doc) =>
-    decodePosition(doc, source),
+  const currentProjections = current.map((doc) =>
+    doc.assetClass === assetClass
+      ? decodePosition(doc, source)
+      : decodePositionHeader(doc),
   );
   const exited = assetPositions
     .filter((doc) => doc.status === "exited")
@@ -222,7 +214,7 @@ export async function assetClassProjection(
   return {
     projection: projection({
       summary,
-      positions: [...globalCurrent, ...hydratedCurrent, ...exited],
+      positions: [...currentProjections, ...exited],
       assetClasses: [
         {
           assetClass,
@@ -234,7 +226,8 @@ export async function assetClassProjection(
     counts: {
       ranges: 7 + fallbackRanges,
       positions: assetPositions.length + current.length,
-      hydratedPositions: hydratedCurrent.length,
+      hydratedPositions: current.filter((doc) => doc.assetClass === assetClass)
+        .length,
       historyFacts: facts.length,
       decodedHistoryFacts:
         source.holdingPayloadsById.size + source.transactionPayloadsById.size,

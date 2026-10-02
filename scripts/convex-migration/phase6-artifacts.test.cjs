@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
+const { loadSnapshot } = require("./load-snapshot.cjs");
 const {
   legacyTables,
   canonicalJson,
@@ -23,6 +24,14 @@ function fixture() {
     sourceFiles: [],
     views: [],
   });
+}
+
+function unsealedFixture() {
+  const source = fixture();
+  delete source.inputDigest;
+  delete source.tableManifest;
+  delete source.perHouseholdCounts;
+  return source;
 }
 
 test("canonical digests ignore object ordering but retain array order and exact decimals", () => {
@@ -78,6 +87,71 @@ test("artifacts reject paths outside the protected root and symlink escapes", ()
     );
   } finally {
     fs.unlinkSync(link);
+  }
+});
+
+test("household manifests count normalized rows through batches and shared instruments through facts", () => {
+  const source = unsealedFixture();
+  source.tables.households = [{ id: "house-a" }, { id: "house-b" }];
+  source.tables.import_batches = [{ id: "batch-a", household_id: "house-a" }];
+  source.tables.import_rows = [{ id: "row-a", import_batch_id: "batch-a" }];
+  source.tables.holding_snapshots = [
+    { id: "holding-a", household_id: "house-a", instrument_id: "shared" },
+    { id: "holding-b", household_id: "house-b", instrument_id: "shared" },
+  ];
+  const manifest = sealSnapshot(source).perHouseholdCounts;
+  assert.equal(manifest[0].counts.import_rows, 1);
+  assert.equal(manifest[1].counts.import_rows, 0);
+  assert.equal(manifest[0].counts.instruments, 1);
+  assert.equal(manifest[1].counts.instruments, 1);
+});
+
+test("missing source bytes fail before the first target mutation", async () => {
+  const runId = `phase6-preflight-test-${process.pid}`;
+  const source = unsealedFixture();
+  source.tables.import_batches = [
+    {
+      id: "batch",
+      expires_at: "2026-06-30T00:00:00.000Z",
+      storage_path: "generated/path",
+      file_hash: "a".repeat(64),
+    },
+  ];
+  source.sourceFiles = [
+    {
+      legacyBatchId: "batch",
+      expiresAt: "2026-06-30T00:00:00.000Z",
+      legacyStoragePath: "generated/path",
+      status: "available",
+      contentHash: "a".repeat(64),
+      sizeBytes: 10,
+      artifact: `${"a".repeat(64)}.bin`,
+    },
+  ];
+  const file = writeArtifact(runId, "snapshot.json", sealSnapshot(source));
+  let writes = 0;
+  try {
+    const snapshot = readSnapshot(file);
+    await assert.rejects(
+      loadSnapshot(
+        snapshot,
+        file,
+        {
+          invoke: () => {
+            writes += 1;
+          },
+        },
+        runId,
+      ),
+      /ENOENT/,
+    );
+    assert.equal(writes, 0);
+    snapshot.sourceFiles[0].artifact = "../outside.bin";
+    source.sourceFiles = snapshot.sourceFiles;
+    const bad = writeArtifact(runId, "bad.json", sealSnapshot(source));
+    assert.throws(() => readSnapshot(bad), /Invalid available/);
+  } finally {
+    fs.rmSync(path.dirname(file), { recursive: true });
   }
 });
 

@@ -1,4 +1,4 @@
-import { createClient } from "../../packages/db/node_modules/@supabase/supabase-js";
+import { createClient } from "../../packages/api/node_modules/@supabase/supabase-js/dist/index.mjs";
 import type { Database } from "../../packages/db/src/client";
 import { assetClassEnum } from "../../packages/db/src/schema";
 import { buildPortfolioOverview } from "../../packages/api/src/services/portfolio/overview";
@@ -19,9 +19,8 @@ export async function collectLegacyViews(
   const originalFetch = globalThis.fetch;
   Date.now = () => Date.parse(evaluationTime);
   // A comparison must use the saved quote and must never refresh production FX.
-  globalThis.fetch = async () => {
-    throw new Error("Network disabled during snapshot comparison");
-  };
+  globalThis.fetch = () =>
+    Promise.reject(new Error("Network disabled during snapshot comparison"));
 
   try {
     const views = [];
@@ -29,7 +28,10 @@ export async function collectLegacyViews(
       const ctx: PortfolioContext = {
         db,
         auth: { userId: null },
-        supabase: createClient("http://127.0.0.1:1", "snapshot-comparison"),
+        supabase: createClient<Record<string, unknown>>(
+          "http://127.0.0.1:1",
+          "snapshot-comparison",
+        ),
         cache: new Map(),
         membership: { householdId },
       };

@@ -39,6 +39,7 @@ export const exportTables = [
   "transactions",
   "portfolioValuations",
   "portfolioVersions",
+  "publicationReceipts",
   "portfolioPositions",
   "portfolioHistoryFacts",
   "portfolioHistoryScopes",

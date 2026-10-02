@@ -17,12 +17,21 @@ import type * as currencyRates from "../currencyRates.js";
 import type * as importCleanup from "../importCleanup.js";
 import type * as importWorkers from "../importWorkers.js";
 import type * as imports from "../imports.js";
+import type * as migration from "../migration.js";
+import type * as migrationAudit from "../migrationAudit.js";
+import type * as migrationProjectionWorkers from "../migrationProjectionWorkers.js";
+import type * as migrationPublication from "../migrationPublication.js";
+import type * as migrationViews from "../migrationViews.js";
 import type * as model_auth from "../model/auth.js";
 import type * as model_currencyRates from "../model/currencyRates.js";
 import type * as model_importLimits from "../model/importLimits.js";
 import type * as model_importRetention from "../model/importRetention.js";
 import type * as model_importValidators from "../model/importValidators.js";
 import type * as model_imports from "../model/imports.js";
+import type * as model_migration from "../model/migration.js";
+import type * as model_migrationFreeze from "../model/migrationFreeze.js";
+import type * as model_migrationLoad from "../model/migrationLoad.js";
+import type * as model_migrationValidators from "../model/migrationValidators.js";
 import type * as model_portfolioEncoding from "../model/portfolioEncoding.js";
 import type * as model_portfolioLimits from "../model/portfolioLimits.js";
 import type * as model_portfolioReads from "../model/portfolioReads.js";
@@ -50,34 +59,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 
-import type * as migration from "../migration.js";
-
-import type * as migrationProjectionWorkers from "../migrationProjectionWorkers.js";
-
-import type * as migrationPublication from "../migrationPublication.js";
-
-import type * as migrationViews from "../migrationViews.js";
-
-import type * as model_migration from "../model/migration.js";
-
-import type * as model_migrationFreeze from "../model/migrationFreeze.js";
-
-import type * as model_migrationLoad from "../model/migrationLoad.js";
-
-import type * as model_migrationValidators from "../model/migrationValidators.js";
-
-import type * as migrationAudit from "../migrationAudit.js";
-
 declare const fullApi: ApiFromModules<{
-  migrationAudit: typeof migrationAudit;
-  "model/migrationValidators": typeof model_migrationValidators;
-  "model/migrationLoad": typeof model_migrationLoad;
-  "model/migrationFreeze": typeof model_migrationFreeze;
-  "model/migration": typeof model_migration;
-  migrationViews: typeof migrationViews;
-  migrationPublication: typeof migrationPublication;
-  migrationProjectionWorkers: typeof migrationProjectionWorkers;
-  migration: typeof migration;
   accounts: typeof accounts;
   "actions/parseImport": typeof actions_parseImport;
   "actions/publishPortfolio": typeof actions_publishPortfolio;
@@ -87,12 +69,21 @@ declare const fullApi: ApiFromModules<{
   importCleanup: typeof importCleanup;
   importWorkers: typeof importWorkers;
   imports: typeof imports;
+  migration: typeof migration;
+  migrationAudit: typeof migrationAudit;
+  migrationProjectionWorkers: typeof migrationProjectionWorkers;
+  migrationPublication: typeof migrationPublication;
+  migrationViews: typeof migrationViews;
   "model/auth": typeof model_auth;
   "model/currencyRates": typeof model_currencyRates;
   "model/importLimits": typeof model_importLimits;
   "model/importRetention": typeof model_importRetention;
   "model/importValidators": typeof model_importValidators;
   "model/imports": typeof model_imports;
+  "model/migration": typeof model_migration;
+  "model/migrationFreeze": typeof model_migrationFreeze;
+  "model/migrationLoad": typeof model_migrationLoad;
+  "model/migrationValidators": typeof model_migrationValidators;
   "model/portfolioEncoding": typeof model_portfolioEncoding;
   "model/portfolioLimits": typeof model_portfolioLimits;
   "model/portfolioReads": typeof model_portfolioReads;

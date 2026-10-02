@@ -1,4 +1,4 @@
-const crypto = require("node:crypto");
+const nodeCrypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
@@ -34,6 +34,7 @@ function canonicalJson(value) {
 
   if (value !== null && typeof value === "object") {
     return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
       .join(",")}}`;
@@ -50,7 +51,7 @@ function canonicalJson(value) {
 }
 
 function sha256(value) {
-  return crypto.createHash("sha256").update(value).digest("hex");
+  return nodeCrypto.createHash("sha256").update(value).digest("hex");
 }
 
 function digest(value) {
@@ -96,8 +97,31 @@ function writeArtifact(runId, name, value) {
     return target;
   }
 
-  fs.writeFileSync(target, contents, { flag: "wx", mode: 0o600 });
+  publishImmutableFile(target, contents);
   return target;
+}
+
+function publishImmutableFile(target, contents) {
+  const temporary = `${target}.${nodeCrypto.randomUUID()}.tmp`;
+  const descriptor = fs.openSync(temporary, "wx", 0o600);
+  try {
+    fs.writeFileSync(descriptor, contents);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+
+  try {
+    fs.linkSync(temporary, target);
+  } catch (error) {
+    if (
+      error.code !== "EEXIST" ||
+      !fs.readFileSync(target).equals(Buffer.from(contents))
+    )
+      throw error;
+  } finally {
+    fs.unlinkSync(temporary);
+  }
 }
 
 function writeFileBytes(runId, bytes) {
@@ -108,7 +132,7 @@ function writeFileBytes(runId, bytes) {
     if (sha256(fs.readFileSync(target)) !== hash)
       throw new Error("Source file artifact changed");
   } else {
-    fs.writeFileSync(target, bytes, { flag: "wx", mode: 0o600 });
+    publishImmutableFile(target, bytes);
   }
 
   return {
@@ -124,19 +148,49 @@ function sealSnapshot(body) {
     count: body.tables[table].length,
     digest: digest(body.tables[table]),
   }));
-  const perHouseholdCounts = body.tables.households.map(({ id }) => ({
-    householdId: id,
-    counts: Object.fromEntries(
+  const perHouseholdCounts = body.tables.households.map(({ id }) => {
+    const batches = body.tables.import_batches.filter(
+      (row) => row.household_id === id,
+    );
+    const batchIds = new Set(batches.map((row) => row.id));
+    const instrumentIds = new Set(
+      [...body.tables.holding_snapshots, ...body.tables.transactions]
+        .filter((row) => row.household_id === id && row.instrument_id !== null)
+        .map((row) => row.instrument_id),
+    );
+    const counts = Object.fromEntries(
       legacyTables
-        .filter((table) =>
-          body.tables[table].some((row) => "household_id" in row),
+        .filter(
+          (table) =>
+            ![
+              "users",
+              "households",
+              "instruments",
+              "import_rows",
+              "prices",
+              "currency_rates",
+            ].includes(table),
         )
         .map((table) => [
           table,
           body.tables[table].filter((row) => row.household_id === id).length,
         ]),
-    ),
-  }));
+    );
+
+    return {
+      householdId: id,
+      counts: {
+        ...counts,
+        import_rows: body.tables.import_rows.filter((row) =>
+          batchIds.has(row.import_batch_id),
+        ).length,
+        instruments: instrumentIds.size,
+        prices: body.tables.prices.filter((row) =>
+          instrumentIds.has(row.instrument_id),
+        ).length,
+      },
+    };
+  });
   const payload = { ...body, tableManifest, perHouseholdCounts };
 
   return { ...payload, inputDigest: digest(payload) };
@@ -173,6 +227,8 @@ function readSnapshot(file) {
     }
   }
 
+  validateSourceFiles(snapshot);
+
   const { inputDigest, tableManifest, perHouseholdCounts, ...body } = snapshot;
   const expected = sealSnapshot(body);
   if (
@@ -184,6 +240,47 @@ function readSnapshot(file) {
     throw new Error("Snapshot checksum mismatch");
 
   return snapshot;
+}
+
+function validateSourceFiles(snapshot) {
+  if (
+    !Array.isArray(snapshot.sourceFiles) ||
+    snapshot.sourceFiles.length !== snapshot.tables.import_batches.length
+  )
+    throw new Error("Source file manifest is incomplete");
+  const batches = new Map(
+    snapshot.tables.import_batches.map((batch) => [batch.id, batch]),
+  );
+  const seen = new Set();
+  for (const file of snapshot.sourceFiles) {
+    const batch = batches.get(file.legacyBatchId);
+    if (
+      !batch ||
+      seen.has(file.legacyBatchId) ||
+      file.expiresAt !== batch.expires_at ||
+      file.legacyStoragePath !== batch.storage_path ||
+      !Number.isFinite(Date.parse(file.expiresAt))
+    )
+      throw new Error("Invalid source file manifest entry");
+    seen.add(file.legacyBatchId);
+
+    if (file.status === "available") {
+      if (
+        !/^[a-f0-9]{64}$/.test(file.contentHash) ||
+        file.contentHash !== batch.file_hash ||
+        file.artifact !== `${file.contentHash}.bin` ||
+        !Number.isSafeInteger(file.sizeBytes) ||
+        file.sizeBytes < 0 ||
+        Date.parse(file.expiresAt) <= Date.parse(snapshot.evaluationTime)
+      )
+        throw new Error("Invalid available source file manifest");
+    } else if (
+      file.status !== "unavailable" ||
+      !["expired", "missing"].includes(file.reason)
+    ) {
+      throw new Error("Invalid source file availability");
+    }
+  }
 }
 
 function requireDatabaseUrl(environment, sourceKind, prefix) {
@@ -255,7 +352,18 @@ function readEnvironment(file) {
   return loadExplicitEnvironment(path.resolve(file));
 }
 
+function writeFailure(runId, stage, error) {
+  const message = error instanceof Error ? error.message : "Unknown failure";
+  const stack = error instanceof Error ? (error.stack ?? null) : null;
+  writeArtifact(requireRunId(runId), `${stage}-failure-${Date.now()}.json`, {
+    stage,
+    message,
+    stack,
+  });
+}
+
 module.exports = {
+  writeFailure,
   legacyTables,
   requireDatabase,
   requireBackend,

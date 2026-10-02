@@ -28,7 +28,14 @@
     "migration:inventory:postgres": "node scripts/convex-migration/inventory-postgres.cjs",
     "migration:inventory:storage": "node scripts/convex-migration/inventory-storage.cjs",
     "migration:capacity-note": "node scripts/convex-migration/generate-capacity-note.cjs",
-    "test:migration-tools": "node --test scripts/convex-migration/*.test.cjs"
+    "test:migration-tools": "node --test scripts/convex-migration/*.test.cjs",
+    "migration:export": "tsx scripts/convex-migration/export-snapshot.cjs",
+    "migration:load": "node scripts/convex-migration/load-snapshot.cjs",
+    "migration:reconcile": "node scripts/convex-migration/reconcile.cjs",
+    "migration:rehearse": "node scripts/convex-migration/rehearse.cjs",
+    "migration:rollback": "node scripts/convex-migration/rollback.cjs",
+    "typecheck:migration-tools": "tsc -p scripts/convex-migration/tsconfig.json",
+    "lint:migration-tools": "eslint scripts/convex-migration"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

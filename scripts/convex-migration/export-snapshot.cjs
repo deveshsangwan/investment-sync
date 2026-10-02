@@ -4,7 +4,6 @@ const { parseArguments, assertAllowedArguments } = require("./runtime.cjs");
 const {
   legacyTables,
   requireDatabase,
-  canonicalJson,
   readEnvironment,
   requireDatabaseUrl,
   requireRunId,
@@ -13,6 +12,7 @@ const {
   writeFileBytes,
   sha256,
   protectedPath,
+  writeFailure,
 } = require("./phase6-artifacts.cjs");
 
 async function extractSnapshot({
@@ -31,16 +31,17 @@ async function extractSnapshot({
   );
   const postgres = requireDatabase("postgres");
   const { drizzle } = requireDatabase("drizzle-orm/postgres-js");
+  const { sql } = requireDatabase("drizzle-orm");
   const schema = require("../../packages/db/src/schema.ts");
   const client = postgres(environment.DATABASE_URL, { max: 1, prepare: false });
+  const db = drizzle(client, { schema });
 
   try {
-    return await client.begin(
-      "isolation level repeatable read read only",
+    return await db.transaction(
       async (transaction) => {
-        await transaction.unsafe("set local timezone = 'UTC'");
-        const [clock] = await transaction.unsafe(
-          "select transaction_timestamp()::text as timestamp",
+        await transaction.execute(sql.raw("set local timezone = 'UTC'"));
+        const [clock] = await transaction.execute(
+          sql.raw("select transaction_timestamp()::text as timestamp"),
         );
         const frozenTime =
           evaluationTime ?? new Date(clock.timestamp).toISOString();
@@ -48,8 +49,9 @@ async function extractSnapshot({
           throw new Error("Invalid evaluation time");
         const tables = {};
         for (const table of legacyTables) {
-          const columns =
-            await transaction`select column_name, data_type from information_schema.columns where table_schema='public' and table_name=${table} order by ordinal_position`;
+          const columns = await transaction.execute(
+            sql`select column_name, data_type from information_schema.columns where table_schema='public' and table_name=${table} order by ordinal_position`,
+          );
           if (columns.length === 0)
             throw new Error("Source schema is incomplete");
 
@@ -72,14 +74,14 @@ async function extractSnapshot({
               ? "import_batch_id, row_number, id"
               : "id";
           tables[table] = Array.from(
-            await transaction.unsafe(
-              `select ${selection} from "${table}" order by ${order}`,
+            await transaction.execute(
+              sql.raw(`select ${selection} from "${table}" order by ${order}`),
             ),
           );
         }
 
         const views = await collectViews(
-          drizzle(transaction, { schema }),
+          transaction,
           tables.households.map((row) => row.id),
           frozenTime,
         );
@@ -100,6 +102,7 @@ async function extractSnapshot({
           views,
         });
       },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
     );
   } finally {
     await client.end({ timeout: 5 });
@@ -238,7 +241,9 @@ async function main() {
 }
 
 if (require.main === module)
-  main().catch(() => {
+  main().catch((error) => {
+    const index = process.argv.indexOf("--run-id");
+    if (index >= 0) writeFailure(process.argv[index + 1], "export", error);
     console.error("Snapshot export failed; no production writes performed");
     process.exitCode = 1;
   });
