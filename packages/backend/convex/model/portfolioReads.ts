@@ -7,6 +7,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { requireCurrentMembership } from "./auth";
 import { capacityError, portfolioLimits } from "./portfolioLimits";
+import { parseJson, timelineDisplayAmountsSchema } from "./publicationStages";
 import {
   decodePortfolioTransaction,
   decodePortfolioValuation,
@@ -581,6 +582,13 @@ async function timelineByAssetClass(
   return points.map((point) => ({
     snapshotDate: point.date,
     totals: point.totals,
+    ...(point.displayAmountsJson
+      ? {
+          displayAmounts: timelineDisplayAmountsSchema.parse(
+            parseJson(point.displayAmountsJson),
+          ),
+        }
+      : {}),
   }));
 }
 

@@ -8,6 +8,10 @@ import type {
 import { buildPortfolioPublication } from "./publication";
 import { valuePortfolioPublication } from "./valuation";
 import type { PortfolioProjection } from "./types";
+import {
+  aggregateSnapshotTotalsByDate,
+  roundMoney,
+} from "../../api/src/services/portfolio/utils";
 
 function holding(overrides: Partial<NormalizedHoldingRow> = {}) {
   return adaptLegacyRow({
@@ -73,6 +77,110 @@ const quote = {
   fetchedAt: "2025-01-01T00:00:00.000Z",
   provider: "frankfurter",
 } as const;
+
+describe("legacy snapshot chart arithmetic", () => {
+  it.each([
+    {
+      name: "precision beyond safe integers",
+      amounts: [
+        { currency: "INR", investedAmount: "60", currentValue: "90" },
+        {
+          currency: "INR",
+          investedAmount: "9007199254740992",
+          currentValue: "9007199254740993.1250",
+        },
+        { currency: "INR", investedAmount: "100", currentValue: "125" },
+        { currency: "INR", investedAmount: "100", currentValue: "125" },
+      ],
+    },
+    {
+      name: "ordered conversion of mixed currencies",
+      amounts: [
+        { currency: "USD", investedAmount: "0.3333", currentValue: "0.5555" },
+        {
+          currency: "INR",
+          investedAmount: "9007199254740992",
+          currentValue: "9007199254740993.1250",
+        },
+        {
+          currency: "USD",
+          investedAmount: "100.0001",
+          currentValue: "125.1234",
+        },
+        { currency: "INR", investedAmount: "100", currentValue: "125" },
+      ],
+    },
+  ] as const)("matches retained Postgres charts for $name", ({ amounts }) => {
+    const rows = amounts.map((amounts, index) => {
+      const row = holding({
+        instrumentName: `CHART ${index}`,
+        symbol: `CHART${index}`,
+        currency: amounts.currency,
+      });
+      if (row.kind !== "holding") throw new Error("Expected test holding");
+
+      return { ...row, ...amounts };
+    });
+    const publication = buildPortfolioPublication({
+      existingFacts: [],
+      batch: {
+        id: "chart-arithmetic",
+        parserVersion: "test-v1",
+        sequence: 1,
+        fallbackDate: "2025-01-01",
+        rows: [...rows, holding({ sourceDate: "2025-02-01" })],
+      },
+    });
+    const chartQuote = { ...quote, rate: "85.123456789" };
+    const expected = aggregateSnapshotTotalsByDate(
+      rows.map((row, index) => ({
+        accountId: row.accountName,
+        instrumentId: String(index),
+        instrumentName: row.instrumentName,
+        snapshotDate: row.sourceDate ?? "2025-01-01",
+        currency: row.currency,
+        investedAmount: row.investedAmount,
+        currentValue: row.currentValue,
+      })),
+      Number(chartQuote.rate),
+    ).get("2025-01-01");
+    if (!expected) throw new Error("Missing independent legacy chart totals");
+
+    const overview = valuePortfolioPublication(
+      publication.projection,
+      chartQuote,
+      {
+        view: "overview",
+      },
+    );
+    const detail = valuePortfolioPublication(
+      publication.projection,
+      chartQuote,
+      {
+        view: "assetClassDetail",
+        assetClass: "indian_stock",
+      },
+    );
+    expect(overview.timeline[0]).toMatchObject({
+      investedAmount: roundMoney(expected.investedAmount),
+      currentValue: roundMoney(expected.currentValue),
+    });
+    expect(detail.timeline[0]).toMatchObject({
+      investedAmount: roundMoney(expected.investedAmount),
+      currentValue: roundMoney(expected.currentValue),
+    });
+    expect(publication.facts[1]?.row).toMatchObject({
+      currentValue: "9007199254740993.1250",
+    });
+
+    if (amounts.every((row) => row.currency === "INR")) {
+      expect(publication.projection.timeline[0]?.totals).toMatchObject([
+        { currentValue: "9007199254741333.125" },
+      ]);
+      expect(detail.timeline[0]?.currentValue).toBe(9007199254741332);
+    }
+  });
+});
 
 // Endpoint selection must not inherit exchange-rate requirements from unrelated views.
 describe("portfolio valuation view selection", () => {

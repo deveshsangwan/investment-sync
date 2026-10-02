@@ -271,6 +271,7 @@ export default defineSchema({
     assetClass: v.union(assetClassValidator, v.null()),
     date: v.string(),
     totals: v.array(nativeTotalValidator),
+    displayAmountsJson: v.optional(v.string()),
   }).index("by_versionId_and_assetClass_and_date", [
     "versionId",
     "assetClass",

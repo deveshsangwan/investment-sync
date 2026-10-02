@@ -95,10 +95,21 @@ export const assetRecordSchema = z.object({
   assetClass: assetClassSchema,
   totals: z.array(totalSchema),
 });
+export const timelineDisplayAmountsSchema = z.array(
+  z.tuple([currencySchema, z.number().finite(), z.number().finite()]),
+);
 export const timelineRecordSchema = z.object({
   assetClass: assetClassSchema.nullable(),
   date: z.string(),
   totals: z.array(totalSchema),
+  displayAmountsJson: z
+    .string()
+    .transform((json) => {
+      timelineDisplayAmountsSchema.parse(parseJson(json));
+
+      return json;
+    })
+    .optional(),
 });
 const positionIdentity = {
   accountKey: z.string(),

@@ -94,6 +94,9 @@ export interface NativeTotal {
 export interface NativeTimelinePoint {
   snapshotDate: string;
   totals: NativeTotal[];
+  displayAmounts?: Array<
+    [currency: Currency, investedAmount: number, currentValue: number]
+  >;
 }
 
 export interface PositionProjection {

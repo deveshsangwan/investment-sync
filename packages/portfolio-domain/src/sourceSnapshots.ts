@@ -164,6 +164,19 @@ export function snapshotTimeline(
     .map(([snapshotDate, facts]) => ({
       snapshotDate,
       totals: nativeTotals(facts.map((fact) => fact.row)),
+      // Legacy charts convert each persisted row before summing. Exact native
+      // totals remain authoritative; these ordered inputs preserve display math.
+      displayAmounts: [...facts]
+        .sort(
+          (left, right) =>
+            left.provenance.sequence - right.provenance.sequence ||
+            left.provenance.rowNumber - right.provenance.rowNumber,
+        )
+        .map((fact) => [
+          fact.row.currency,
+          Number(fact.row.investedAmount),
+          Number(fact.row.currentValue),
+        ]),
     }));
 }
 

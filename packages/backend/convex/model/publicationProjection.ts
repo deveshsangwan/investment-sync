@@ -169,6 +169,9 @@ export function projectionRecords(projection: PortfolioProjection) {
       assetClass: asset.assetClass,
       date: point.snapshotDate,
       totals: point.totals,
+      ...(point.displayAmounts
+        ? { displayAmountsJson: JSON.stringify(point.displayAmounts) }
+        : {}),
     })),
   );
   if (timeline.length > portfolioLimits.timeline)

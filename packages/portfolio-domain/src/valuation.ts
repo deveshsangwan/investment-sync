@@ -300,7 +300,7 @@ function assetClassDetail(
   const totals = convertedTotals(asset.totals, rate);
   const valuations = asset.timeline.map((point) => ({
     date: new Date(point.snapshotDate),
-    ...convertedTotals(point.totals, rate),
+    ...convertedTimelineAmounts(point, rate),
   }));
   const resolved = resolveAssetClassXirr({
     holdings: selected.map((position) =>
@@ -520,7 +520,7 @@ function timelinePoint(
   rate: number | undefined,
   hasPnl: boolean,
 ) {
-  const totals = convertedTotals(point.totals, rate);
+  const totals = convertedTimelineAmounts(point, rate);
   return {
     snapshotDate: point.snapshotDate,
     investedAmount: roundDisplay(totals.investedAmount),
@@ -528,6 +528,27 @@ function timelinePoint(
     ...(hasPnl ? { pnlAmount: roundDisplay(totals.pnlAmount) } : {}),
     currency: "INR" as const,
   };
+}
+
+function convertedTimelineAmounts(point: NativeTimelinePoint, rate?: number) {
+  if (!point.displayAmounts) return convertedTotals(point.totals, rate);
+
+  const convertAmount = (amount: number, currency: Currency) =>
+    currency === "INR"
+      ? amount
+      : currency === "USD" && rate
+        ? amount * rate
+        : 0;
+
+  return point.displayAmounts.reduce(
+    (totals, [currency, investedAmount, currentValue]) => ({
+      investedAmount:
+        totals.investedAmount + convertAmount(investedAmount, currency),
+      currentValue: totals.currentValue + convertAmount(currentValue, currency),
+      pnlAmount: 0,
+    }),
+    { investedAmount: 0, currentValue: 0, pnlAmount: 0 },
+  );
 }
 
 function percent(value: number, total: number): number {
