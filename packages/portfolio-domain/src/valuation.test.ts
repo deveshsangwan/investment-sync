@@ -79,6 +79,105 @@ const quote = {
 } as const;
 
 describe("legacy snapshot chart arithmetic", () => {
+  it("preserves SQL snapshot creation order through same-date corrections", () => {
+    const rows = [
+      {
+        symbol: "HUGE",
+        investedAmount: "9007199254740992",
+        currentValue: "9007199254740992",
+      },
+      { symbol: "SMALL1", investedAmount: "1", currentValue: "1" },
+      { symbol: "SMALL2", investedAmount: "1", currentValue: "1" },
+    ].map(({ symbol, investedAmount, currentValue }) => {
+      const row = holding({ instrumentName: symbol, symbol });
+      if (row.kind !== "holding") throw new Error("Expected test holding");
+
+      return { ...row, investedAmount, currentValue };
+    });
+    const initial = buildPortfolioPublication({
+      existingFacts: [],
+      batch: {
+        id: "original-snapshots",
+        parserVersion: "test-v1",
+        sequence: 1,
+        fallbackDate: "2025-01-01",
+        rows,
+      },
+    });
+    const huge = rows[0];
+    if (!huge) throw new Error("Missing initial test snapshot");
+
+    const corrected = { ...huge, currentValue: "9007199254740996" };
+    const updated = buildPortfolioPublication({
+      existingFacts: initial.facts,
+      batch: {
+        id: "same-date-correction",
+        parserVersion: "test-v1",
+        sequence: 2,
+        fallbackDate: "2025-01-01",
+        rows: [corrected],
+      },
+    });
+    const later = buildPortfolioPublication({
+      existingFacts: updated.facts,
+      batch: {
+        id: "later-snapshot",
+        parserVersion: "test-v1",
+        sequence: 3,
+        fallbackDate: "2025-02-01",
+        rows: [holding({ sourceDate: "2025-02-01" })],
+      },
+    });
+    const expected = aggregateSnapshotTotalsByDate(
+      [corrected, ...rows.slice(1)].map((row) => ({
+        accountId: row.accountName,
+        instrumentId: row.instrumentName,
+        instrumentName: row.instrumentName,
+        snapshotDate: "2025-01-01",
+        currency: row.currency,
+        investedAmount: row.investedAmount,
+        currentValue: row.currentValue,
+      })),
+    ).get("2025-01-01");
+    if (!expected) throw new Error("Missing independent legacy chart totals");
+
+    expect(expected).toEqual({
+      investedAmount: 9007199254740992,
+      currentValue: 9007199254740996,
+    });
+    for (const publication of [updated, later]) {
+      const detail = valuePortfolioPublication(
+        publication.projection,
+        undefined,
+        {
+          view: "assetClassDetail",
+          assetClass: "indian_stock",
+        },
+      );
+      expect(detail.timeline[0]).toMatchObject({
+        investedAmount: roundMoney(expected.investedAmount),
+        currentValue: roundMoney(expected.currentValue),
+      });
+    }
+    const overview = valuePortfolioPublication(later.projection, undefined, {
+      view: "overview",
+    });
+    expect(overview.timeline[0]).toMatchObject({
+      investedAmount: roundMoney(expected.investedAmount),
+      currentValue: roundMoney(expected.currentValue),
+    });
+    const winning = updated.projection.positions.find(
+      (position) => position.holding.row.symbol === "HUGE",
+    );
+    expect(winning?.holding).toMatchObject({
+      row: { currentValue: "9007199254740996" },
+      provenance: { batchId: "same-date-correction", sequence: 2 },
+    });
+    expect(updated.projection.timeline[0]?.totals).toMatchObject([
+      { investedAmount: "9007199254740994", currentValue: "9007199254740998" },
+    ]);
+  });
+
   it.each([
     {
       name: "precision beyond safe integers",

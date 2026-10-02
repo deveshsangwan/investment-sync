@@ -279,6 +279,12 @@ function resolveFacts(facts: PortfolioFact[]) {
         canonicalPositionKey: canonicalPositionKey(row),
         sourceGroupKey: sourceGroupKey(row),
         factKey: key,
+        // SQL upserts retain a snapshot's original creation order even when
+        // its winning financial values come from a later import.
+        snapshotCreationOrder: existing?.snapshotCreationOrder ?? {
+          sequence: provenance.sequence,
+          rowNumber: provenance.rowNumber,
+        },
       });
       continue;
     }

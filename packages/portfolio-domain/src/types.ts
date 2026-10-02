@@ -73,6 +73,7 @@ export interface HoldingFact {
   sourceGroupKey: string;
   snapshotDate: string;
   factKey: string;
+  snapshotCreationOrder?: Pick<ImportProvenance, "sequence" | "rowNumber">;
 }
 
 export interface TransactionFact {

@@ -167,11 +167,15 @@ export function snapshotTimeline(
       // Legacy charts convert each persisted row before summing. Exact native
       // totals remain authoritative; these ordered inputs preserve display math.
       displayAmounts: [...facts]
-        .sort(
-          (left, right) =>
-            left.provenance.sequence - right.provenance.sequence ||
-            left.provenance.rowNumber - right.provenance.rowNumber,
-        )
+        .sort((left, right) => {
+          const leftOrder = left.snapshotCreationOrder ?? left.provenance;
+          const rightOrder = right.snapshotCreationOrder ?? right.provenance;
+
+          return (
+            leftOrder.sequence - rightOrder.sequence ||
+            leftOrder.rowNumber - rightOrder.rowNumber
+          );
+        })
         .map((fact) => [
           fact.row.currency,
           Number(fact.row.investedAmount),
