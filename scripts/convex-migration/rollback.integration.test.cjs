@@ -211,7 +211,7 @@ function prepareCliArtifacts(fixture, databaseUrl) {
     JSON.stringify({ sourceKind: "synthetic", backend: "Postgres" }),
   );
   const environment = write("rollback.env", `DATABASE_URL=${databaseUrl}\n`);
-  const commit = execFileSync("git", ["rev-parse", "origin/main"], {
+  const commit = execFileSync("git", ["rev-parse", "HEAD"], {
     encoding: "utf8",
   }).trim();
 
