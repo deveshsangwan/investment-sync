@@ -2,14 +2,21 @@ import type { HoldingRow, TransactionRow } from "./types";
 
 type PositionRow = HoldingRow | TransactionRow;
 
-export function accountKey(row: PositionRow): string {
+export function accountKey(
+  row: Pick<PositionRow, "provider" | "accountName">,
+): string {
   return JSON.stringify([
     row.provider.trim().toLowerCase(),
     row.accountName.trim().toLowerCase(),
   ]);
 }
 
-export function instrumentKey(row: PositionRow): string {
+export function instrumentKey(
+  row: Pick<
+    PositionRow,
+    "assetClass" | "currency" | "symbol" | "instrumentName"
+  >,
+): string {
   const symbol = row.symbol?.trim().toUpperCase();
   return JSON.stringify([
     row.assetClass,
