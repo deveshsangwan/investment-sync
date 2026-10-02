@@ -150,6 +150,21 @@ async function latestCurrentHoldingRows(
   const assetClassFilter = assetClass
     ? sql`and i.asset_class = ${assetClass}`
     : sql``;
+
+  // These importer-defined sources describe the same US Stocks portfolio.
+  // Preserve the physical account and sheet on each row for history, while
+  // reconciling complete snapshots across the two representations.
+  const isVestedSource = sql`a.name = 'US Stocks'
+    and a.provider = 'Vested / DriveWealth'
+    and hs.source_type = 'vested_drivewealth_xlsx'
+    and i.asset_class = 'us_stock' and hs.currency = 'USD'
+    and coalesce(hs.source_payload->>'sourceSheet', '') = ''`;
+  const isWorkbookSource = sql`a.name = 'US Stocks'
+    and a.provider = 'Manual Workbook'
+    and hs.source_type = 'investment_portfolio_xlsx'
+    and i.asset_class = 'us_stock' and hs.currency = 'USD'
+    and hs.source_payload->>'sourceSheet' = 'US stocks'`;
+
   const sourceCte =
     mode === "current"
       ? sql`latest_group_rows`
@@ -157,11 +172,20 @@ async function latestCurrentHoldingRows(
   const modeWhere =
     mode === "current"
       ? sql`"holdingRank" = 1`
-      : sql`"holdingRank" = 1 and "snapshotDate" <> "latestGroupSnapshotDate"`;
+      : sql`"holdingRank" = 1 and (
+          "snapshotDate" <> "latestGroupSnapshotDate"
+          or "sourcePriority" < "latestGroupSourcePriority"
+        )`;
 
   const rows = await ctx.db.execute(sql`
     with base as (
       select
+        case when (${isVestedSource}) or (${isWorkbookSource})
+          then jsonb_build_array('workbook-vested-us-stocks')
+          else jsonb_build_array(hs.account_id, a.name, a.provider,
+            i.asset_class, hs.currency, coalesce(hs.source_payload->>'sourceSheet', ''))
+        end as "sourceGroup",
+        case when (${isVestedSource}) then 1 else 0 end as "sourcePriority",
         hs.id::text as "id",
         hs.account_id::text as "accountId",
         hs.instrument_id::text as "instrumentId",
@@ -212,45 +236,25 @@ async function latestCurrentHoldingRows(
         )
     ),
     latest_group_dates as (
-      select
-        "accountId",
-        "accountName",
-        "provider",
-        "assetClass",
-        "currency",
-        "sourceSheet",
-        max("snapshotDate") as "snapshotDate"
+      select distinct on ("sourceGroup")
+        "sourceGroup", "snapshotDate", "sourcePriority"
       from eligible
-      group by
-        "accountId",
-        "accountName",
-        "provider",
-        "assetClass",
-        "currency",
-        "sourceSheet"
+      order by "sourceGroup", "snapshotDate" desc, "sourcePriority" desc
     ),
     latest_group_rows as (
       select eligible.*
       from eligible
       inner join latest_group_dates latest
-        on latest."accountId" = eligible."accountId"
-        and latest."accountName" = eligible."accountName"
-        and latest."provider" = eligible."provider"
-        and latest."assetClass" = eligible."assetClass"
-        and latest."currency" = eligible."currency"
-        and latest."sourceSheet" = eligible."sourceSheet"
+        on latest."sourceGroup" = eligible."sourceGroup"
         and latest."snapshotDate" = eligible."snapshotDate"
+        and latest."sourcePriority" = eligible."sourcePriority"
     ),
     eligible_with_latest_group as (
-      select eligible.*, latest."snapshotDate" as "latestGroupSnapshotDate"
+      select eligible.*, latest."snapshotDate" as "latestGroupSnapshotDate",
+        latest."sourcePriority" as "latestGroupSourcePriority"
       from eligible
       inner join latest_group_dates latest
-        on latest."accountId" = eligible."accountId"
-        and latest."accountName" = eligible."accountName"
-        and latest."provider" = eligible."provider"
-        and latest."assetClass" = eligible."assetClass"
-        and latest."currency" = eligible."currency"
-        and latest."sourceSheet" = eligible."sourceSheet"
+        on latest."sourceGroup" = eligible."sourceGroup"
     ),
     ranked as (
       select
@@ -260,7 +264,7 @@ async function latestCurrentHoldingRows(
             "assetClass",
             "instrumentKey",
             "currency"
-          order by "snapshotDate" desc, "instrumentName" asc, "id" desc
+          order by "snapshotDate" desc, "sourcePriority" desc, "instrumentName" asc, "id" desc
         ) as "holdingRank"
       from ${sourceCte}
     )
