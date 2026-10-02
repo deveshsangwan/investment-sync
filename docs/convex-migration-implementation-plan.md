@@ -1,10 +1,12 @@
 # Convex migration implementation plan
 
-Status: Implementation through Phase 5 committed, reviewed and verified in personal development; separate preview and remaining Phase 1 external gates tracked separately; Phase 6 onward not started
+Status: Implementation through Phase 5 committed, reviewed and verified in personal development; Phase 6 authorized and in progress; separate preview and remaining Phase 1 external gates tracked separately; production cutover not authorized
 
 Phase 1 review and external gates: [`convex-phase-1-review.md`](convex-phase-1-review.md). Phases 3–5 changes, review findings and verification: [`convex-phases-3-5-verification.md`](convex-phases-3-5-verification.md).
 
 Deferred product work outside this migration: [realized sales and accurate exited-position gains](realized-sales-todo.md).
+
+Phase 6 execution and reconciliation evidence: [convex-phase-6-verification.md](convex-phase-6-verification.md). On 2026-10-03 the owner authorized syncing with current Postgres changes and implementing the migration tooling and generated-data rehearsal. Opus is unavailable; independent Codex reviews replace the new Opus review for this work, with that gap recorded. This does not authorize moving real data or changing production traffic.
 
 Decision: migrate the web application fully to a Convex-native backend on a separate branch, prove behavior against the current Postgres and Supabase production system, then perform a one-shot production cutover.
 
@@ -67,6 +69,7 @@ The current mobile source should not force the old backend to remain. Preserve i
 10. Record any deliberate behavior difference in this document before implementing it.
 11. After each phase or separately tracked repository milestone passes its local completion checks, run a read-only Claude Code review with Claude Opus 5 against the complete diff and its completion criteria. Verify and resolve every blocking finding, rerun affected checks, and obtain an Opus 5 follow-up approval before committing or starting dependent work. The Phase 1 repository milestone may be committed with its external gates explicitly pending, as allowed by rule 3.
     On 2026-09-13, the owner explicitly approved a narrow exception to rule 11 after Phase 4 passed its final checks, live capacity/parity checks and Codex follow-up: commit Phase 4 and begin Phase 5 while Claude Opus 5 is quota-limited, then run the deferred Opus review when available. This does not waive that review or authorize production changes.
+    On 2026-10-03 the owner confirmed Opus is unavailable while authorizing Phase 6. Use independent Codex reviews and record the missing new Opus review without blocking authorized development.
 
 12. Review approvals are evidence, not proof. Record the reviewed revision, actual checks, accepted findings, and outstanding deployment gates. Never describe checked-in generated bindings as proof that codegen or real Clerk sign-in has succeeded on a clean deployment.
 
@@ -703,6 +706,7 @@ Implementation decisions, recorded for the new contract:
 - The historical adapter explicitly marks all holding source snapshots complete, including manual/unknown sources, matching existing omission behavior. New callers can supply partial source metadata. Account, asset class, currency, and source sheet define source groups. NPS portal priority is 100; other sources use 0. The publisher uses source metadata instead of inferring aggregate or complete status from payloads.
 - Keys encode tuples as JSON, distinguishing name-based from symbol-based instruments and avoiding separator collisions. Stable position keys include account, instrument, and source group so overlapping entries retain separate links and histories. Current and Exited ranking preserves the legacy cross-account symbol-or-name grouping. Same-date holding conflicts preserve portal priority and otherwise publication order. Transaction fingerprints include the source stream and an occurrence number within each batch. Repeated statements dedupe matching occurrences while two identical same-day occurrences remain distinct, as already approved in section 10.
 - Owner decision, 2026-09-13: "Preserve both legacy entries" when overlapping source groups place the same holding in Current and Exited. Select the two lists independently. Partial sales remain Current at the remaining quantity, with source histories and sale transactions retained. Suppressing the Exited entry is not an approved bug fix.
+- Parity sync, 2026-10-03: adopt the specific workbook/Vested US Stocks correction already approved and shipped in Postgres PR #51. These exact report identities share complete-snapshot omission rules; Vested wins at the same date. Physical histories and aggregate groups remain separate. Other overlapping groups retain the earlier independent Current/Exited selections. This updates the reference behavior without introducing a new migration-only correction.
 - Exact native totals and dated projections do not depend on FX. `valuePortfolioPublication` takes an explicit fresh/stale/unavailable quote. Typed per-view selection scopes missing-quote failures to the currencies used by that legacy endpoint; unsupported currencies retain native totals but contribute zero to INR display. Ratios and XIRR remain approximate analytics, with parity comparisons allowing 1e-8 absolute numeric tolerance and exact comparison after canonicalization for decimal strings.
 
 Verification and open follow-ups are tracked in `docs/convex-phase-2-verification.md`. Phase 2 does not deploy backend functions or change production reads.
