@@ -20,7 +20,9 @@ export async function requirePublication(
   if (now !== undefined && (version.leaseExpiresAt ?? 0) <= now)
     throw new Error("Publication lease expired");
   const household = await ctx.db.get("households", version.householdId);
-  const batch = await ctx.db.get("importBatches", version.batchId);
+  const batch = version.batchId
+    ? await ctx.db.get("importBatches", version.batchId)
+    : null;
   if (
     !household ||
     !batch ||

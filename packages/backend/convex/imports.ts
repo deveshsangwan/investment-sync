@@ -16,12 +16,15 @@ import {
 import { batchView } from "./model/importValidators";
 import { commitBatch } from "./model/publication";
 import { commitResultValidator } from "./model/portfolioValidators";
+import { requireApplicationWritesEnabled } from "./model/migrationFreeze";
 
 export const commit = mutation({
   args: { batchId: v.id("importBatches") },
   returns: commitResultValidator,
-  handler: async (ctx, { batchId }) =>
-    commitBatch(ctx, await requireBatch(ctx, batchId, true)),
+  handler: async (ctx, { batchId }) => {
+    requireApplicationWritesEnabled();
+    return commitBatch(ctx, await requireBatch(ctx, batchId, true));
+  },
 });
 
 export const createUpload = mutation({
@@ -32,6 +35,7 @@ export const createUpload = mutation({
   },
   returns: v.object({ batchId: v.id("importBatches"), uploadUrl: v.string() }),
   handler: async (ctx, args) => {
+    requireApplicationWritesEnabled();
     const { user, household } = await requireOwner(ctx);
     if (
       !args.fileName.trim() ||
@@ -94,6 +98,7 @@ export const attachUpload = mutation({
   args: { batchId: v.id("importBatches"), storageId: v.id("_storage") },
   returns: v.id("importBatches"),
   handler: async (ctx, args) => {
+    requireApplicationWritesEnabled();
     const batch = await requireBatch(ctx, args.batchId, true);
     const file = await sourceFile(ctx, batch._id);
     if (file.storageId === args.storageId) return batch._id;
@@ -144,6 +149,7 @@ export const retryParse = mutation({
   args: { batchId: v.id("importBatches") },
   returns: v.id("importBatches"),
   handler: async (ctx, { batchId }) => {
+    requireApplicationWritesEnabled();
     const batch = await requireBatch(ctx, batchId, true);
     if (
       batch.status !== "failed" &&

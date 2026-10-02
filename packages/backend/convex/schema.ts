@@ -15,8 +15,65 @@ import {
   fileStatus,
   manifestEntry,
 } from "./model/importValidators";
+import { legacyTableValidator } from "./model/migrationValidators";
+
+const legacyFields = { legacyId: v.optional(v.string()) };
 
 export default defineSchema({
+  migrationRuns: defineTable({
+    runKey: v.string(),
+    inputDigest: v.string(),
+    sourceKind: v.union(v.literal("synthetic"), v.literal("production")),
+    evaluationTime: v.string(),
+    expectedCountsJson: v.string(),
+    sourceFilesJson: v.string(),
+    loadedCountsJson: v.string(),
+    nextFactOrdinal: v.number(),
+    maximumFactSequence: v.number(),
+    inputSealed: v.boolean(),
+    finalizedBatchCount: v.number(),
+    unsupportedCount: v.number(),
+  }).index("by_runKey", ["runKey"]),
+  migrationRecords: defineTable({
+    runKey: v.string(),
+    legacyTable: legacyTableValidator,
+    legacyId: v.string(),
+    sourceJson: v.string(),
+    digest: v.string(),
+    batchLegacyId: v.optional(v.string()),
+    rowNumber: v.optional(v.number()),
+    normalizedRowJson: v.optional(v.string()),
+    householdLegacyId: v.optional(v.string()),
+    unsupportedReason: v.optional(v.string()),
+  })
+    .index("by_runKey_and_legacyTable_and_legacyId", [
+      "runKey",
+      "legacyTable",
+      "legacyId",
+    ])
+    .index("by_runKey_and_legacyTable_and_batchLegacyId_and_rowNumber", [
+      "runKey",
+      "legacyTable",
+      "batchLegacyId",
+      "rowNumber",
+    ])
+    .index("by_runKey_and_legacyTable_and_householdLegacyId", [
+      "runKey",
+      "legacyTable",
+      "householdLegacyId",
+    ]),
+  migrationMappings: defineTable({
+    runKey: v.string(),
+    legacyTable: legacyTableValidator,
+    legacyId: v.string(),
+    targetTable: v.string(),
+    targetId: v.string(),
+    householdLegacyId: v.optional(v.string()),
+  }).index("by_runKey_and_legacyTable_and_legacyId", [
+    "runKey",
+    "legacyTable",
+    "legacyId",
+  ]),
   publicationReceipts: defineTable({
     versionId: v.id("portfolioVersions"),
     attempt: v.number(),
@@ -29,6 +86,9 @@ export default defineSchema({
     modelBytesWritten: v.optional(v.number()),
   }).index("by_versionId_and_stage_and_index", ["versionId", "stage", "index"]),
   accounts: defineTable({
+    ...legacyFields,
+    isArchived: v.optional(v.boolean()),
+    metadataJson: v.optional(v.string()),
     householdId: v.id("households"),
     key: v.string(),
     provider: v.string(),
@@ -37,6 +97,10 @@ export default defineSchema({
     currency: currencyValidator,
   }).index("by_householdId_and_key", ["householdId", "key"]),
   instruments: defineTable({
+    ...legacyFields,
+    isin: v.optional(v.string()),
+    exchange: v.optional(v.string()),
+    providerMetadataJson: v.optional(v.string()),
     householdId: v.id("households"),
     key: v.string(),
     name: v.string(),
@@ -45,8 +109,9 @@ export default defineSchema({
     currency: currencyValidator,
   }).index("by_householdId_and_key", ["householdId", "key"]),
   holdingSnapshots: defineTable({
+    ...legacyFields,
     householdId: v.id("households"),
-    batchId: v.id("importBatches"),
+    batchId: v.optional(v.id("importBatches")),
     key: v.string(),
     positionKey: v.string(),
     instrumentKey: v.string(),
@@ -67,8 +132,9 @@ export default defineSchema({
     ])
     .index("by_batchId", ["batchId"]),
   transactions: defineTable({
+    ...legacyFields,
     householdId: v.id("households"),
-    batchId: v.id("importBatches"),
+    batchId: v.optional(v.id("importBatches")),
     key: v.string(),
     positionKey: v.string(),
     instrumentKey: v.string(),
@@ -84,8 +150,9 @@ export default defineSchema({
     ])
     .index("by_batchId", ["batchId"]),
   portfolioValuations: defineTable({
+    ...legacyFields,
     householdId: v.id("households"),
-    batchId: v.id("importBatches"),
+    batchId: v.optional(v.id("importBatches")),
     key: v.string(),
     date: v.string(),
     factJson: v.string(),
@@ -94,8 +161,9 @@ export default defineSchema({
     .index("by_householdId_and_date", ["householdId", "date"])
     .index("by_batchId", ["batchId"]),
   portfolioVersions: defineTable({
+    migrationRunKey: v.optional(v.string()),
     householdId: v.id("households"),
-    batchId: v.id("importBatches"),
+    batchId: v.optional(v.id("importBatches")),
     sequence: v.number(),
     digest: v.string(),
     createdAt: v.number(),
@@ -228,6 +296,12 @@ export default defineSchema({
     quoteRevision: v.optional(v.number()),
   }).index("by_base_and_quote_and_provider", ["base", "quote", "provider"]),
   importBatches: defineTable({
+    ...legacyFields,
+    legacyStatus: v.optional(v.string()),
+    legacyDeclaredRowCount: v.optional(v.number()),
+    legacyErrors: v.optional(v.array(v.string())),
+    migrationRowsFinalized: v.optional(v.boolean()),
+    failureReason: v.optional(v.literal("source_expired_no_rows")),
     householdId: v.id("households"),
     uploaderId: v.id("users"),
     fileName: v.string(),
@@ -266,6 +340,7 @@ export default defineSchema({
     .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_status_and_stagingExpiresAt", ["status", "stagingExpiresAt"]),
   sourceFiles: defineTable({
+    legacyStoragePath: v.optional(v.string()),
     batchId: v.id("importBatches"),
     householdId: v.id("households"),
     uploaderId: v.id("users"),
@@ -293,10 +368,12 @@ export default defineSchema({
     batchId: v.id("importBatches"),
   }).index("by_householdId_and_key", ["householdId", "key"]),
   users: defineTable({
+    ...legacyFields,
     clerkSubject: v.string(),
     email: v.optional(v.string()),
   }).index("by_clerk_subject", ["clerkSubject"]),
   households: defineTable({
+    ...legacyFields,
     ownerUserId: v.id("users"),
     name: v.string(),
     activePortfolioVersionId: v.optional(v.id("portfolioVersions")),
@@ -304,6 +381,7 @@ export default defineSchema({
     publicationSequence: v.optional(v.number()),
   }).index("by_owner", ["ownerUserId"]),
   householdMembers: defineTable({
+    ...legacyFields,
     householdId: v.id("households"),
     userId: v.id("users"),
     role: v.union(v.literal("owner"), v.literal("viewer")),

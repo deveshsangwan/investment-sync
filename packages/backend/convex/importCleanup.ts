@@ -3,11 +3,13 @@ import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { importLimits } from "./model/importLimits";
 import { expireSourceFile } from "./model/importRetention";
+import { hasMigrationWriteFreeze } from "./model/migrationFreeze";
 
 export const obsoleteChunks = internalMutation({
   args: { batchId: v.id("importBatches"), beforeAttempt: v.number() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return null;
     const batch = await ctx.db.get("importBatches", args.batchId);
     if (!batch || args.beforeAttempt > batch.attempt)
       throw new Error("Cannot delete current parse provenance");
@@ -33,6 +35,7 @@ export const expireFiles = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
+    if (hasMigrationWriteFreeze()) return null;
     for (const status of ["reserved", "stored", "delete_failed"] as const) {
       const files = await ctx.db
         .query("sourceFiles")
@@ -50,6 +53,7 @@ export const expireFailedStaging = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
+    if (hasMigrationWriteFreeze()) return null;
     const batch = await ctx.db
       .query("importBatches")
       .withIndex("by_status_and_stagingExpiresAt", (q) =>
@@ -87,6 +91,7 @@ export const expireParseLeases = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
+    if (hasMigrationWriteFreeze()) return null;
     const batches = await ctx.db
       .query("importBatches")
       .withIndex("by_status_and_leaseExpiresAt", (q) =>
@@ -110,6 +115,7 @@ export const sweepOrphans = internalMutation({
   args: { cursor: v.union(v.string(), v.null()) },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return null;
     const page = await ctx.db.system
       .query("_storage")
       .withIndex("by_creation_time", (q) =>

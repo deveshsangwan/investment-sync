@@ -3,6 +3,10 @@ import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { currencyRatePolicy, usdInrRate } from "./model/currencyRates";
+import {
+  hasMigrationWriteFreeze,
+  requireApplicationWritesEnabled,
+} from "./model/migrationFreeze";
 
 const settlementValidator = v.union(
   v.literal("saved"),
@@ -14,6 +18,7 @@ export const beginRefresh = internalMutation({
   args: {},
   returns: v.object({ requestRevision: v.number() }),
   handler: async (ctx) => {
+    requireApplicationWritesEnabled();
     const current = await currentRate(ctx);
     const requestRevision = (current?.refreshRevision ?? 0) + 1;
 
@@ -41,6 +46,7 @@ export const saveQuote = internalMutation({
   },
   returns: settlementValidator,
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return "superseded";
     validateRefreshRevision(args.requestRevision);
     validateQuote(args.rate, args.fetchedAt);
     const current = await currentRate(ctx);
@@ -86,6 +92,7 @@ export const markStale = internalMutation({
   args: { quoteRevision: v.number() },
   returns: v.union(v.literal("stale"), v.literal("superseded")),
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return "superseded";
     validateRefreshRevision(args.quoteRevision);
     const current = await currentRate(ctx);
     if (
@@ -105,6 +112,7 @@ export const markUnavailable = internalMutation({
   args: { quoteRevision: v.number() },
   returns: v.union(v.literal("unavailable"), v.literal("superseded")),
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return "superseded";
     validateRefreshRevision(args.quoteRevision);
     const current = await currentRate(ctx);
     if (

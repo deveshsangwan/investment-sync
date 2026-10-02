@@ -50,7 +50,34 @@ import type {
   FunctionReference,
 } from "convex/server";
 
+import type * as migration from "../migration.js";
+
+import type * as migrationProjectionWorkers from "../migrationProjectionWorkers.js";
+
+import type * as migrationPublication from "../migrationPublication.js";
+
+import type * as migrationViews from "../migrationViews.js";
+
+import type * as model_migration from "../model/migration.js";
+
+import type * as model_migrationFreeze from "../model/migrationFreeze.js";
+
+import type * as model_migrationLoad from "../model/migrationLoad.js";
+
+import type * as model_migrationValidators from "../model/migrationValidators.js";
+
+import type * as migrationAudit from "../migrationAudit.js";
+
 declare const fullApi: ApiFromModules<{
+  migrationAudit: typeof migrationAudit;
+  "model/migrationValidators": typeof model_migrationValidators;
+  "model/migrationLoad": typeof model_migrationLoad;
+  "model/migrationFreeze": typeof model_migrationFreeze;
+  "model/migration": typeof model_migration;
+  migrationViews: typeof migrationViews;
+  migrationPublication: typeof migrationPublication;
+  migrationProjectionWorkers: typeof migrationProjectionWorkers;
+  migration: typeof migration;
   accounts: typeof accounts;
   "actions/parseImport": typeof actions_parseImport;
   "actions/publishPortfolio": typeof actions_publishPortfolio;

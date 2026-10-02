@@ -331,7 +331,9 @@ export const fail = internalMutation({
       leaseExpiresAt: undefined,
     });
     const household = await ctx.db.get("households", version.householdId);
-    const batch = await ctx.db.get("importBatches", version.batchId);
+    const batch = version.batchId
+      ? await ctx.db.get("importBatches", version.batchId)
+      : null;
     if (household?.publishingVersionId === version._id)
       await ctx.db.patch("households", household._id, {
         publishingVersionId: undefined,

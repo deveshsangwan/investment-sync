@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
 import { currencyRatePolicy } from "../model/currencyRates";
+import { hasMigrationWriteFreeze } from "../model/migrationFreeze";
 
 const providerUrl = "https://api.frankfurter.dev/v2/rate/USD/INR";
 
@@ -33,6 +34,8 @@ export const refreshCurrencyRate = internalAction({
     attempts: v.number(),
   }),
   handler: async (ctx): Promise<RefreshResult> => {
+    if (hasMigrationWriteFreeze())
+      return { outcome: "superseded", attempts: 0 };
     const beginning: { requestRevision: number } = await ctx.runMutation(
       internal.currencyRates.beginRefresh,
       {},

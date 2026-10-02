@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation } from "./_generated/server";
+import { hasMigrationWriteFreeze } from "./model/migrationFreeze";
 
 function cleanupRange(
   ctx: QueryCtx,
@@ -57,6 +58,7 @@ export const cleanupVersion = internalMutation({
   args: { versionId: v.id("portfolioVersions"), stage: v.number() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return null;
     const version = await ctx.db.get("portfolioVersions", args.versionId);
     if (
       !version ||
@@ -102,6 +104,7 @@ export const sweep = internalMutation({
   args: { cursor: v.union(v.string(), v.null()) },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return null;
     const page = await ctx.db
       .query("portfolioVersions")
       .withIndex("by_cleanupState_and_expiresAt", (q) =>

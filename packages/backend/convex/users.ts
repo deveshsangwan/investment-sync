@@ -1,10 +1,12 @@
 import { mutation, query } from "./_generated/server";
 import { requireCurrentMembership, requireIdentity } from "./model/auth";
 import { ensureUserProvisioned } from "./model/users";
+import { requireApplicationWritesEnabled } from "./model/migrationFreeze";
 
 export const ensureCurrent = mutation({
   args: {},
   handler: async (ctx) => {
+    requireApplicationWritesEnabled();
     const identity = await requireIdentity(ctx);
 
     return ensureUserProvisioned(ctx, {
