@@ -43,7 +43,18 @@ function replayFacts({
       validateExactRow(fact.row);
       object(fact.provenance);
       const batch = batches.get(doc.batchId);
-      if (
+      if (doc.legacyId) {
+        validateMigratedFact({
+          doc,
+          fact,
+          table,
+          kind,
+          batch,
+          maps,
+          rowsByTable,
+          targetTables,
+        });
+      } else if (
         !batch ||
         batch.status !== "committed" ||
         batch.householdId !== doc.householdId ||
@@ -61,7 +72,7 @@ function replayFacts({
   facts.sort(
     (a, b) =>
       a.provenance.sequence - b.provenance.sequence ||
-      a.doc.batchId.localeCompare(b.doc.batchId) ||
+      a.provenance.batchId.localeCompare(b.provenance.batchId) ||
       a.provenance.rowNumber - b.provenance.rowNumber,
   );
   for (const batch of newCommittedBatches) {
@@ -201,6 +212,135 @@ function replayFacts({
     };
     rowsByTable.transactions.set(value.id, value);
   }
+
+  rejectNewHoldingSelectionTies(rowsByTable, newCommittedBatches);
+}
+
+function rejectNewHoldingSelectionTies(rowsByTable, newCommittedBatches) {
+  const newBatchIds = new Set(
+    newCommittedBatches.map((batch) => batch.legacyBatchId),
+  );
+  const groups = new Map();
+  for (const row of rowsByTable.holding_snapshots.values()) {
+    const instrument = rowsByTable.instruments.get(row.instrument_id);
+    const account = rowsByTable.accounts.get(row.account_id);
+    const isVested =
+      row.source_type === "vested_drivewealth_xlsx" &&
+      account.name === "US Stocks" &&
+      account.provider === "Vested / DriveWealth" &&
+      instrument.asset_class === "us_stock" &&
+      row.currency === "USD" &&
+      (row.source_payload.sourceSheet ?? "") === "";
+    const key = JSON.stringify([
+      row.household_id,
+      instrument.asset_class,
+      row.currency,
+      (instrument.symbol?.trim() || instrument.name.trim()).toUpperCase(),
+      row.snapshot_date,
+      isVested ? 1 : 0,
+      instrument.name,
+    ]);
+    const previous = groups.get(key);
+    if (
+      previous &&
+      (newBatchIds.has(previous.import_batch_id) ||
+        newBatchIds.has(row.import_batch_id))
+    )
+      reject("holding_selection_tie_not_reversible");
+    groups.set(key, row);
+  }
+}
+
+function validateMigratedFact({
+  doc,
+  fact,
+  table,
+  kind,
+  batch,
+  maps,
+  rowsByTable,
+  targetTables,
+}) {
+  const legacyTable = {
+    holdingSnapshots: "holding_snapshots",
+    transactions: "transactions",
+    portfolioValuations: "portfolio_valuations",
+  }[table];
+  const source = rowsByTable[legacyTable].get(mapped(maps[table], doc._id));
+  const legacyBatchId = source?.import_batch_id ?? null;
+  if (
+    !source ||
+    source.id !== doc.legacyId ||
+    fact.provenance.legacyId !== source.id ||
+    source.household_id !== mapped(maps.households, doc.householdId) ||
+    (legacyBatchId
+      ? !batch || mapped(maps.importBatches, batch._id) !== legacyBatchId
+      : doc.batchId !== undefined) ||
+    fact.row.kind !== kind ||
+    fact.provenance.batchId !== (legacyBatchId ?? `legacy:${source.id}`) ||
+    fact.provenance.parserVersion !==
+      (batch?.parserVersion ?? "legacy-postgres") ||
+    fact.provenance.sequence !== Date.parse(source.created_at) ||
+    fact.row.currency !== source.currency
+  )
+    reject("invalid_migrated_fact_provenance");
+
+  const fields =
+    kind === "transaction"
+      ? { amount: "amount", quantity: "quantity", price: "price" }
+      : {
+          investedAmount: "invested_amount",
+          currentValue: "current_value",
+          pnlAmount: "pnl_amount",
+          ...(kind === "holding" ? { quantity: "quantity" } : {}),
+        };
+  for (const [field, column] of Object.entries(fields)) {
+    const value = source[column];
+    const scale = ["quantity", "price"].includes(field) ? 10 : 4;
+    if (
+      value === null
+        ? fact.row[field] !== undefined
+        : fact.row[field] === undefined ||
+          scaled(fact.row[field], scale) !== value
+    )
+      reject("changed_migrated_fact_values");
+  }
+
+  if (kind === "valuation") {
+    if (
+      fact.row.valuationDate !== source.valuation_date ||
+      stableJson(fact.row.metadata) !== stableJson(source.metadata)
+    )
+      reject("changed_migrated_fact_values");
+    return;
+  }
+
+  if (
+    findAccountId({ ...fact, doc }, maps, targetTables) !== source.account_id ||
+    findInstrumentId({ ...fact, doc }, maps, targetTables) !==
+      source.instrument_id
+  )
+    reject("changed_migrated_fact_values");
+  const instrument = rowsByTable.instruments.get(source.instrument_id);
+  const metadata =
+    kind === "holding"
+      ? {
+          ...source.source_payload,
+          ...(instrument.exchange === null
+            ? {}
+            : { exchange: instrument.exchange }),
+        }
+      : { ...source.metadata, notes: source.notes };
+  if (
+    stableJson(fact.row.metadata) !== stableJson(metadata) ||
+    (kind === "holding"
+      ? fact.row.sourceDate !== source.snapshot_date ||
+        fact.row.sourceType !== source.source_type
+      : fact.row.tradeDate !== source.trade_date ||
+        fact.row.type !== source.type)
+  )
+    reject("changed_migrated_fact_values");
+  assertLegacyHoldingSemantics(fact.row);
 }
 
 module.exports = { replayFacts };

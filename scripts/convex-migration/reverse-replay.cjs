@@ -145,6 +145,7 @@ function buildReverseReplayPlan({ sourceSnapshot, targetSnapshot }) {
         !version.rootDigest
       )
         reject("missing_commit_receipt");
+      validatePublicationReceipts(version, batch, targetTables);
 
       row.status = "committed";
       row.row_count = rows.length;
@@ -191,6 +192,126 @@ function buildReverseReplayPlan({ sourceSnapshot, targetSnapshot }) {
     sourceTables,
     tables: normalizedTables,
   };
+}
+
+function validatePublicationReceipts(version, batch, tables) {
+  const manifest = version.rootManifest;
+  if (
+    !Array.isArray(manifest) ||
+    manifest.length === 0 ||
+    manifest.length > 512 ||
+    !/^[a-f0-9]{64}$/.test(version.digest) ||
+    version.attempt !== batch.publicationAttempt
+  )
+    reject("invalid_publication_root_manifest");
+  const expected = new Map();
+  const nextIndex = new Map();
+  for (const entry of manifest) {
+    object(entry);
+    const key = `${entry.stage}:${entry.index}`;
+    if (
+      ![
+        "history",
+        "positions",
+        "scopes",
+        "summary",
+        "assets",
+        "timeline",
+        "facts",
+      ].includes(entry.stage) ||
+      entry.index !== (nextIndex.get(entry.stage) ?? 0) ||
+      expected.has(key) ||
+      !Number.isSafeInteger(entry.count) ||
+      entry.count < 1 ||
+      entry.count > 100 ||
+      !Number.isSafeInteger(entry.bytes) ||
+      entry.bytes < 1 ||
+      entry.bytes > 65536 ||
+      !/^[a-f0-9]{64}$/.test(entry.digest)
+    )
+      reject("invalid_publication_root_manifest");
+    expected.set(key, entry);
+    nextIndex.set(entry.stage, entry.index + 1);
+  }
+
+  const sum = (stage) =>
+    manifest
+      .filter((entry) => entry.stage === stage)
+      .reduce((total, entry) => total + entry.count, 0);
+  const rootJson = JSON.stringify(
+    manifest.map((entry) => [
+      entry.stage,
+      entry.index,
+      entry.count,
+      entry.bytes,
+      entry.digest,
+    ]),
+  );
+  if (
+    sum("facts") !== batch.rowCount ||
+    sum("summary") !== 1 ||
+    sha256(rootJson) !== version.rootDigest
+  )
+    reject("invalid_publication_root_manifest");
+  const receipts = tables.publicationReceipts.filter(
+    (receipt) => receipt.versionId === version._id,
+  );
+  if (receipts.length !== manifest.length)
+    reject("incomplete_publication_receipts");
+  const persistedFacts = new Map(
+    ["holdingSnapshots", "transactions", "portfolioValuations"].flatMap(
+      (table) =>
+        tables[table]
+          .filter((doc) => doc.batchId === batch._id)
+          .map((doc) => {
+            const fact = JSON.parse(text(doc.factJson));
+            return [fact.provenance.rowNumber, fact];
+          }),
+    ),
+  );
+  const factRows = new Set();
+
+  for (const receipt of receipts) {
+    const key = `${receipt.stage}:${receipt.index}`;
+    const entry = expected.get(key);
+    if (
+      !entry ||
+      receipt.attempt !== version.attempt ||
+      receipt.count !== entry.count ||
+      receipt.bytes !== entry.bytes ||
+      receipt.digest !== entry.digest
+    )
+      reject("conflicting_publication_receipt");
+    expected.delete(key);
+    if (receipt.stage !== "facts") continue;
+    const payload = text(receipt.payloadJson);
+    if (
+      Buffer.byteLength(payload) !== receipt.bytes ||
+      sha256(payload) !== receipt.digest
+    )
+      reject("conflicting_publication_fact_payload");
+    const values = JSON.parse(payload);
+    if (!Array.isArray(values) || values.length !== receipt.count)
+      reject("conflicting_publication_fact_payload");
+    for (const value of values) {
+      object(value);
+      object(value.provenance);
+      const rowNumber = value.provenance.rowNumber;
+      if (
+        factRows.has(rowNumber) ||
+        stableJson(persistedFacts.get(rowNumber)) !==
+          stableJson({ row: value.row, provenance: value.provenance })
+      )
+        reject("conflicting_publication_fact_payload");
+      factRows.add(rowNumber);
+    }
+  }
+  if (expected.size || factRows.size !== batch.rowCount)
+    reject("incomplete_publication_receipts");
+}
+
+function sha256(value) {
+  return nodeCrypto.createHash("sha256").update(value).digest("hex");
 }
 
 function assertEnvelope(envelope) {
@@ -353,7 +474,7 @@ function replayQuote(quotes, destination) {
 
 function restoredStoragePath(file, snapshot) {
   if (
-    file.status !== "available" ||
+    !["stored", "delete_failed", "available"].includes(file.status) ||
     file.expiresAt <= Date.parse(snapshot.evaluationTime)
   )
     return null;

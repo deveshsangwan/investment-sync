@@ -313,6 +313,7 @@ function appendCommittedBatch(
     parserVersion: "fixture-decimal-v1",
     sourceType: "manual_snapshot",
     committedVersionId: versionId,
+    publicationAttempt: 1,
     processedAt: committedAt - 500,
     committedAt,
   });
@@ -338,29 +339,7 @@ function appendCommittedBatch(
     digest: nodeCrypto.createHash("sha256").update(rowsJson).digest("hex"),
     rowsJson,
   });
-  tables.portfolioVersions.push({
-    _id: versionId,
-    _creationTime: committedAt,
-    householdId,
-    batchId: id,
-    sequence,
-    digest: "a".repeat(64),
-    rootDigest: "b".repeat(64),
-    publicationState: "published",
-    createdAt: committedAt,
-  });
-  tables.publicationReceipts.push({
-    _id: `receipt-${id}`,
-    _creationTime: committedAt,
-    versionId,
-    attempt: 1,
-    stage: "facts",
-    index: 0,
-    count: rows.length,
-    digest: "c".repeat(64),
-    bytes: rowsJson.length,
-  });
-
+  const publishedFacts = [];
   for (const [index, row] of rows.entries()) {
     const date =
       row.kind === "holding"
@@ -400,7 +379,89 @@ function appendCommittedBatch(
         index + 1,
       ]);
     tables[table].push(doc);
+    const identity =
+      row.kind === "valuation"
+        ? { kind: "valuation", valuationKey: row.valuationDate }
+        : {
+            kind: row.kind,
+            accountKey: JSON.stringify([row.provider, row.accountName]),
+            instrumentKey: JSON.stringify([
+              row.assetClass,
+              row.currency,
+              row.symbol,
+            ]),
+            positionKey: `${householdId}:${row.symbol}`,
+            ...(row.kind === "transaction"
+              ? { occurrenceKey: doc.occurrenceKey }
+              : {
+                  sourceGroupKey: "",
+                  canonicalPositionKey: `${householdId}:${row.symbol}`,
+                  snapshotKey: `${row.sourceDate}:${row.symbol}`,
+                  snapshotDate: row.sourceDate,
+                }),
+          };
+    publishedFacts.push({ ...JSON.parse(doc.factJson), identity });
   }
+
+  const sha256 = (value) =>
+    nodeCrypto.createHash("sha256").update(value).digest("hex");
+  const summary = [
+    {
+      asOfDate: null,
+      totals: [],
+      hasExplicitValuations: false,
+      valuationScope: "valuations",
+      cashFlowScope: "cashflows",
+    },
+  ];
+  const rootManifest = [];
+  for (const [stage, records] of [
+    ["summary", summary],
+    ["facts", publishedFacts],
+  ]) {
+    const payloadJson = JSON.stringify(records);
+    const entry = {
+      stage,
+      index: 0,
+      count: records.length,
+      bytes: Buffer.byteLength(payloadJson),
+      digest: sha256(payloadJson),
+    };
+    rootManifest.push(entry);
+    tables.publicationReceipts.push({
+      _id: `receipt-${id}-${stage}`,
+      _creationTime: committedAt,
+      versionId,
+      attempt: 1,
+      ...entry,
+      ...(stage === "facts"
+        ? { payloadJson }
+        : { modelBytesWritten: entry.bytes }),
+    });
+  }
+  tables.portfolioVersions.push({
+    _id: versionId,
+    _creationTime: committedAt,
+    householdId,
+    batchId: id,
+    sequence,
+    attempt: 1,
+    digest: sha256(JSON.stringify(summary)),
+    rootManifest,
+    rootDigest: sha256(
+      JSON.stringify(
+        rootManifest.map((entry) => [
+          entry.stage,
+          entry.index,
+          entry.count,
+          entry.bytes,
+          entry.digest,
+        ]),
+      ),
+    ),
+    publicationState: "published",
+    createdAt: committedAt,
+  });
 }
 
 function holding(sourceDate, investedAmount, currentValue) {

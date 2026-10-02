@@ -78,16 +78,44 @@ The measured small rehearsal takes about half a second on the local Postgres ser
 
 Some Convex data cannot be represented by the retained schema. The adapter stops instead of discarding it:
 
-| Failure code                                                | Reason                                                                                                                                                              |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `identical_same_day_transaction_occurrences_not_reversible` | Distinct resolved Convex transactions share the old transaction unique key. The approved occurrence correction cannot survive an unchanged old database schema.     |
-| `normalized_row_not_losslessly_representable`               | A financial input cannot round-trip through the legacy normalized-row number schema. Persisted decimals remain exact, but an old Commit would lose input precision. |
-| `source_metadata_not_reconstructible_in_postgres`           | A new holding uses custom source grouping, completeness, granularity, or priority absent from the old schema.                                                       |
-| `available_source_file_not_restored`                        | A new unexpired file lacks a matching restored storage record.                                                                                                      |
-| `target_writes_not_drained`                                 | A parse or publication is still running.                                                                                                                            |
-| `convex_only_writes_detected`                               | The current target differs from the archived initial dataset, so an instant before-write rollback is unsafe.                                                        |
-| `incomplete_committed_facts`                                | A committed batch lacks all its exported facts.                                                                                                                     |
+| Failure code                                                | Reason                                                                                                                                                                                 |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `identical_same_day_transaction_occurrences_not_reversible` | Distinct resolved Convex transactions share the old transaction unique key. The approved occurrence correction cannot survive an unchanged old database schema.                        |
+| `normalized_row_not_losslessly_representable`               | A financial input cannot round-trip through the legacy normalized-row number schema. Persisted decimals remain exact, but an old Commit would lose input precision.                    |
+| `source_metadata_not_reconstructible_in_postgres`           | A new holding uses custom source grouping, completeness, granularity, or priority absent from the old schema.                                                                          |
+| `available_source_file_not_restored`                        | A new unexpired file lacks a matching restored storage record.                                                                                                                         |
+| `target_writes_not_drained`                                 | A parse or publication is still running.                                                                                                                                               |
+| `convex_only_writes_detected`                               | The current target differs from the archived initial dataset, so an instant before-write rollback is unsafe.                                                                           |
+| `incomplete_committed_facts`                                | A committed batch lacks all its exported facts.                                                                                                                                        |
+| `holding_selection_tie_not_reversible`                      | A new holding creates a same-date, same-name, same-priority canonical-position tie across SQL rows. Native fact-key ranking and new SQL UUID ranking need not select the same account. |
+| `invalid_publication_root_manifest`                         | A new published version lacks a valid stage manifest, publication attempt, or recomputed root checksum.                                                                                |
+| `incomplete_publication_receipts`                           | The complete manifest cannot be matched to exported publication receipts and persisted facts.                                                                                          |
+| `conflicting_publication_receipt`                           | Receipt stage, index, attempt, count, bytes, or checksum disagrees with its sealed manifest.                                                                                           |
 
 After Convex-only writes, keep both applications' writes disabled until the owner chooses a recovery policy for any such failure. A schema change that preserves the approved correction, or continuing with the Convex build, needs a separate decision. Do not enable the old build after a partial or lossy replay.
 
 Once replay passes, run the portfolio reconciliation against the old Postgres readers and the frozen Convex packet using the same exchange rate and evaluation time. Verify application queries and source-file downloads before redeploying the exact archived Postgres build with its matching configuration. URL changes alone cannot restore removed tRPC routes. The CLI deliberately leaves `applicationRestored: false` in its receipt so a data check cannot be mistaken for a completed deployment rollback.
+
+## Actual local deployment drill
+
+`rehearse-rollback.cjs` drives the public upload, parse and Commit APIs on an explicitly named local synthetic deployment. It temporarily removes the migration write freeze, commits an expired parsed batch without its original file, provisions a generated identity, uploads a tiny Tickertape CSV, waits for parsing and publication, and reinstates `MIGRATION_MODE=synthetic`. It downloads the new stored file, verifies its checksum and size, saves protected restored bytes, and exports the actual native tables. The SQL replay uses the retained migrations in a dedicated database and verifies exact rows and idempotency. Independent retained SQL queries then compare Overview, positions, every SQL holding UUID, and all eight asset classes per household against actual Convex read models with the same saved quote and evaluation time.
+
+Run from the repository root with protected generated inputs and the explicit operator environment:
+
+```sh
+node scripts/convex-migration/rehearse-rollback.cjs \
+  --snapshot .migration/generated-source-complete/snapshot.json \
+  --baseline .migration/rehearsal-complete-a/target.json \
+  --fixture-metadata .migration/generated-source-v2/fixture-metadata.json \
+  --target-env-file .migration/local-backends/phase6-c/operator.env \
+  --source-env-file .migration/generated-source-v2/database.env \
+  --run-key rehearsal-complete-a \
+  --run-id live-rollback-complete-a \
+  --database-name investment_sync_rollback_live_complete_a
+```
+
+The default database is `investment_sync_rollback_live`; an explicit name may only add a lowercase alphanumeric/underscore suffix. Existing databases are retained and must already match the frozen source or exact replay. Use a new dedicated name for a new clean target. `--mode capture` resumes after both protected commit receipts exist, without creating another identity or import. `--mode replay` reuses the frozen packet. `--mode semantic` repeats only the exact SQL check and independent read-model comparison. Any comparison finding causes a nonzero exit and remains in a protected diagnostic artifact; the drill does not approve differences.
+
+The first actual `local:phase6-c` drill used the generated source tables at evaluation time `2026-06-20T12:00:00.000Z`. Its frozen baseline replay digest exactly equaled its source digest, `8a8fd81035033d9bfc7c5cc3a2c4b3de8b095d1206fa513169f3ef62c204244e`. After the two public commits, all retained SQL tables exactly matched replay digest `c2c29e91739f0f171b8ddf01f340a7f1f8a8e5331f227329979a90756c46798a`; a second replay performed no write. Counts were 5 users, 4 households, 5 memberships, 22 accounts, 26 instruments, 26 batches, 44 normalized rows, 38 holdings, 2 transactions, 2 valuations, and 1 currency quote. The new file was downloaded and its restored bytes matched the native storage checksum and size. Protected packets and receipts are under `.migration/live-rollback-final-a/`.
+
+The independent comparison covered all 4 households, all 38 holding UUIDs, and all 32 asset-class views. It exposed one historical Indian-stock chart difference: the old reader sums JavaScript numbers, while the native chart sums exact persisted decimals before display conversion. In the deliberate amount-above-`Number.MAX_SAFE_INTEGER` fixture, adding the new synthetic holding produced a one-ULP difference of 2 INR. The exact stored decimals agree. The failed semantic receipt is retained; this is not an approved behavior difference and the semantic gate remains blocked until display parity is restored or the owner explicitly approves a recovery disposition. No production data, storage, authentication settings, or deployment were changed.

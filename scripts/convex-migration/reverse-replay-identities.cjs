@@ -15,6 +15,19 @@ const {
 } = require("./reverse-replay-values.cjs");
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAPPING_TARGETS = {
+  users: ["users"],
+  households: ["households"],
+  household_members: ["householdMembers"],
+  accounts: ["accounts"],
+  instruments: ["instruments"],
+  import_batches: ["importBatches", "sourceFiles"],
+  import_rows: ["migrationRecords"],
+  holding_snapshots: ["holdingSnapshots"],
+  transactions: ["transactions"],
+  portfolio_valuations: ["portfolioValuations"],
+  currency_rates: ["currencyRates"],
+};
 
 function createIdentityMaps(sourceTables, targetTables, mappings) {
   if (!Array.isArray(mappings)) reject("missing_id_mapping");
@@ -23,6 +36,8 @@ function createIdentityMaps(sourceTables, targetTables, mappings) {
   );
 
   for (const mapping of mappings) {
+    if (!MAPPING_TARGETS[mapping.legacyTable]?.includes(mapping.targetTable))
+      reject("unsupported_id_mapping_target");
     const sourceRows = sourceTables[mapping.legacyTable];
     const targetRows = targetTables[mapping.targetTable];
     if (!sourceRows || !targetRows || !UUID.test(mapping.legacyId))
@@ -40,8 +55,15 @@ function createIdentityMaps(sourceTables, targetTables, mappings) {
     }
 
     const map = maps[mapping.targetTable];
-    // Several archived SQL rows can belong to one bounded Convex chunk.
-    if (mapping.targetTable === "importRowChunks") continue;
+    if (mapping.targetTable === "migrationRecords") {
+      if (
+        target.legacyTable !== mapping.legacyTable ||
+        target.legacyId !== mapping.legacyId ||
+        target.sourceJson !== mapping.sourceJson
+      )
+        reject("divergent_archived_normalized_row");
+      continue;
+    }
     if (map.has(target._id) && map.get(target._id) !== source.id)
       reject("ambiguous_id_mapping");
     map.set(target._id, source.id);

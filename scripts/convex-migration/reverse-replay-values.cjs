@@ -244,11 +244,28 @@ function date(value) {
 function timestamp(value) {
   if (
     typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
+    !Number.isSafeInteger(Math.trunc(value)) ||
     !Number.isFinite(new Date(value).getTime())
   )
     reject("invalid_target_timestamp");
-  return new Date(value).toISOString();
+
+  const [whole, fraction = ""] = expandNumberExponent(Math.abs(value)).split(
+    ".",
+  );
+  let microseconds =
+    BigInt(whole) * 1000n + BigInt(fraction.slice(0, 3).padEnd(3, "0"));
+  if ((fraction[3] ?? "0") >= "5") microseconds += 1n;
+  if (value < 0) microseconds = -microseconds;
+  let milliseconds = microseconds / 1000n;
+  let remainder = microseconds % 1000n;
+  if (remainder < 0n) {
+    milliseconds -= 1n;
+    remainder += 1000n;
+  }
+
+  return new Date(Number(milliseconds))
+    .toISOString()
+    .replace(/Z$/, `${remainder.toString().padStart(3, "0")}Z`);
 }
 function optionalTimestamp(value) {
   return value === undefined ? null : timestamp(value);

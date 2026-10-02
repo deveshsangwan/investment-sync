@@ -110,7 +110,7 @@ test("rejects corrupted chunks and committed facts missing from an otherwise com
   const missing = createRollbackFixture();
   missing.targetSnapshot.tables.holdingSnapshots.pop();
   assert.throws(() => buildReverseReplayPlan(missing), {
-    code: "incomplete_committed_facts",
+    code: "conflicting_publication_fact_payload",
   });
 });
 
@@ -171,6 +171,57 @@ test("requires restored downloads for a new source file that remains available",
   );
 });
 
+test("validates native archival row mappings without treating archive records as SQL identities", () => {
+  const fixture = createRollbackFixture();
+  const source = fixture.sourceSnapshot.tables.import_rows[0];
+  const record = {
+    _id: "archive-normalized-row",
+    _creationTime: Date.parse(CREATED_AT),
+    legacyTable: "import_rows",
+    legacyId: source.id,
+    sourceJson: JSON.stringify(source),
+  };
+  fixture.targetSnapshot.tables.migrationRecords = [record];
+  fixture.targetSnapshot.mappings.push({
+    legacyTable: "import_rows",
+    legacyId: source.id,
+    targetTable: "migrationRecords",
+    targetId: record._id,
+    sourceJson: record.sourceJson,
+  });
+  assert.equal(buildReverseReplayPlan(fixture).counts.import_rows, 4);
+  fixture.targetSnapshot.mappings.at(-1).targetTable = "users";
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "unsupported_id_mapping_target",
+  });
+});
+
+test("requires restored bytes for actual native stored and delete_failed source files", () => {
+  for (const status of ["stored", "delete_failed"]) {
+    const fixture = createRollbackFixture();
+    const file = fixture.targetSnapshot.tables.sourceFiles[1];
+    file.status = status;
+    file.expiresAt = Date.parse("2026-01-05T00:00:00Z");
+    assert.throws(() => buildReverseReplayPlan(fixture), {
+      code: "available_source_file_not_restored",
+    });
+    fixture.targetSnapshot.reverseStorageMappings = [
+      {
+        batchId: file.batchId,
+        storagePath: "synthetic/native-restored.csv",
+        contentHash: file.contentHash,
+        sizeBytes: file.sizeBytes,
+      },
+    ];
+    assert.equal(
+      buildReverseReplayPlan(fixture).tables.import_batches.find(
+        (row) => row.original_file_name === "batch-second.csv",
+      ).storage_path,
+      "synthetic/native-restored.csv",
+    );
+  }
+});
+
 test("requires the same immutable normalized source rows and valid published receipts", () => {
   const changed = createRollbackFixture();
   const chunk = changed.targetSnapshot.tables.importRowChunks[0];
@@ -206,6 +257,194 @@ test("retains archived microsecond timestamps and exact persisted decimal string
   const fixture = createRollbackFixture();
   const normalized = normalizeSqlTables(fixture.sourceSnapshot.tables);
   assert.equal(normalized.users[0].created_at, CREATED_AT);
+});
+
+test("accepts actual Convex fractional-millisecond creation times at Postgres microsecond precision", () => {
+  const fixture = createRollbackFixture();
+  const user = fixture.targetSnapshot.tables.users.find(
+    (row) => row._id === "user-new",
+  );
+  user._creationTime = 1767398400000.125;
+  const plan = buildReverseReplayPlan(fixture);
+  assert.equal(
+    plan.tables.users.find((row) => row.clerk_user_id === user.clerkSubject)
+      .created_at,
+    "2026-01-03T00:00:00.000125Z",
+  );
+});
+
+test("validates migrated persisted facts independently of rounded normalized rows and preserves batchless legacy valuations", () => {
+  const fixture = createRollbackFixture();
+  const published = buildReverseReplayPlan(fixture);
+  const batch = fixture.sourceSnapshot.tables.import_batches[0];
+  batch.status = "committed";
+  batch.committed_at = published.tables.import_batches.find(
+    (row) => row.id === batch.id,
+  ).committed_at;
+  fixture.targetSnapshot.mappings.find(
+    (mapping) => mapping.legacyTable === "import_batches",
+  ).sourceJson = JSON.stringify(batch);
+  fixture.sourceSnapshot.tables.import_rows[0].is_committed = true;
+  const doc = fixture.targetSnapshot.tables.holdingSnapshots[0];
+  const source = published.tables.holding_snapshots.find(
+    (row) => row.id === deterministicUuid("holding_snapshots", doc._id),
+  );
+  source.invested_amount = "9007199254740993.1234";
+  fixture.sourceSnapshot.tables.holding_snapshots.push(source);
+  const fact = JSON.parse(doc.factJson);
+  fact.row.investedAmount = source.invested_amount;
+  fact.row.metadata.exchange = "TEST";
+  fact.provenance = {
+    ...fact.provenance,
+    legacyId: source.id,
+    batchId: batch.id,
+    sequence: Date.parse(source.created_at),
+  };
+  doc.legacyId = source.id;
+  doc.factJson = JSON.stringify(fact);
+  fixture.targetSnapshot.mappings.push({
+    legacyTable: "holding_snapshots",
+    legacyId: source.id,
+    targetTable: "holdingSnapshots",
+    targetId: doc._id,
+    sourceJson: JSON.stringify(source),
+  });
+  const valuation = {
+    id: deterministicUuid("portfolio_valuations", "source-valuation"),
+    household_id: source.household_id,
+    valuation_date: "2026-01-01",
+    invested_amount: "9007199254740993.1234",
+    current_value: "9007199254740994.1234",
+    pnl_amount: "1",
+    currency: "USD",
+    metadata: {},
+    created_at: CREATED_AT,
+  };
+  fixture.sourceSnapshot.tables.portfolio_valuations.push(valuation);
+  fixture.targetSnapshot.tables.portfolioValuations.push({
+    _id: "legacy-valuation",
+    _creationTime: Date.parse(CREATED_AT),
+    householdId: doc.householdId,
+    legacyId: valuation.id,
+    factJson: JSON.stringify({
+      row: {
+        kind: "valuation",
+        sourceType: "investment_portfolio_xlsx",
+        valuationDate: valuation.valuation_date,
+        investedAmount: valuation.invested_amount,
+        currentValue: valuation.current_value,
+        pnlAmount: valuation.pnl_amount,
+        currency: valuation.currency,
+        metadata: {},
+        source: {
+          group: "",
+          completeness: "complete",
+          granularity: "portfolio",
+          priority: 0,
+        },
+        numericProvenance: {
+          investedAmount: "persisted_decimal",
+          currentValue: "persisted_decimal",
+          pnlAmount: "persisted_decimal",
+        },
+      },
+      provenance: {
+        legacyId: valuation.id,
+        batchId: `legacy:${valuation.id}`,
+        parserVersion: "legacy-postgres",
+        sequence: Date.parse(CREATED_AT),
+        rowNumber: 100,
+        fallbackDate: "2026-01-01",
+      },
+    }),
+  });
+  fixture.targetSnapshot.mappings.push({
+    legacyTable: "portfolio_valuations",
+    legacyId: valuation.id,
+    targetTable: "portfolioValuations",
+    targetId: "legacy-valuation",
+    sourceJson: JSON.stringify(valuation),
+  });
+
+  const plan = buildReverseReplayPlan(fixture);
+  assert.equal(
+    plan.tables.holding_snapshots.find((row) => row.id === source.id)
+      .invested_amount,
+    source.invested_amount,
+  );
+  assert.deepEqual(
+    plan.tables.portfolio_valuations.find((row) => row.id === valuation.id),
+    valuation,
+  );
+  fact.row.investedAmount = "9007199254740993.1235";
+  doc.factJson = JSON.stringify(fact);
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "changed_migrated_fact_values",
+  });
+});
+
+test("requires the actual publication root manifest and complete matching stage receipts", () => {
+  const check = (mutate, code) => {
+    const fixture = createRollbackFixture();
+    mutate(fixture.targetSnapshot.tables);
+    assert.throws(() => buildReverseReplayPlan(fixture), { code });
+  };
+  check((tables) => {
+    tables.publicationReceipts = [];
+  }, "incomplete_publication_receipts");
+  check((tables) => {
+    tables.publicationReceipts.pop();
+  }, "incomplete_publication_receipts");
+  check((tables) => {
+    tables.publicationReceipts[0].digest = "0".repeat(64);
+  }, "conflicting_publication_receipt");
+  check((tables) => {
+    tables.portfolioVersions[0].rootDigest = "0".repeat(64);
+  }, "invalid_publication_root_manifest");
+  check((tables) => {
+    tables.portfolioVersions[0].rootManifest[0].index = 1;
+  }, "invalid_publication_root_manifest");
+  check((tables) => {
+    tables.publicationReceipts[1] = {
+      ...tables.publicationReceipts[0],
+      _id: "conflicting-receipt",
+    };
+  }, "conflicting_publication_receipt");
+  check((tables) => {
+    tables.publicationReceipts.find(
+      (receipt) => receipt.stage === "facts",
+    ).payloadJson = "[]";
+  }, "conflicting_publication_fact_payload");
+});
+
+test("refuses same-date cross-account holdings whose arbitrary new SQL UUID order could change selection", () => {
+  const fixture = createRollbackFixture();
+  const epoch = Date.parse("2026-01-03T12:00:00Z");
+  for (const [index, name] of ["Generated A", "Generated B"].entries()) {
+    fixture.targetSnapshot.tables.accounts.push({
+      _id: `cross-account-${index}`,
+      _creationTime: epoch,
+      householdId: "household-new",
+      name,
+      provider: "Synthetic",
+      accountType: "broker",
+      currency: "USD",
+    });
+    const row = holding("2026-01-04", "100", index === 0 ? "100" : "200");
+    row.accountName = name;
+    appendCommittedBatch(
+      fixture.targetSnapshot,
+      index === 0 ? "cross-A" : "cross-B",
+      "household-new",
+      "user-new",
+      index + 2,
+      [row],
+      epoch + index,
+    );
+  }
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "holding_selection_tie_not_reversible",
+  });
 });
 
 test("preserves a currency quote's UTC microseconds", () => {
