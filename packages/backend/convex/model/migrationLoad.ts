@@ -618,6 +618,7 @@ async function loadFact(
   }
   await archiveRecord(ctx, run, legacyTable, source, value, {
     householdLegacyId: source.household_id,
+    rowNumber: provenance.rowNumber,
   });
   await ctx.db.patch("migrationRuns", run._id, {
     nextFactOrdinal: run.nextFactOrdinal + 1,

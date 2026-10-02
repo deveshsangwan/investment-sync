@@ -10,6 +10,10 @@ const { exactNormalizedImportRowSchema } = requireBackend(
 const { normalizedImportRowSchema } = requireBackend(
   "@investment-sync/importers/types",
 );
+const {
+  expectedMigratedFact,
+  expectedMigratedIdentity,
+} = require("../../packages/backend/convex/model/migrationFactAudit.ts");
 
 function sourceNormalizedRow(payload) {
   const exact = exactNormalizedImportRowSchema.safeParse(payload);
@@ -269,6 +273,13 @@ function reconcileRecords(snapshot, target, findings) {
     }
   }
 
+  let factOrdinal = 0;
+  const sourceById = Object.fromEntries(
+    Object.entries(snapshot.tables).map(([table, rows]) => [
+      table,
+      new Map(rows.map((row) => [row.id, row])),
+    ]),
+  );
   const financialTables = {
     holding_snapshots: {
       target: "holdingSnapshots",
@@ -297,6 +308,7 @@ function reconcileRecords(snapshot, target, findings) {
   };
   for (const [table, config] of Object.entries(financialTables)) {
     for (const source of snapshot.tables[table]) {
+      factOrdinal += 1;
       const entries = mapped(table, source.id, config.target);
       if (entries.length !== 1) {
         findings.push({
@@ -311,6 +323,40 @@ function reconcileRecords(snapshot, target, findings) {
       if (!actual) continue;
       const fact = JSON.parse(actual.factJson);
       const base = `native.${config.target}.${source.id}`;
+      const expectedFact = expectedMigratedFact({
+        source,
+        ordinal: factOrdinal,
+        account: sourceById.accounts.get(source.account_id),
+        instrument: sourceById.instruments.get(source.instrument_id),
+        batch: sourceById.import_batches.get(source.import_batch_id),
+      });
+      equal(expectedFact, fact, `${base}.fullFact`);
+      equal(
+        JSON.stringify([expectedFact.provenance.batchId, factOrdinal]),
+        actual.key,
+        `${base}.key`,
+      );
+      const identity = expectedMigratedIdentity(expectedFact);
+      if (identity.kind !== "valuation") {
+        equal(identity.positionKey, actual.positionKey, `${base}.positionKey`);
+        equal(
+          identity.instrumentKey,
+          actual.instrumentKey,
+          `${base}.instrumentKey`,
+        );
+        if (identity.kind === "holding")
+          equal(
+            identity.sourceGroupKey,
+            actual.sourceGroupKey,
+            `${base}.sourceGroupKey`,
+          );
+        else
+          equal(
+            identity.occurrenceKey,
+            actual.occurrenceKey,
+            `${base}.occurrenceKey`,
+          );
+      }
       equal(source.id, fact.provenance.legacyId, `${base}.provenance.legacyId`);
       equal(
         parentId("households", source.household_id, "households"),

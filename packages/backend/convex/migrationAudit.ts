@@ -19,7 +19,6 @@ import {
   accountSchema,
   batchSchema,
   canonicalJson,
-  holdingSchema,
   householdSchema,
   importRowSchema,
   instrumentSchema,
@@ -27,11 +26,9 @@ import {
   parseJson,
   rateSchema,
   sourceFileManifestSchema,
-  transactionSchema,
   userSchema,
-  valuationSchema,
 } from "./model/migrationValidators";
-import { decodeFact } from "./model/portfolioEncoding";
+import { auditMigratedFact } from "./model/migrationFactAudit";
 import { auditPackedNormalizedRows } from "./model/migrationRowAudit";
 
 export const recordsPage = internalQuery({
@@ -650,149 +647,7 @@ async function auditRecord(
     case "holding_snapshots":
     case "transactions":
     case "portfolio_valuations": {
-      const row =
-        record.legacyTable === "holding_snapshots"
-          ? holdingSchema.parse(source)
-          : record.legacyTable === "transactions"
-            ? transactionSchema.parse(source)
-            : valuationSchema.parse(source);
-      const table =
-        record.legacyTable === "holding_snapshots"
-          ? "holdingSnapshots"
-          : record.legacyTable === "transactions"
-            ? "transactions"
-            : "portfolioValuations";
-      const target = await migrationTarget(
-        ctx,
-        run.runKey,
-        record.legacyTable,
-        row.id,
-        table,
-      );
-      const household = await migrationTarget(
-        ctx,
-        run.runKey,
-        "households",
-        row.household_id,
-        "households",
-      );
-      const fact = decodeFact(target.factJson);
-      const batchId =
-        "import_batch_id" in row && row.import_batch_id
-          ? (
-              await migrationTarget(
-                ctx,
-                run.runKey,
-                "import_batches",
-                row.import_batch_id,
-                "importBatches",
-              )
-            )._id
-          : undefined;
-      assertEqual(
-        [
-          target.legacyId,
-          target.householdId,
-          target.batchId ?? null,
-          fact.provenance.legacyId,
-        ],
-        [row.id, household._id, batchId ?? null, row.id],
-      );
-      if ("amount" in row && fact.row.kind === "transaction")
-        assertEqual(
-          [
-            fact.row.amount,
-            fact.row.quantity ?? null,
-            fact.row.price ?? null,
-            fact.row.tradeDate,
-            fact.row.type,
-            fact.row.currency,
-          ],
-          [
-            canonicalDecimal(row.amount),
-            canonicalNullable(row.quantity),
-            canonicalNullable(row.price),
-            row.trade_date,
-            row.type,
-            row.currency,
-          ],
-        );
-      else if ("snapshot_date" in row && fact.row.kind === "holding")
-        assertEqual(
-          [
-            fact.row.quantity ?? null,
-            fact.row.investedAmount,
-            fact.row.currentValue,
-            fact.row.pnlAmount ?? null,
-            fact.row.pnlPercent ?? null,
-            fact.row.sourceDate,
-            fact.row.sourceType,
-            fact.row.currency,
-          ],
-          [
-            canonicalNullable(row.quantity),
-            canonicalDecimal(row.invested_amount),
-            canonicalDecimal(row.current_value),
-            canonicalNullable(row.pnl_amount),
-            row.pnl_percent === null ? null : Number(row.pnl_percent),
-            row.snapshot_date,
-            row.source_type,
-            row.currency,
-          ],
-        );
-      else if ("valuation_date" in row && fact.row.kind === "valuation")
-        assertEqual(
-          [
-            fact.row.investedAmount,
-            fact.row.currentValue,
-            fact.row.pnlAmount,
-            fact.row.valuationDate,
-            fact.row.currency,
-          ],
-          [
-            canonicalDecimal(row.invested_amount),
-            canonicalDecimal(row.current_value),
-            canonicalDecimal(row.pnl_amount),
-            row.valuation_date,
-            row.currency,
-          ],
-        );
-      else throw new Error("Persisted fact kind mismatch");
-      if ("account_id" in row && fact.row.kind !== "valuation") {
-        const account = await migrationTarget(
-          ctx,
-          run.runKey,
-          "accounts",
-          row.account_id,
-          "accounts",
-        );
-        if (!row.instrument_id)
-          throw new Error("transaction_without_instrument");
-        const instrument = await migrationTarget(
-          ctx,
-          run.runKey,
-          "instruments",
-          row.instrument_id,
-          "instruments",
-          row.household_id,
-        );
-        assertEqual(
-          [
-            fact.row.accountName,
-            fact.row.provider,
-            fact.row.instrumentName,
-            fact.row.symbol ?? null,
-            fact.row.assetClass,
-          ],
-          [
-            account.name,
-            account.provider,
-            instrument.name,
-            instrument.symbol ?? null,
-            instrument.assetClass,
-          ],
-        );
-      }
+      await auditMigratedFact(ctx, run, record);
       return;
     }
     case "currency_rates": {
@@ -831,10 +686,6 @@ async function auditRecord(
     case "prices":
       return;
   }
-}
-
-function canonicalNullable(value: string | null) {
-  return value === null ? null : canonicalDecimal(value);
 }
 
 function assertEqual(actual: unknown, expected: unknown) {

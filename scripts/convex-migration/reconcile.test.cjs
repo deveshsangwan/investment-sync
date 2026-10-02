@@ -71,37 +71,98 @@ test("only approximate numeric analytics use the declared tolerance", () => {
   assert.equal(findings.length, 2);
 });
 
-test("an intact source archive cannot hide a changed native financial value or household", () => {
+function persistedHoldingFixture() {
   const tables = Object.fromEntries(legacyTables.map((table) => [table, []]));
-  tables.holding_snapshots = [
-    {
-      id: "holding-old",
-      household_id: "house-old",
-      import_batch_id: null,
-      snapshot_date: "2026-01-01",
+  const account = {
+    id: "account-old",
+    household_id: "house-old",
+    name: "Fake account",
+    provider: "Fake broker",
+    account_type: "brokerage",
+    currency: "USD",
+    is_archived: false,
+    metadata: {},
+  };
+  const instrument = {
+    id: "instrument-old",
+    name: "Fake holding",
+    symbol: "FAKE",
+    isin: null,
+    exchange: null,
+    asset_class: "us_stock",
+    currency: "USD",
+    provider_metadata: {},
+  };
+  tables.accounts.push(account);
+  tables.instruments.push(instrument);
+  tables.holding_snapshots.push({
+    id: "holding-old",
+    household_id: "house-old",
+    account_id: account.id,
+    instrument_id: instrument.id,
+    import_batch_id: null,
+    source_type: "tickertape_stock_csv",
+    snapshot_date: "2026-01-01",
+    created_at: "2026-01-01T00:00:00.000Z",
+    currency: "USD",
+    quantity: "2.0000000000",
+    invested_amount: "10.0000",
+    current_value: "12.0000",
+    pnl_amount: null,
+    pnl_percent: null,
+    source_payload: {},
+  });
+  const fact = {
+    row: {
+      kind: "holding",
+      sourceType: "tickertape_stock_csv",
+      sourceDate: "2026-01-01",
+      accountName: account.name,
+      provider: account.provider,
+      instrumentName: instrument.name,
+      symbol: instrument.symbol,
+      assetClass: "us_stock",
       currency: "USD",
-      quantity: "2.0000000000",
-      invested_amount: "10.0000",
-      current_value: "12.0000",
-      pnl_amount: null,
+      quantity: "2",
+      investedAmount: "10",
+      currentValue: "12",
+      metadata: {},
+      source: {
+        group: "",
+        completeness: "complete",
+        granularity: "instrument",
+        priority: 0,
+      },
+      numericProvenance: {
+        quantity: "persisted_decimal",
+        investedAmount: "persisted_decimal",
+        currentValue: "persisted_decimal",
+      },
     },
-  ];
+    provenance: {
+      legacyId: "holding-old",
+      batchId: "legacy:holding-old",
+      parserVersion: "legacy-postgres",
+      sequence: Date.parse("2026-01-01"),
+      rowNumber: 1,
+      fallbackDate: "2026-01-01",
+    },
+  };
+  const { buildPortfolioPublication } = requireBackend(
+    "@investment-sync/portfolio-domain",
+  );
+  const identity = buildPortfolioPublication({ existingFacts: [fact] })
+    .identifiedFacts[0].identity;
   const native = {
     _id: "holding-new",
     legacyId: "holding-old",
     householdId: "house-new",
     date: "2026-01-01",
-    positionKey: "position",
-    factJson: JSON.stringify({
-      row: {
-        kind: "holding",
-        currency: "USD",
-        quantity: "2",
-        investedAmount: "10",
-        currentValue: "12",
-      },
-      provenance: { legacyId: "holding-old" },
-    }),
+    key: JSON.stringify(["legacy:holding-old", 1]),
+    positionKey: identity.positionKey,
+    instrumentKey: identity.instrumentKey,
+    sourceGroupKey: identity.sourceGroupKey,
+    factJson: JSON.stringify(fact),
   };
   const target = {
     tables: {
@@ -110,9 +171,35 @@ test("an intact source archive cannot hide a changed native financial value or h
         {
           householdId: "house-new",
           legacyId: "holding-old",
-          positionKey: "position",
+          positionKey: native.positionKey,
         },
       ],
+      accounts: [
+        {
+          _id: "account-new",
+          legacyId: account.id,
+          householdId: "house-new",
+          name: account.name,
+          provider: account.provider,
+          accountType: account.account_type,
+          currency: account.currency,
+          isArchived: false,
+          metadataJson: "{}",
+        },
+      ],
+      instruments: [
+        {
+          _id: "instrument-new",
+          legacyId: instrument.id,
+          householdId: "house-new",
+          name: instrument.name,
+          symbol: instrument.symbol,
+          assetClass: instrument.asset_class,
+          currency: "USD",
+          providerMetadataJson: "{}",
+        },
+      ],
+      households: [{ _id: "house-new" }],
       migrationMappings: [
         {
           legacyTable: "households",
@@ -121,29 +208,38 @@ test("an intact source archive cannot hide a changed native financial value or h
           targetId: "house-new",
         },
         {
+          legacyTable: "accounts",
+          legacyId: account.id,
+          targetTable: "accounts",
+          targetId: "account-new",
+        },
+        {
+          legacyTable: "instruments",
+          legacyId: instrument.id,
+          targetTable: "instruments",
+          targetId: "instrument-new",
+          householdLegacyId: "house-old",
+        },
+        {
           legacyTable: "holding_snapshots",
           legacyId: "holding-old",
           targetTable: "holdingSnapshots",
           targetId: "holding-new",
         },
       ],
-      households: [{ _id: "house-new" }],
     },
   };
+  return { tables, target, native };
+}
+
+test("an intact source archive cannot hide a changed native financial value or household", () => {
+  const { tables, target, native } = persistedHoldingFixture();
   const clean = [];
   reconcileRecords({ tables }, target, clean);
   assert.equal(clean.length, 0);
-
-  native.factJson = JSON.stringify({
-    row: {
-      kind: "holding",
-      currency: "USD",
-      quantity: "2",
-      investedAmount: "10",
-      currentValue: "13",
-    },
-    provenance: { legacyId: "holding-old" },
-  });
+  const fact = JSON.parse(native.factJson);
+  fact.row.currentValue = "13";
+  native.factJson = JSON.stringify(fact);
   native.householdId = "foreign-household";
   const findings = [];
   reconcileRecords({ tables }, target, findings);
@@ -152,6 +248,59 @@ test("an intact source archive cannot hide a changed native financial value or h
   assert.ok(
     findings.some((finding) => finding.path.endsWith(".legacyAliasCount")),
   );
+});
+
+test("complete persisted source metadata, ordering and identity remain bound even when views are cached", () => {
+  const changes = [
+    (fact) => {
+      fact.row.metadata.changed = true;
+    },
+    (fact) => {
+      fact.row.source.completeness = "partial";
+    },
+    (fact) => {
+      fact.row.source.group = "other-source";
+    },
+    (fact) => {
+      fact.row.numericProvenance.currentValue = "legacy_float64";
+    },
+    (fact) => {
+      fact.provenance.parserVersion = "changed-parser";
+    },
+    (fact) => {
+      fact.provenance.sequence += 1;
+    },
+    (fact) => {
+      fact.provenance.rowNumber += 1;
+    },
+    (fact) => {
+      fact.provenance.fallbackDate = "2026-01-02";
+    },
+    (fact) => {
+      fact.row.isin = "CHANGED";
+    },
+  ];
+  for (const mutate of changes) {
+    const { tables, target, native } = persistedHoldingFixture();
+    const fact = JSON.parse(native.factJson);
+    mutate(fact);
+    native.factJson = JSON.stringify(fact);
+    const findings = [];
+    reconcileRecords({ tables }, target, findings);
+    assert.ok(findings.some((finding) => finding.path.endsWith(".fullFact")));
+  }
+  for (const field of [
+    "key",
+    "positionKey",
+    "instrumentKey",
+    "sourceGroupKey",
+  ]) {
+    const { tables, target, native } = persistedHoldingFixture();
+    native[field] = "changed-key";
+    const findings = [];
+    reconcileRecords({ tables }, target, findings);
+    assert.ok(findings.some((finding) => finding.path.endsWith("." + field)));
+  }
 });
 
 test("a missing mapped native row blocks verification", () => {
