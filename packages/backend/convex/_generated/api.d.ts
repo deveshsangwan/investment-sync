@@ -31,6 +31,7 @@ import type * as model_imports from "../model/imports.js";
 import type * as model_migration from "../model/migration.js";
 import type * as model_migrationFreeze from "../model/migrationFreeze.js";
 import type * as model_migrationLoad from "../model/migrationLoad.js";
+import type * as model_migrationRowAudit from "../model/migrationRowAudit.js";
 import type * as model_migrationValidators from "../model/migrationValidators.js";
 import type * as model_portfolioEncoding from "../model/portfolioEncoding.js";
 import type * as model_portfolioLimits from "../model/portfolioLimits.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   "model/migration": typeof model_migration;
   "model/migrationFreeze": typeof model_migrationFreeze;
   "model/migrationLoad": typeof model_migrationLoad;
+  "model/migrationRowAudit": typeof model_migrationRowAudit;
   "model/migrationValidators": typeof model_migrationValidators;
   "model/portfolioEncoding": typeof model_portfolioEncoding;
   "model/portfolioLimits": typeof model_portfolioLimits;
