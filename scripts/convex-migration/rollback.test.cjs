@@ -381,6 +381,12 @@ test("validates migrated persisted facts independently of rounded normalized row
   assert.throws(() => buildReverseReplayPlan(fixture), {
     code: "changed_migrated_fact_values",
   });
+  fact.row.investedAmount = source.invested_amount;
+  fact.row.pnlPercent = 25;
+  doc.factJson = JSON.stringify(fact);
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "changed_migrated_fact_values",
+  });
 });
 
 test("requires the actual publication root manifest and complete matching stage receipts", () => {

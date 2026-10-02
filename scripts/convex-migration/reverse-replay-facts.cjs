@@ -340,6 +340,14 @@ function validateMigratedFact({
         fact.row.type !== source.type)
   )
     reject("changed_migrated_fact_values");
+  if (
+    kind === "holding" &&
+    (source.pnl_percent === null
+      ? fact.row.pnlPercent !== undefined
+      : fact.row.pnlPercent === undefined ||
+        scaled(String(fact.row.pnlPercent), 6, 12) !== source.pnl_percent)
+  )
+    reject("changed_migrated_fact_values");
   assertLegacyHoldingSemantics(fact.row);
 }
 
