@@ -29,6 +29,7 @@ import type * as model_importRetention from "../model/importRetention.js";
 import type * as model_importValidators from "../model/importValidators.js";
 import type * as model_imports from "../model/imports.js";
 import type * as model_migration from "../model/migration.js";
+import type * as model_migrationFactAudit from "../model/migrationFactAudit.js";
 import type * as model_migrationFreeze from "../model/migrationFreeze.js";
 import type * as model_migrationLoad from "../model/migrationLoad.js";
 import type * as model_migrationRowAudit from "../model/migrationRowAudit.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   "model/importValidators": typeof model_importValidators;
   "model/imports": typeof model_imports;
   "model/migration": typeof model_migration;
+  "model/migrationFactAudit": typeof model_migrationFactAudit;
   "model/migrationFreeze": typeof model_migrationFreeze;
   "model/migrationLoad": typeof model_migrationLoad;
   "model/migrationRowAudit": typeof model_migrationRowAudit;
