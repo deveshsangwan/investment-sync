@@ -52,6 +52,8 @@ pnpm migration:load \
 
 Without `--apply yes`, loading checks the source checksums, source bytes, and target classification without writing. Add that flag only for the already authorized target. Loading in the same run is idempotent; changing a source record or reusing the run with different input stops execution. An interrupted load leaves the target inactive. Correct the failure and resume the same input; do not reset or silently overwrite it.
 
+An initial production comparison may use a consistent snapshot while source writers remain active, if separately authorized. That populated target then represents only that snapshot. A changed final snapshot needs a fresh empty explicitly approved production target or a separately reviewed and authorized reset. The loader does not append or update a new snapshot over the initial migration. The final authoritative export still requires the source writer pause and verified recovery backups.
+
 ```sh
 pnpm migration:reconcile \
   --snapshot .migration/generated-source-complete/snapshot.json \
