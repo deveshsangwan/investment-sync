@@ -255,9 +255,11 @@ function normalizeSqlValue(column, value) {
 
 async function readSqlTables(sql) {
   const tables = {};
+
+  // Production disables type discovery, so table names use a JSON parameter.
   const actualColumns = await sql.unsafe(
-    "select table_name, column_name from information_schema.columns where table_schema = 'public' and table_name = any($1::text[])",
-    [Object.keys(TABLE_COLUMNS)],
+    "select table_name, column_name from information_schema.columns where table_schema = 'public' and table_name = any(array(select jsonb_array_elements_text($1::text::jsonb)))",
+    [JSON.stringify(Object.keys(TABLE_COLUMNS))],
   );
   for (const [table, columns] of Object.entries(TABLE_COLUMNS)) {
     const actual = actualColumns
@@ -342,8 +344,8 @@ async function applyReverseReplay(sql, plan, expectedDatabaseName) {
 
     if (typeof expectedDatabaseName === "object") {
       const sideEffects = await transaction.unsafe(
-        "select 1 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[]) and not t.tgisinternal union all select 1 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[]) and (c.relkind <> 'r' or c.relrowsecurity or c.relhassubclass) union all select 1 from pg_catalog.pg_inherits i join pg_catalog.pg_class c on c.oid = i.inhrelid or c.oid = i.inhparent join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[]) union all select 1 from pg_catalog.pg_rewrite r join pg_catalog.pg_class c on c.oid = r.ev_class join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[])",
-        [Object.keys(TABLE_COLUMNS)],
+        "select 1 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any(array(select jsonb_array_elements_text($1::text::jsonb))) and not t.tgisinternal union all select 1 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any(array(select jsonb_array_elements_text($1::text::jsonb))) and (c.relkind <> 'r' or c.relrowsecurity or c.relhassubclass) union all select 1 from pg_catalog.pg_inherits i join pg_catalog.pg_class c on c.oid = i.inhrelid or c.oid = i.inhparent join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any(array(select jsonb_array_elements_text($1::text::jsonb))) union all select 1 from pg_catalog.pg_rewrite r join pg_catalog.pg_class c on c.oid = r.ev_class join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any(array(select jsonb_array_elements_text($1::text::jsonb)))",
+        [JSON.stringify(Object.keys(TABLE_COLUMNS))],
       );
       if (sideEffects.length)
         throw new Error(
