@@ -429,6 +429,7 @@ test("replays multiple commits, a parsed expired-file batch, and a new identity 
   assert.equal(plan.tables.users[0].created_at, CREATED_AT);
   assert.equal(plan.tables.transactions[0].amount, "2.125");
   assert.equal(plan.tables.transactions[0].metadata.sourceLine, 2);
+  assert.ok(plan.tables.import_rows.every((row) => row.is_committed));
   assert.ok(
     plan.tables.import_batches.every(
       (row) => row.storage_path === null && row.status === "committed",
@@ -441,6 +442,36 @@ test("replays multiple commits, a parsed expired-file batch, and a new identity 
   assert.equal(
     plan.targetDigest,
     buildReverseReplayPlan(structuredClone(fixture)).targetDigest,
+  );
+});
+
+test("a frozen expired import preserves its historical committed row flag", () => {
+  const fixture = createRollbackFixture();
+  const retainedTables = new Set([
+    "users",
+    "households",
+    "householdMembers",
+    "accounts",
+    "instruments",
+    "importBatches",
+    "sourceFiles",
+    "importRowChunks",
+  ]);
+
+  for (const [table, rows] of Object.entries(fixture.targetSnapshot.tables))
+    fixture.targetSnapshot.tables[table] = retainedTables.has(table)
+      ? rows.slice(0, 1)
+      : [];
+
+  fixture.targetSnapshot.tables.importBatches[0].status = "failed";
+  fixture.sourceSnapshot.tables.import_rows[0].is_committed = true;
+
+  const plan = buildReverseReplayPlan(fixture);
+  assert.equal(plan.newCommittedBatches.length, 0);
+  assert.equal(plan.sourceDigest, plan.replayDigest);
+  assert.deepEqual(
+    plan.tables.import_rows,
+    normalizeSqlTables(fixture.sourceSnapshot.tables).import_rows,
   );
 });
 

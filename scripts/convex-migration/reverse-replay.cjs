@@ -437,7 +437,14 @@ function preserveNormalizedRows(
           is_committed: false,
           created_at: legacyBatch.uploaded_at,
         };
-    value.is_committed = batch.status === "committed";
+
+    // Expired legacy batches can retain committed rows until a new commit changes them.
+    if (
+      !previous ||
+      (batch.status === "committed" && baseline?.status !== "committed")
+    )
+      value.is_committed = batch.status === "committed";
+
     destination.set(value.id, value);
   }
 }
