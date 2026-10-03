@@ -46,7 +46,6 @@ export async function currentAttempt(
 export async function readVerifiedRows(
   ctx: QueryCtx,
   batch: Doc<"importBatches">,
-  limits: { rows: number; normalizedBytes: number } = importLimits,
 ) {
   if (!batch.manifest) throw new Error("Missing chunk manifest");
   const chunks = await ctx.db
@@ -79,8 +78,8 @@ export async function readVerifiedRows(
     rows.push(...values);
     bytes += chunk.bytes;
     if (
-      rows.length > limits.rows ||
-      bytes > limits.normalizedBytes + importLimits.chunks
+      rows.length > importLimits.rows ||
+      bytes > importLimits.normalizedBytes + importLimits.chunks
     )
       throw new ConvexError("Import capacity exceeded");
   }

@@ -4,7 +4,7 @@ import { api, internal } from "./_generated/api";
 import { capacityRows } from "./testing/publicationCapacity";
 import { buildPortfolioPublication } from "@investment-sync/portfolio-domain";
 import { projectionRecords } from "./model/publicationProjection";
-import { digest, utf8Bytes } from "./model/importLimits";
+import { chunkRows, digest, parseRows, utf8Bytes } from "./model/importLimits";
 import schema from "./schema";
 import { modules } from "./test.setup";
 
@@ -14,7 +14,11 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function smallPublication(runId: string) {
+async function smallPublication(
+  runId: string,
+  rows = capacityRows(0).slice(0, 1),
+  shouldSeal = true,
+) {
   vi.stubEnv("APP_ENV", "development");
   vi.useFakeTimers();
   const t = convexTest(schema, modules);
@@ -22,7 +26,6 @@ async function smallPublication(runId: string) {
     internal.testing.publicationCapacity.prepare,
     { runId, index: 0 },
   );
-  const rows = capacityRows(0).slice(0, 1);
   const rowsJson = JSON.stringify(rows);
   await t.run(async (ctx) => {
     for (const chunk of await ctx.db.query("importRowChunks").collect())
@@ -93,20 +96,21 @@ async function smallPublication(runId: string) {
       },
     ];
   });
-  await t.mutation(internal.publicationWorkers.seal, {
-    ...args,
-    manifest: packets.map(({ stage, index, count, bytes, digest }) => ({
-      stage,
-      index,
-      count,
-      bytes,
-      digest,
-    })),
-    publicationDigest: publication.digest,
-    factCount: 1,
-    currentCount: publication.reconciliation.currentCount,
-    exitedCount: publication.reconciliation.exitedCount,
-  });
+  if (shouldSeal)
+    await t.mutation(internal.publicationWorkers.seal, {
+      ...args,
+      manifest: packets.map(({ stage, index, count, bytes, digest }) => ({
+        stage,
+        index,
+        count,
+        bytes,
+        digest,
+      })),
+      publicationDigest: publication.digest,
+      factCount: 1,
+      currentCount: publication.reconciliation.currentCount,
+      exitedCount: publication.reconciliation.exitedCount,
+    });
   async function stageAll() {
     for (const { stage, index, payloadJson } of packets)
       await t.mutation(internal.publicationWorkers.stage, {
@@ -171,7 +175,11 @@ describe("publication capacity candidate", () => {
         await ctx.db.get("households", prepared.householdId),
       ).not.toHaveProperty("activePortfolioVersionId");
       expect(await ctx.db.get("importBatches", prepared.batchId)).toMatchObject(
-        { status: "parsed", errorMessage: "Forced publication failure" },
+        {
+          status: "parsed",
+          errorMessage:
+            "This import could not be published. Try again or choose another file.",
+        },
       );
     });
 
@@ -216,6 +224,276 @@ describe("publication capacity candidate", () => {
       });
     });
   }, 30000);
+});
+
+describe("production publication readiness", () => {
+  it("recovers a missed one-shot expiry and fences the failed attempt after retry", async () => {
+    const { t, owner, prepared, args } = await smallPublication(
+      "fake-capacity-missed-expiry",
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch("portfolioVersions", args.versionId, {
+        leaseExpiresAt: Date.now() - 1,
+      });
+      for (const job of await ctx.db.system
+        .query("_scheduled_functions")
+        .collect())
+        await ctx.scheduler.cancel(job._id);
+    });
+
+    await expect(
+      owner.mutation(api.imports.commit, { batchId: prepared.batchId }),
+    ).rejects.toMatchObject({
+      data: {
+        code: "PUBLICATION_EXPIRED",
+        message:
+          "Publication timed out. Wait for recovery, then retry this import.",
+      },
+    });
+    await t.mutation(internal.publicationWorkers.expireLeases);
+    await expect(
+      owner.query(api.imports.get, { batchId: prepared.batchId }),
+    ).resolves.toMatchObject({
+      status: "parsed",
+      errorMessage: "Publication timed out; retry this import",
+    });
+    const retry = await owner.mutation(api.imports.commit, {
+      batchId: prepared.batchId,
+    });
+    expect(retry.versionId).not.toBe(args.versionId);
+    await t.mutation(internal.publicationWorkers.expire, args);
+    await t.mutation(internal.publicationWorkers.fail, {
+      ...args,
+      errorMessage: "Late stale-worker error",
+    });
+    await t.action(internal.actions.publishPortfolio.publishPortfolio, {
+      versionId: retry.versionId,
+      attempt: 2,
+    });
+    await expect(
+      owner.query(api.imports.get, { batchId: prepared.batchId }),
+    ).resolves.toMatchObject({ status: "committed", publicationAttempt: 2 });
+  });
+
+  it("bounds each expiry sweep and leaves live leases and frozen migrations untouched", async () => {
+    const { t, args } = await smallPublication("fake-capacity-sweep-limit");
+    const expiredIds = await t.run(async (ctx) => {
+      const version = await ctx.db.get("portfolioVersions", args.versionId);
+      if (!version) throw new Error("Missing publication fixture");
+
+      const { _id, _creationTime, ...fields } = version;
+      const ids = [];
+      for (let index = 0; index < 51; index++)
+        ids.push(
+          await ctx.db.insert("portfolioVersions", {
+            ...fields,
+            leaseExpiresAt: Date.now() - 1,
+          }),
+        );
+      return ids;
+    });
+    const expiredId = expiredIds[0];
+    if (!expiredId) throw new Error("Missing expired publication fixture");
+
+    vi.stubEnv("MIGRATION_MODE", "production");
+    await t.mutation(internal.publicationWorkers.expireLeases);
+    await t.mutation(internal.publicationWorkers.expire, {
+      versionId: expiredId,
+      attempt: 1,
+    });
+    await t.run(async (ctx) => {
+      expect(
+        (await ctx.db.query("portfolioVersions").collect()).filter(
+          (version) => version.publicationState === "failed",
+        ),
+      ).toHaveLength(0);
+    });
+
+    vi.stubEnv("MIGRATION_MODE", "");
+    await t.mutation(internal.publicationWorkers.expireLeases);
+    await t.run(async (ctx) => {
+      const versions = await ctx.db.query("portfolioVersions").collect();
+      expect(
+        versions.filter((version) => version.publicationState === "failed"),
+      ).toHaveLength(50);
+      expect(
+        await ctx.db.get("portfolioVersions", args.versionId),
+      ).toMatchObject({ publicationState: "building" });
+    });
+    await t.mutation(internal.publicationWorkers.expireLeases);
+    await t.run(async (ctx) => {
+      expect(
+        (await ctx.db.query("portfolioVersions").collect()).filter(
+          (version) => version.publicationState === "failed",
+        ),
+      ).toHaveLength(51);
+    });
+  });
+
+  it("keeps wrapped worker diagnostics out of the public publication failure", async () => {
+    const { t, owner, prepared, args } = await smallPublication(
+      "fake-capacity-private-error",
+    );
+    await t.run((ctx) =>
+      ctx.db.patch("importBatches", prepared.batchId, {
+        manifest: undefined,
+      }),
+    );
+    const diagnostics = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await t.action(internal.actions.publishPortfolio.publishPortfolio, args);
+      await expect(
+        owner.query(api.imports.get, { batchId: prepared.batchId }),
+      ).resolves.toMatchObject({
+        status: "parsed",
+        errorMessage:
+          "This import could not be published. Try again or choose another file.",
+      });
+      expect(diagnostics).toHaveBeenCalled();
+      await t.run(async (ctx) => {
+        expect(await ctx.db.query("holdingSnapshots").collect()).toHaveLength(
+          0,
+        );
+        expect(
+          await ctx.db.get("households", prepared.householdId),
+        ).not.toHaveProperty("activePortfolioVersionId");
+      });
+    } finally {
+      diagnostics.mockRestore();
+    }
+  });
+
+  it("explains derived-size rejection after a normalized row fits parsing", async () => {
+    const rows = parseRows(
+      JSON.stringify(
+        capacityRows(0)
+          .slice(0, 1)
+          .map((row) => ({
+            ...row,
+            metadata: { note: '"'.repeat(20000) },
+          })),
+      ),
+    );
+    expect(chunkRows(rows)).toHaveLength(1);
+    const { t, owner, prepared, args } = await smallPublication(
+      "fake-capacity-derived-size",
+      rows,
+      false,
+    );
+
+    await t.action(internal.actions.publishPortfolio.publishPortfolio, args);
+    await expect(
+      owner.query(api.imports.get, { batchId: prepared.batchId }),
+    ).resolves.toMatchObject({
+      status: "parsed",
+      errorMessage:
+        "This import contains a record that is too large to publish. Upload a smaller statement with shorter descriptions.",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("holdingSnapshots").collect()).toHaveLength(0);
+      expect(await ctx.db.query("importDedupeKeys").collect()).toHaveLength(0);
+    });
+  });
+
+  it("does not emit publication metrics outside development", async () => {
+    const { t, args } = await smallPublication(
+      "fake-capacity-prod-metrics",
+      capacityRows(0).slice(0, 1),
+      false,
+    );
+    vi.stubEnv("APP_ENV", "production");
+    const metrics = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    try {
+      await t.action(internal.actions.publishPortfolio.publishPortfolio, args);
+      expect(metrics).not.toHaveBeenCalled();
+      await t.run(async (ctx) => {
+        expect(
+          await ctx.db.get("portfolioVersions", args.versionId),
+        ).toMatchObject({ publicationState: "published" });
+      });
+    } finally {
+      metrics.mockRestore();
+    }
+  });
+
+  it("preserves the expected duplicate rejection across the publication worker boundary", async () => {
+    const { t, owner, prepared, args } = await smallPublication(
+      "fake-capacity-worker-duplicate",
+      capacityRows(0).slice(0, 1),
+      false,
+    );
+    await t.run(async (ctx) => {
+      const batch = await ctx.db.get("importBatches", prepared.batchId);
+      if (!batch) throw new Error("Missing parsed fixture");
+
+      await ctx.db.insert("importDedupeKeys", {
+        householdId: prepared.householdId,
+        batchId: prepared.batchId,
+        key: `${batch.contentHash}:${batch.parserVersion}`,
+      });
+    });
+
+    await t.action(internal.actions.publishPortfolio.publishPortfolio, args);
+    await expect(
+      owner.query(api.imports.get, { batchId: prepared.batchId }),
+    ).resolves.toMatchObject({
+      status: "parsed",
+      errorMessage: "This file and parser version have already been committed",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("holdingSnapshots").collect()).toHaveLength(0);
+    });
+  });
+
+  it("does not schedule retained active or base versions and still cleans obsolete versions", async () => {
+    const { t, prepared, args, stageAll } = await smallPublication(
+      "fake-capacity-retained-cleanup",
+    );
+    await stageAll();
+    await t.mutation(internal.publicationWorkers.finalize, args);
+    const obsoleteId = await t.run(async (ctx) => {
+      await ctx.db.patch("portfolioVersions", args.versionId, {
+        expiresAt: Date.now() - 1,
+      });
+      const version = await ctx.db.get("portfolioVersions", args.versionId);
+      if (!version) throw new Error("Missing published fixture");
+
+      const { _id, _creationTime, ...fields } = version;
+      const baseId = await ctx.db.insert("portfolioVersions", fields);
+      const candidateId = await ctx.db.insert("portfolioVersions", {
+        ...fields,
+        publicationState: "building",
+        baseVersionId: baseId,
+      });
+      await ctx.db.patch("households", prepared.householdId, {
+        publishingVersionId: candidateId,
+      });
+      return ctx.db.insert("portfolioVersions", fields);
+    });
+    const scheduledCount = () =>
+      t.run(
+        async (ctx) =>
+          (await ctx.db.system.query("_scheduled_functions").collect()).length,
+      );
+    const before = await scheduledCount();
+
+    await t.mutation(internal.publicationCleanup.sweep, { cursor: null });
+    expect(await scheduledCount()).toBe(before + 1);
+    await t.mutation(internal.publicationCleanup.cleanupVersion, {
+      versionId: obsoleteId,
+      stage: 0,
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("portfolioPositions").collect()).toHaveLength(
+        1,
+      );
+      expect(
+        await ctx.db.get("portfolioVersions", args.versionId),
+      ).toMatchObject({ cleanupState: "pending" });
+    });
+  });
 });
 
 describe("staged publication fences", () => {

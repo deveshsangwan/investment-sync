@@ -60,6 +60,14 @@ export async function commitBatch(
       batch.publishingVersionId,
     );
     if (!version) throw new Error("Missing publishing portfolio version");
+
+    if ((version.leaseExpiresAt ?? 0) <= Date.now())
+      throw new ConvexError({
+        code: "PUBLICATION_EXPIRED",
+        message:
+          "Publication timed out. Wait for recovery, then retry this import.",
+      });
+
     await requirePublication(
       ctx,
       version._id,

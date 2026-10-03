@@ -558,9 +558,17 @@ describe("guarded migration loading", () => {
       t
         .withIdentity({ ...ownerIdentity, subject: "new_fake_identity" })
         .mutation(api.users.ensureCurrent),
-    ).rejects.toThrow("writes are disabled");
+    ).rejects.toMatchObject({ data: { code: "USER_NOT_PROVISIONED" } });
+    const before = await t.action(internal.migrationAudit.audit, { runKey });
+    await expect(
+      t.withIdentity(ownerIdentity).mutation(api.users.ensureCurrent),
+    ).resolves.toBeTypeOf("string");
+    expect(await t.action(internal.migrationAudit.audit, { runKey })).toEqual(
+      before,
+    );
     await t.mutation(internal.importCleanup.expireFiles);
     await t.mutation(internal.publicationCleanup.sweep, { cursor: null });
+    await t.mutation(internal.publicationWorkers.expireLeases);
     await expect(
       t.action(internal.actions.refreshCurrencyRate.refreshCurrencyRate),
     ).resolves.toEqual({ outcome: "superseded", attempts: 0 });

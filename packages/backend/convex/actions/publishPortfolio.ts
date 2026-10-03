@@ -5,7 +5,7 @@ import {
   buildPortfolioPublication,
   type PortfolioFact,
 } from "@investment-sync/portfolio-domain";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
@@ -54,7 +54,7 @@ export const publishPortfolio = internalAction({
               existingFacts.length >= portfolioLimits.facts ||
               inputBytes > portfolioLimits.householdFactBytes
             )
-              throw new Error(
+              throw new ConvexError(
                 "Household history exceeds the supported publication capacity",
               );
             existingFacts.push(decodeFact(fact.factJson));
@@ -85,7 +85,7 @@ export const publishPortfolio = internalAction({
             chunks.length >= importLimits.chunks ||
             chunkBytes > normalizedLimit + importLimits.chunks
           )
-            throw new Error("Import staging capacity exceeded");
+            throw new ConvexError("Import staging capacity exceeded");
           chunks.push(chunk);
         }
         cursor = page.isDone ? null : page.continueCursor;
@@ -146,7 +146,7 @@ export const publishPortfolio = internalAction({
         inputBytes,
       );
       if (resultingFactBytes > portfolioLimits.householdFactBytes)
-        throw new Error(
+        throw new ConvexError(
           "Resulting household history exceeds the supported publication capacity",
         );
 
@@ -154,20 +154,21 @@ export const publishPortfolio = internalAction({
         ...projectionRecords(publication.projection),
         facts: publication.factsToPersist,
       };
-      console.info(
-        "portfolio.builder.metrics",
-        JSON.stringify({
-          builderMs: performance.now() - builderStarted,
-          readMs: builderStarted - started,
-          existingFacts: existingFacts.length,
-          incomingRows: rows.length,
-          inputBytes,
-          resultingFactBytes,
-          normalizedBytes: input.batch.normalizedBytes,
-          factLimit: portfolioLimits.facts,
-          byteLimit: portfolioLimits.householdFactBytes,
-        }),
-      );
+      if (process.env.APP_ENV === "development")
+        console.info(
+          "portfolio.builder.metrics",
+          JSON.stringify({
+            builderMs: performance.now() - builderStarted,
+            readMs: builderStarted - started,
+            existingFacts: existingFacts.length,
+            incomingRows: rows.length,
+            inputBytes,
+            resultingFactBytes,
+            normalizedBytes: input.batch.normalizedBytes,
+            factLimit: portfolioLimits.facts,
+            byteLimit: portfolioLimits.householdFactBytes,
+          }),
+        );
       const packets = [];
       for (const stage of [
         "history",
@@ -194,7 +195,7 @@ export const publishPortfolio = internalAction({
           });
       }
       if (packets.length > publicationLimits.receipts)
-        throw new Error("Publication manifest capacity exceeded");
+        throw new ConvexError("Publication manifest capacity exceeded");
       await ctx.runMutation(internal.publicationWorkers.seal, {
         ...args,
         manifest: packets.map(({ stage, index, count, bytes, digest }) => ({
@@ -218,12 +219,32 @@ export const publishPortfolio = internalAction({
         });
       await ctx.runMutation(internal.publicationWorkers.finalize, args);
     } catch (error) {
+      console.error("Portfolio publication failed", error);
+
       await ctx.runMutation(internal.publicationWorkers.fail, {
         ...args,
-        errorMessage:
-          error instanceof Error ? error.message : "Publication failed",
+        errorMessage: publicationFailureMessage(error),
       });
     }
     return null;
   },
 });
+
+function publicationFailureMessage(error: unknown) {
+  if (error instanceof ConvexError) {
+    const data: unknown = error.data;
+    if (typeof data === "string") return data;
+
+    if (
+      data !== null &&
+      typeof data === "object" &&
+      "code" in data &&
+      data.code === "CAPACITY" &&
+      "message" in data &&
+      typeof data.message === "string"
+    )
+      return data.message;
+  }
+
+  return "This import could not be published. Try again or choose another file.";
+}

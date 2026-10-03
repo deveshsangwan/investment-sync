@@ -191,6 +191,10 @@ export default defineSchema({
   })
     .index("by_householdId_and_sequence", ["householdId", "sequence"])
     .index("by_batchId", ["batchId"])
+    .index("by_publicationState_and_leaseExpiresAt", [
+      "publicationState",
+      "leaseExpiresAt",
+    ])
     .index("by_expiresAt", ["expiresAt"])
     .index("by_cleanupState_and_expiresAt", ["cleanupState", "expiresAt"]),
   portfolioPositions: defineTable({

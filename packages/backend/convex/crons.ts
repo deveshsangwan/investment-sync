@@ -27,6 +27,12 @@ crons.interval(
   {},
 );
 crons.interval(
+  "Expire publication leases",
+  { minutes: 5 },
+  internal.publicationWorkers.expireLeases,
+  {},
+);
+crons.interval(
   "Sweep abandoned storage",
   { hours: 6 },
   internal.importCleanup.sweepOrphans,

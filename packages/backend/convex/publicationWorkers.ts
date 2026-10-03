@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { digest, utf8Bytes } from "./model/importLimits";
@@ -15,6 +15,7 @@ import {
 } from "./model/publicationStages";
 import { requirePublicationReadBudget } from "./model/publicationReadBudget";
 import { writePublicationRecords } from "./model/publicationWriter";
+import { hasMigrationWriteFreeze } from "./model/migrationFreeze";
 
 export const seal = internalMutation({
   args: {
@@ -150,14 +151,15 @@ export const stage = internalMutation({
       payloadJson: args.stage === "facts" ? args.payloadJson : undefined,
       modelBytesWritten: args.stage === "facts" ? undefined : modelBytesWritten,
     });
-    console.info(
-      "portfolio.stage.metrics",
-      JSON.stringify({
-        stage: args.stage,
-        index: args.index,
-        ...(await ctx.meta.getTransactionMetrics()),
-      }),
-    );
+    if (process.env.APP_ENV === "development")
+      console.info(
+        "portfolio.stage.metrics",
+        JSON.stringify({
+          stage: args.stage,
+          index: args.index,
+          ...(await ctx.meta.getTransactionMetrics()),
+        }),
+      );
     return null;
   },
 });
@@ -259,15 +261,16 @@ export const finalize = internalMutation({
       )
       .unique();
     if (duplicate)
-      throw new Error(
+      throw new ConvexError(
         "This file and parser version have already been committed",
       );
 
     const readBudget = requirePublicationReadBudget(receipts);
-    console.info(
-      "portfolio.publication.readBudget",
-      JSON.stringify(readBudget),
-    );
+    if (process.env.APP_ENV === "development")
+      console.info(
+        "portfolio.publication.readBudget",
+        JSON.stringify(readBudget),
+      );
 
     await persistIdentities(ctx, household._id, facts);
     await persistFacts(ctx, batch, facts);
@@ -293,14 +296,15 @@ export const finalize = internalMutation({
       leaseExpiresAt: undefined,
     });
     if (version.forcedFailure) throw new Error("Forced publication failure");
-    console.info(
-      "portfolio.finalize.metrics",
-      JSON.stringify({
-        incomingRows: facts.length,
-        factCount: version.factCount,
-        ...(await ctx.meta.getTransactionMetrics()),
-      }),
-    );
+    if (process.env.APP_ENV === "development")
+      console.info(
+        "portfolio.finalize.metrics",
+        JSON.stringify({
+          incomingRows: facts.length,
+          factCount: version.factCount,
+          ...(await ctx.meta.getTransactionMetrics()),
+        }),
+      );
     return {
       status: "committed" as const,
       versionId: version._id,
@@ -357,6 +361,8 @@ export const expire = internalMutation({
   args: { versionId: v.id("portfolioVersions"), attempt: v.number() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return null;
+
     const version = await ctx.db.get("portfolioVersions", args.versionId);
     if (
       version?.publicationState === "building" &&
@@ -367,6 +373,32 @@ export const expire = internalMutation({
         ...args,
         errorMessage: "Publication timed out; retry this import",
       });
+    return null;
+  },
+});
+
+export const expireLeases = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    if (hasMigrationWriteFreeze()) return null;
+
+    const versions = await ctx.db
+      .query("portfolioVersions")
+      .withIndex("by_publicationState_and_leaseExpiresAt", (q) =>
+        q
+          .eq("publicationState", "building")
+          .gt("leaseExpiresAt", 0)
+          .lte("leaseExpiresAt", Date.now()),
+      )
+      .take(50);
+
+    for (const version of versions)
+      await ctx.runMutation(internal.publicationWorkers.expire, {
+        versionId: version._id,
+        attempt: version.attempt ?? 0,
+      });
+
     return null;
   },
 });

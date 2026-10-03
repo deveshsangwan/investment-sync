@@ -111,12 +111,23 @@ export const sweep = internalMutation({
         q.eq("cleanupState", "pending").lte("expiresAt", Date.now()),
       )
       .paginate({ cursor: args.cursor, numItems: 20 });
-    for (const version of page.page)
+    for (const version of page.page) {
+      if (version.publicationState === "building") continue;
+
+      const household = await ctx.db.get("households", version.householdId);
+      if (household?.activePortfolioVersionId === version._id) continue;
+
+      const candidate = household?.publishingVersionId
+        ? await ctx.db.get("portfolioVersions", household.publishingVersionId)
+        : null;
+      if (candidate?.baseVersionId === version._id) continue;
+
       await ctx.scheduler.runAfter(
         0,
         internal.publicationCleanup.cleanupVersion,
         { versionId: version._id, stage: 0 },
       );
+    }
     if (!page.isDone)
       await ctx.scheduler.runAfter(0, internal.publicationCleanup.sweep, {
         cursor: page.continueCursor,

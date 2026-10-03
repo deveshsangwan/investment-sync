@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { z } from "zod";
 import {
   assetClassSchema,
@@ -159,7 +159,9 @@ export function publicationPayloadChunks(
       rowBytes + 2 > publicationLimits.chunkBytes ||
       rowReferences > publicationLimits.scopeChunkReferences
     )
-      throw new Error("Publication row exceeds the chunk capacity");
+      throw new ConvexError(
+        "This import contains a record that is too large to publish. Upload a smaller statement with shorter descriptions.",
+      );
     if (
       pending.length === publicationLimits.chunkRows ||
       bytes + rowBytes + Number(pending.length > 0) >
