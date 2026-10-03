@@ -42,7 +42,12 @@ test(
     try {
       await admin.unsafe(`create database "${databaseName}"`);
       parsed.pathname = `/${databaseName}`;
-      sql = postgres(parsed.toString(), { max: 1, onnotice: () => {} });
+      sql = postgres(parsed.toString(), {
+        max: 1,
+        onnotice: () => {},
+        prepare: false,
+        fetch_types: false,
+      });
       const migrationDirectory = path.resolve(
         process.cwd(),
         "packages/db/drizzle",
