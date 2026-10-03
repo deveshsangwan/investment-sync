@@ -1,9 +1,9 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import "./globals.css";
-import { DevelopmentConvexProvider } from "./convex-provider";
-import { TRPCProvider } from "./providers";
+import { ConvexAppProvider } from "./convex-provider";
 import { AppShell } from "@/components/app-shell";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: {
@@ -31,11 +31,11 @@ export default function RootLayout({
     <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up">
       <html lang="en" suppressHydrationWarning>
         <body className="antialiased">
-          <TRPCProvider>
-            <DevelopmentConvexProvider>
-              <AppShell>{children}</AppShell>
-            </DevelopmentConvexProvider>
-          </TRPCProvider>
+          <ThemeProvider>
+            <AppShell>
+              <ConvexAppProvider>{children}</ConvexAppProvider>
+            </AppShell>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

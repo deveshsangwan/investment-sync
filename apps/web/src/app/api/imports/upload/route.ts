@@ -1,4 +1,5 @@
 import {
+  assertSourceWritesAllowed,
   canManageHousehold,
   createApiContext,
   ensureMembership,
@@ -6,6 +7,7 @@ import {
   isImportError,
   logger,
   runImportEffect,
+  SourceWritesPausedError,
   uploadAndProcessImport,
   validateImportFile,
 } from "@investment-sync/api";
@@ -16,6 +18,16 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session.userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    assertSourceWritesAllowed();
+  } catch (error) {
+    if (error instanceof SourceWritesPausedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
+    throw error;
   }
 
   const formData = await request.formData();
@@ -38,6 +50,8 @@ export async function POST(request: Request) {
   }
 
   try {
+    assertSourceWritesAllowed();
+
     const claims = session.sessionClaims as
       | { email?: string; email_address?: string }
       | undefined;
@@ -66,6 +80,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof SourceWritesPausedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     if (isImportError(error)) {
       logger.error("Import upload failed", {
         tag: error._tag,

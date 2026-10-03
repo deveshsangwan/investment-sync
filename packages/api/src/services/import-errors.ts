@@ -1,5 +1,9 @@
 import type { ApiContext } from "../context";
 import { Data, Effect } from "effect";
+import {
+  assertSourceWritesAllowed,
+  SourceWritesPausedError,
+} from "../source-writes";
 
 const COMMITTED_IMPORT_UNIQUE_INDEX =
   "import_batches_committed_file_parser_idx";
@@ -75,8 +79,21 @@ export function importEffect<A>(operation: () => Promise<A>) {
   return Effect.tryPromise({ try: operation, catch: toImportError });
 }
 
+export function importWriteEffect<A>(operation: () => Promise<A>) {
+  return importEffect(() => {
+    assertSourceWritesAllowed();
+
+    return operation();
+  });
+}
+
 export function toImportError(error: unknown): ImportError {
   if (isImportError(error)) return error;
+
+  if (error instanceof SourceWritesPausedError) {
+    return new ImportConflictError({ message: error.message, cause: error });
+  }
+
   if (isCommittedImportUniqueViolation(error)) {
     return duplicateImportError(error);
   }

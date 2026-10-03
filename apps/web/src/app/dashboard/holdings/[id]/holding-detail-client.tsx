@@ -1,17 +1,19 @@
 "use client";
 
-import type { AppRouter } from "@investment-sync/api";
-import type { inferRouterOutputs } from "@trpc/server";
+import { api } from "@investment-sync/backend/api";
+import type { FunctionReturnType } from "convex/server";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, LineChart, ReceiptText } from "lucide-react";
+import type { ReactNode } from "react";
 import { DisplayAmount, HideAmountsButton, Money } from "@/components/amounts";
-import { MissingHolding, SetupRequired } from "@/components/dashboard-states";
+import { MissingHolding } from "@/components/dashboard-states";
 import { InstrumentMark } from "@/components/instrument-mark";
 import { NpsDetailsSections } from "@/components/nps-details-sections";
 import { PortfolioTimelineChart } from "@/components/portfolio-charts";
 import {
   EmptyState,
-  ErrorState,
   PageShell,
   Panel,
   PortfolioContentSkeleton,
@@ -39,23 +41,15 @@ import {
   numberOrUndefined,
   qualityLabel,
 } from "@/lib/format";
-import { trpc } from "../../../providers";
+import { positionKeyFromHoldingPathname } from "@/lib/holding-route";
+import { ConvexSessionGate } from "../../../convex-provider";
+import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
-type HoldingDetail =
-  inferRouterOutputs<AppRouter>["portfolio"]["holdingDetail"];
+type HoldingDetail = FunctionReturnType<typeof api.portfolio.holdingDetail>;
 
-export function HoldingDetailClient({
-  id,
-  isDataConfigured,
-}: {
-  id: string;
-  isDataConfigured: boolean;
-}) {
-  const detail = trpc.portfolio.holdingDetail.useQuery(
-    { id },
-    { enabled: isDataConfigured },
-  );
-  const holding = detail.data?.holding;
+export function HoldingDetailClient() {
+  const pathname = usePathname();
+  const positionKey = positionKeyFromHoldingPathname(pathname);
 
   return (
     <PageShell>
@@ -69,66 +63,105 @@ export function HoldingDetailClient({
         <HideAmountsButton />
       </div>
 
-      {holding ? (
-        <header className="mb-8 flex items-start gap-4">
-          <InstrumentMark
-            symbol={holding.symbol}
-            isin={holding.isin}
-            exchange={holding.exchange}
-            name={holding.instrumentName}
-            assetClass={holding.assetClass}
-            size="detail"
-          />
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-[-0.02em]">
-              {holding.symbol ?? holding.instrumentName}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {holding.symbol ? `${holding.instrumentName} · ` : ""}
-              {holding.accountName}
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Link
-                href={`/dashboard/asset-class/${encodeURIComponent(holding.assetClass)}`}
-                className="rounded-md border border-border/80 px-2 py-0.5 text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-              >
-                {assetClassLabel(holding.assetClass)}
-              </Link>
-              {holding.isCurrent === false ? (
-                <Badge variant="outline">Not in latest snapshot</Badge>
-              ) : null}
-              <span className="number text-xs text-muted-foreground">
-                Priced {formatDate(holding.snapshotDate)}
-              </span>
-            </div>
-          </div>
-        </header>
-      ) : (
-        <h1 className="mb-8 text-2xl font-semibold tracking-[-0.02em]">
-          Holding
-        </h1>
-      )}
-
-      {!isDataConfigured ? <SetupRequired /> : null}
-
-      {isDataConfigured && detail.isLoading ? (
-        <PortfolioContentSkeleton variant="holding" />
-      ) : null}
-
-      {isDataConfigured && detail.isError ? (
-        <ErrorState
-          title="This holding could not be loaded"
-          description="The position remains saved. Try loading its latest analytics again."
-          onRetry={() => void detail.refetch()}
-        />
-      ) : null}
-
-      {isDataConfigured && detail.isSuccess && !holding ? (
-        <MissingHolding />
-      ) : null}
-
-      {holding && detail.data ? <HoldingContent data={detail.data} /> : null}
+      <ConvexSessionGate
+        errorHeader={<HoldingFallbackHeading />}
+        loading={
+          <HoldingFallback>
+            <PortfolioContentSkeleton variant="holding" />
+          </HoldingFallback>
+        }
+      >
+        {positionKey ? (
+          <ConvexQueryBoundary
+            key={positionKey}
+            title="This holding could not be loaded"
+            description="The position remains saved. Try loading its latest analytics again."
+            renderFallback={(fallback) => (
+              <HoldingFallback>{fallback}</HoldingFallback>
+            )}
+          >
+            <HoldingData positionKey={positionKey} />
+          </ConvexQueryBoundary>
+        ) : (
+          <HoldingFallback>
+            <MissingHolding />
+          </HoldingFallback>
+        )}
+      </ConvexSessionGate>
     </PageShell>
+  );
+}
+
+function HoldingData({ positionKey }: { positionKey: string }) {
+  const detail = useCachedQuery(api.portfolio.holdingDetail, { positionKey });
+
+  if (detail === undefined)
+    return (
+      <HoldingFallback>
+        <PortfolioContentSkeleton variant="holding" />
+      </HoldingFallback>
+    );
+  if (!detail)
+    return (
+      <HoldingFallback>
+        <MissingHolding />
+      </HoldingFallback>
+    );
+
+  const { holding } = detail;
+
+  return (
+    <>
+      <header className="mb-8 flex items-start gap-4">
+        <InstrumentMark
+          symbol={holding.symbol}
+          isin={holding.isin}
+          exchange={holding.exchange}
+          name={holding.instrumentName}
+          assetClass={holding.assetClass}
+          size="detail"
+        />
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">
+            {holding.symbol ?? holding.instrumentName}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {holding.symbol ? `${holding.instrumentName} · ` : ""}
+            {holding.accountName}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Link
+              href={`/dashboard/asset-class/${encodeURIComponent(holding.assetClass)}`}
+              className="rounded-md border border-border/80 px-2 py-0.5 text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+            >
+              {assetClassLabel(holding.assetClass)}
+            </Link>
+            {holding.isCurrent === false ? (
+              <Badge variant="outline">Not in latest snapshot</Badge>
+            ) : null}
+            <span className="number text-xs text-muted-foreground">
+              Priced {formatDate(holding.snapshotDate)}
+            </span>
+          </div>
+        </div>
+      </header>
+      <HoldingContent data={detail} />
+    </>
+  );
+}
+
+function HoldingFallbackHeading() {
+  return (
+    <h1 className="mb-8 text-2xl font-semibold tracking-[-0.02em]">Holding</h1>
+  );
+}
+
+function HoldingFallback({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <HoldingFallbackHeading />
+      {children}
+    </>
   );
 }
 

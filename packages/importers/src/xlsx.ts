@@ -1,3 +1,5 @@
+import { parseSourceDecimal } from "./numeric";
+import { getSourceDecimals, withSourceDecimals } from "./source-decimals";
 import * as XLSX from "xlsx";
 import type {
   AssetClass,
@@ -99,24 +101,32 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
       if (!symbol || symbol.toLowerCase() === "total") return [];
 
       return [
-        {
-          kind: "holding" as const,
-          sourceType: "vested_drivewealth_xlsx" as const,
-          accountName: "US Stocks",
-          provider: "Vested / DriveWealth",
-          instrumentName: symbol,
-          symbol,
-          assetClass: "us_stock" as const,
-          currency: "USD" as const,
-          quantity: parseNumber(record.quantity),
-          investedAmount: parseRequiredNumber(record["cost basis (usd)"]),
-          currentValue: parseRequiredNumber(record["market value (usd)"]),
-          pnlAmount: parseNumber(record["profit/loss (usd)"]),
-          pnlPercent: parseNumber(record["profit/loss (%)"]),
-          metadata: {
-            profitLossInr: parseNumber(record["profit/loss (inr)"]),
+        withSourceDecimals(
+          {
+            kind: "holding" as const,
+            sourceType: "vested_drivewealth_xlsx" as const,
+            accountName: "US Stocks",
+            provider: "Vested / DriveWealth",
+            instrumentName: symbol,
+            symbol,
+            assetClass: "us_stock" as const,
+            currency: "USD" as const,
+            quantity: parseNumber(record.quantity),
+            investedAmount: parseRequiredNumber(record["cost basis (usd)"]),
+            currentValue: parseRequiredNumber(record["market value (usd)"]),
+            pnlAmount: parseNumber(record["profit/loss (usd)"]),
+            pnlPercent: parseNumber(record["profit/loss (%)"]),
+            metadata: {
+              profitLossInr: parseNumber(record["profit/loss (inr)"]),
+            },
           },
-        },
+          {
+            quantity: record.quantity,
+            investedAmount: record["cost basis (usd)"],
+            currentValue: record["market value (usd)"],
+            pnlAmount: record["profit/loss (usd)"],
+          },
+        ),
       ];
     });
 
@@ -167,7 +177,7 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
           : "Workbook layout not recognized",
     };
   },
-  parse(file: ImportFile): ParseResult {
+  parse(file: ImportFile, options): ParseResult {
     const workbook = createWorkbookContext(file);
     const rows = workbookRows(workbook, INVESTMENT_PORTFOLIO_SUMMARY_SHEET);
     const headerRow = findHeaderRow(rows, [
@@ -191,28 +201,40 @@ export const investmentPortfolioWorkbookImporter: PortfolioImporter = {
           const valuationDate = toIsoDate(record.date);
           if (!valuationDate) return [];
           return [
-            {
-              kind: "valuation" as const,
-              sourceType: "investment_portfolio_xlsx" as const,
-              valuationDate,
-              investedAmount: parseRequiredNumber(record["investment amount"]),
-              currentValue: parseRequiredNumber(record["current value"]),
-              pnlAmount: parseNumber(record["gain/loss"]),
-              currency: "INR" as const,
-              metadata: { sourceSheet: INVESTMENT_PORTFOLIO_SUMMARY_SHEET },
-            },
+            withSourceDecimals(
+              {
+                kind: "valuation" as const,
+                sourceType: "investment_portfolio_xlsx" as const,
+                valuationDate,
+                investedAmount: parseRequiredNumber(
+                  record["investment amount"],
+                ),
+                currentValue: parseRequiredNumber(record["current value"]),
+                pnlAmount: parseNumber(record["gain/loss"]),
+                currency: "INR" as const,
+                metadata: { sourceSheet: INVESTMENT_PORTFOLIO_SUMMARY_SHEET },
+              },
+              {
+                investedAmount: record["investment amount"],
+                currentValue: record["current value"],
+                pnlAmount: record["gain/loss"],
+              },
+            ),
           ];
         }
         return [];
       });
-    const detailedRows = dedupeHoldingRows([
-      ...parseStockInvestments(workbook, initialDate),
-      ...parseMutualFunds(workbook, initialDate),
-      ...parseNps(workbook, initialDate),
-      ...parseUlips(workbook, initialDate),
-      ...parseCrypto(workbook, initialDate),
-      ...parseUsStocks(workbook, initialDate),
-    ]);
+    const detailedRows = dedupeHoldingRows(
+      [
+        ...parseStockInvestments(workbook, initialDate),
+        ...parseMutualFunds(workbook, initialDate),
+        ...parseNps(workbook, initialDate),
+        ...parseUlips(workbook, initialDate),
+        ...parseCrypto(workbook, initialDate),
+        ...parseUsStocks(workbook, initialDate),
+      ],
+      options?.preserveDecimalMeaning ?? false,
+    );
     const parsedRows = [...valuationRows, ...detailedRows.rows];
     const warnings = [
       ...detailedRows.warnings,
@@ -292,35 +314,49 @@ function parseStockInvestments(
     if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
-      {
-        kind: "holding",
-        sourceType: "investment_portfolio_xlsx",
-        sourceDate,
-        accountName: "Indian Stocks",
-        provider: "Manual Workbook",
-        instrumentName: symbol,
-        symbol,
-        assetClass: "indian_stock",
-        currency: "INR",
-        quantity: parseNumber(pick(record, ["quantity"])),
-        investedAmount,
-        currentValue,
-        pnlAmount: parseNumber(pick(record, ["p & l rs", "p & l"])),
-        pnlPercent: parseNumber(pick(record, ["net change %"])),
-        metadata: {
-          sourceSheet: "Stock Investments",
-          smallcases: parseNumber(pick(record, ["no. of smallcases"])),
-          averageCost: parseNumber(
-            pick(record, ["average cost rs", "average cost"]),
-          ),
-          portfolioWeight: parseNumber(pick(record, ["portfolio weight %"])),
-          ltp: parseNumber(pick(record, ["ltp rs", "ltp"])),
-          dailyChangeAmount: parseNumber(
-            pick(record, ["daily change rs", "daily change"]),
-          ),
-          dailyChangePercent: parseNumber(pick(record, ["daily change %"])),
+      withSourceDecimals(
+        {
+          kind: "holding",
+          sourceType: "investment_portfolio_xlsx",
+          sourceDate,
+          accountName: "Indian Stocks",
+          provider: "Manual Workbook",
+          instrumentName: symbol,
+          symbol,
+          assetClass: "indian_stock",
+          currency: "INR",
+          quantity: parseNumber(pick(record, ["quantity"])),
+          investedAmount,
+          currentValue,
+          pnlAmount: parseNumber(pick(record, ["p & l rs", "p & l"])),
+          pnlPercent: parseNumber(pick(record, ["net change %"])),
+          metadata: {
+            sourceSheet: "Stock Investments",
+            smallcases: parseNumber(pick(record, ["no. of smallcases"])),
+            averageCost: parseNumber(
+              pick(record, ["average cost rs", "average cost"]),
+            ),
+            portfolioWeight: parseNumber(pick(record, ["portfolio weight %"])),
+            ltp: parseNumber(pick(record, ["ltp rs", "ltp"])),
+            dailyChangeAmount: parseNumber(
+              pick(record, ["daily change rs", "daily change"]),
+            ),
+            dailyChangePercent: parseNumber(pick(record, ["daily change %"])),
+          },
         },
-      },
+        {
+          quantity: pick(record, ["quantity"]),
+          investedAmount: pick(
+            record,
+            STOCK_INVESTMENTS_COLUMNS["Invested Value"],
+          ),
+          currentValue: pick(
+            record,
+            STOCK_INVESTMENTS_COLUMNS["Current Value"],
+          ),
+          pnlAmount: pick(record, ["p & l rs", "p & l"]),
+        },
+      ),
     ];
   });
 }
@@ -382,33 +418,41 @@ function parseMutualFunds(
     if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
-      {
-        kind: "holding",
-        sourceType: "investment_portfolio_xlsx",
-        sourceDate,
-        accountName: "Mutual Funds",
-        provider: "Manual Workbook",
-        instrumentName: fundName,
-        assetClass: "mutual_fund",
-        currency: "INR",
-        quantity: parseNumber(pick(record, ["units"])),
-        investedAmount,
-        currentValue,
-        pnlAmount: parseNumber(pick(record, ["p&l rs", "p&l"])),
-        pnlPercent: parseNumber(pick(record, ["p&l %"])),
-        metadata: {
-          sourceSheet: "Mutual Funds",
-          amcName: pick(record, ["amc name"]),
-          category: pick(record, ["category"]),
-          subCategory: pick(record, ["sub-category"]),
-          planType: pick(record, ["plan type"]),
-          optionType: pick(record, ["option type"]),
-          nav: parseNumber(pick(record, ["nav rs", "nav"])),
-          weight: parseNumber(pick(record, ["weight %"])),
-          xirr: parseNumber(pick(record, ["xirr %", "xirr"])),
-          investedSince: pick(record, ["invested since"]),
+      withSourceDecimals(
+        {
+          kind: "holding",
+          sourceType: "investment_portfolio_xlsx",
+          sourceDate,
+          accountName: "Mutual Funds",
+          provider: "Manual Workbook",
+          instrumentName: fundName,
+          assetClass: "mutual_fund",
+          currency: "INR",
+          quantity: parseNumber(pick(record, ["units"])),
+          investedAmount,
+          currentValue,
+          pnlAmount: parseNumber(pick(record, ["p&l rs", "p&l"])),
+          pnlPercent: parseNumber(pick(record, ["p&l %"])),
+          metadata: {
+            sourceSheet: "Mutual Funds",
+            amcName: pick(record, ["amc name"]),
+            category: pick(record, ["category"]),
+            subCategory: pick(record, ["sub-category"]),
+            planType: pick(record, ["plan type"]),
+            optionType: pick(record, ["option type"]),
+            nav: parseNumber(pick(record, ["nav rs", "nav"])),
+            weight: parseNumber(pick(record, ["weight %"])),
+            xirr: parseNumber(pick(record, ["xirr %", "xirr"])),
+            investedSince: pick(record, ["invested since"]),
+          },
         },
-      },
+        {
+          quantity: pick(record, ["units"]),
+          investedAmount: pick(record, MUTUAL_FUNDS_COLUMNS["Invested Amount"]),
+          currentValue: pick(record, MUTUAL_FUNDS_COLUMNS["Current Value"]),
+          pnlAmount: pick(record, ["p&l rs", "p&l"]),
+        },
+      ),
     ];
   });
 }
@@ -455,30 +499,43 @@ function parseNps(
     }
 
     const pnlAmount = parseNumber(pick(record, ["gain/loss", "p&l", "pnl"]));
-    parsed.push({
-      kind: "holding",
-      sourceType: "investment_portfolio_xlsx",
-      sourceDate,
-      accountName: "NPS",
-      provider: "NPS",
-      instrumentName: "NPS",
-      assetClass: "nps",
-      currency: "INR",
-      investedAmount,
-      currentValue,
-      pnlAmount,
-      pnlPercent:
-        investedAmount === 0 || pnlAmount === undefined
-          ? undefined
-          : (pnlAmount / investedAmount) * 100,
-      metadata: {
-        sourceSheet: NPS_SOURCE_SHEET,
-        contributions: parseNumber(pick(record, ["count", "contributions"])),
-        withdrawals: parseNumber(pick(record, ["withdrawals", "withdrawal"])),
-        charges: parseNumber(pick(record, ["charges"])),
-        xirr: parseNumber(pick(record, ["xirr", "xirr %"])),
-      },
-    });
+    parsed.push(
+      withSourceDecimals(
+        {
+          kind: "holding",
+          sourceType: "investment_portfolio_xlsx",
+          sourceDate,
+          accountName: "NPS",
+          provider: "NPS",
+          instrumentName: "NPS",
+          assetClass: "nps",
+          currency: "INR",
+          investedAmount,
+          currentValue,
+          pnlAmount,
+          pnlPercent:
+            investedAmount === 0 || pnlAmount === undefined
+              ? undefined
+              : (pnlAmount / investedAmount) * 100,
+          metadata: {
+            sourceSheet: NPS_SOURCE_SHEET,
+            contributions: parseNumber(
+              pick(record, ["count", "contributions"]),
+            ),
+            withdrawals: parseNumber(
+              pick(record, ["withdrawals", "withdrawal"]),
+            ),
+            charges: parseNumber(pick(record, ["charges"])),
+            xirr: parseNumber(pick(record, ["xirr", "xirr %"])),
+          },
+        },
+        {
+          investedAmount: pick(record, NPS_COLUMNS.Contribution),
+          currentValue: pick(record, NPS_COLUMNS.Value),
+          pnlAmount: pick(record, ["gain/loss", "p&l", "pnl"]),
+        },
+      ),
+    );
   }
 
   return parsed;
@@ -614,29 +671,37 @@ function parseSimpleSectionHoldings({
     if (investedAmount === 0 && currentValue === 0) return [];
 
     return [
-      {
-        kind: "holding",
-        sourceType: "investment_portfolio_xlsx",
-        sourceDate,
-        accountName,
-        provider: "Manual Workbook",
-        instrumentName,
-        symbol: symbolFromName ? instrumentName : undefined,
-        assetClass,
-        currency,
-        quantity: quantityAliases
-          ? parseNumber(pick(record, quantityAliases))
-          : undefined,
-        investedAmount,
-        currentValue,
-        pnlAmount: pnlAliases
-          ? parseNumber(pick(record, pnlAliases))
-          : undefined,
-        pnlPercent: pnlPercentAliases
-          ? parseNumber(pick(record, pnlPercentAliases))
-          : undefined,
-        metadata: { sourceSheet },
-      },
+      withSourceDecimals(
+        {
+          kind: "holding",
+          sourceType: "investment_portfolio_xlsx",
+          sourceDate,
+          accountName,
+          provider: "Manual Workbook",
+          instrumentName,
+          symbol: symbolFromName ? instrumentName : undefined,
+          assetClass,
+          currency,
+          quantity: quantityAliases
+            ? parseNumber(pick(record, quantityAliases))
+            : undefined,
+          investedAmount,
+          currentValue,
+          pnlAmount: pnlAliases
+            ? parseNumber(pick(record, pnlAliases))
+            : undefined,
+          pnlPercent: pnlPercentAliases
+            ? parseNumber(pick(record, pnlPercentAliases))
+            : undefined,
+          metadata: { sourceSheet },
+        },
+        {
+          quantity: quantityAliases ? pick(record, quantityAliases) : undefined,
+          investedAmount: pick(record, investedAliases),
+          currentValue: pick(record, currentAliases),
+          pnlAmount: pnlAliases ? pick(record, pnlAliases) : undefined,
+        },
+      ),
     ];
   });
 }
@@ -653,7 +718,10 @@ function firstPortfolioDate(
   return undefined;
 }
 
-function dedupeHoldingRows(rows: NormalizedHoldingRow[]): {
+function dedupeHoldingRows(
+  rows: NormalizedHoldingRow[],
+  preserveDecimalMeaning: boolean,
+): {
   rows: NormalizedHoldingRow[];
   warnings: string[];
 } {
@@ -667,7 +735,7 @@ function dedupeHoldingRows(rows: NormalizedHoldingRow[]): {
       continue;
     }
 
-    if (sameHoldingAmounts(existing, row)) {
+    if (sameHoldingAmounts(existing, row, preserveDecimalMeaning)) {
       byKey.set(holdingDedupeKey(row), richerHolding(existing, row));
       continue;
     }
@@ -699,7 +767,24 @@ function holdingDedupeKey(row: NormalizedHoldingRow): string {
 function sameHoldingAmounts(
   left: NormalizedHoldingRow,
   right: NormalizedHoldingRow,
+  preserveDecimalMeaning: boolean,
 ): boolean {
+  if (preserveDecimalMeaning) {
+    const leftCells = getSourceDecimals(left);
+    const rightCells = getSourceDecimals(right);
+    for (const field of [
+      "quantity",
+      "investedAmount",
+      "currentValue",
+      "pnlAmount",
+    ] as const) {
+      const leftValue = parseSourceDecimal(leftCells?.[field]) ?? left[field];
+      const rightValue =
+        parseSourceDecimal(rightCells?.[field]) ?? right[field];
+      if (String(leftValue) !== String(rightValue)) return false;
+    }
+  }
+
   return (
     sameNumber(left.quantity, right.quantity) &&
     sameNumber(left.investedAmount, right.investedAmount) &&

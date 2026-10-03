@@ -74,7 +74,7 @@ export function labelize(value: string) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-export function formatDate(value: string | Date) {
+export function formatDate(value: string | number | Date) {
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
@@ -82,7 +82,7 @@ export function formatDate(value: string | Date) {
   }).format(new Date(value));
 }
 
-export function formatAsOfDate(value: string | Date) {
+export function formatAsOfDate(value: string | number | Date) {
   return `As of ${formatDate(value)}`;
 }
 

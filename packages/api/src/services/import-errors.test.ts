@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
+import { SourceWritesPausedError } from "../source-writes";
 import {
   duplicateImportError,
   importEffect,
@@ -55,6 +56,15 @@ describe("isImportError", () => {
 });
 
 describe("toImportError", () => {
+  it("maps paused writes to the existing conflict response", () => {
+    const cause = new SourceWritesPausedError();
+    const error = toImportError(cause);
+
+    expect(error).toBeInstanceOf(ImportConflictError);
+    expect(error.message).toBe("Source writes are paused");
+    expect(importErrorHttpStatus(error)).toBe(409);
+  });
+
   it("passes an existing import error through untouched", () => {
     const original = new ImportNotFoundError({ message: "gone" });
     expect(toImportError(original)).toBe(original);

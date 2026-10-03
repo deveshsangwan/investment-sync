@@ -14,8 +14,13 @@ const optionalUrl = z.preprocess(
   (value) => (value === "" ? undefined : value),
   z.string().url().optional(),
 );
+const sourceWritesPausedSchema = z
+  .enum(["true", "false"])
+  .default("false")
+  .transform((value) => value === "true");
 
 const envSchema = z.object({
+  SOURCE_WRITES_PAUSED: sourceWritesPausedSchema,
   DATABASE_URL: optionalString,
   SUPABASE_URL: optionalString,
   SUPABASE_SERVICE_ROLE_KEY: optionalString,
@@ -49,4 +54,8 @@ export function isDataConfigured(env: NodeJS.ProcessEnv = process.env) {
 
 export function getImportBucketName() {
   return getAppEnv().SUPABASE_IMPORT_BUCKET;
+}
+
+export function isSourceWritesPaused(env: NodeJS.ProcessEnv = process.env) {
+  return sourceWritesPausedSchema.parse(env.SOURCE_WRITES_PAUSED);
 }

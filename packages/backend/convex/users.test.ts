@@ -83,6 +83,39 @@ describe("users", () => {
     });
   });
 
+  it("validates existing users under the migration freeze without changing their profile", async () => {
+    const t = convexTest(schema, modules);
+    const owner = t.withIdentity(identity);
+    const userId = await owner.mutation(api.users.ensureCurrent);
+    const readState = () =>
+      t.run(async (ctx) => ({
+        users: await ctx.db.query("users").collect(),
+        households: await ctx.db.query("households").collect(),
+        memberships: await ctx.db.query("householdMembers").collect(),
+      }));
+    const before = await readState();
+    vi.stubEnv("MIGRATION_MODE", "production");
+
+    const changed = t.withIdentity({
+      ...identity,
+      email: "changed@example.invalid",
+    });
+    await expect(changed.mutation(api.users.ensureCurrent)).resolves.toBe(
+      userId,
+    );
+    await expect(changed.query(api.users.current)).resolves.toMatchObject({
+      id: userId,
+      email: identity.email,
+    });
+    await expect(
+      t.withIdentity(secondIdentity).mutation(api.users.ensureCurrent),
+    ).rejects.toMatchObject({ data: { code: "USER_NOT_PROVISIONED" } });
+    await expect(t.mutation(api.users.ensureCurrent)).rejects.toMatchObject({
+      data: { code: "UNAUTHENTICATED" },
+    });
+    expect(await readState()).toEqual(before);
+  });
+
   it("rejects owner-only access for a viewer", async () => {
     const t = convexTest(schema, modules).withIdentity(identity);
     await t.mutation(api.users.ensureCurrent);
@@ -181,72 +214,85 @@ describe("users", () => {
     });
   });
 
-  it.each([
-    "duplicate_subject",
-    "missing_membership",
-    "multiple_memberships",
-    "missing_household",
-    "owner_mismatch",
-  ])("rejects %s without repairing or changing data", async (corruption) => {
-    const t = convexTest(schema, modules).withIdentity(identity);
-    const userId = await t.mutation(api.users.ensureCurrent);
-    const current = await t.query(api.users.current);
+  it.each(
+    [
+      "duplicate_subject",
+      "missing_membership",
+      "multiple_memberships",
+      "missing_household",
+      "owner_mismatch",
+    ].flatMap((corruption) =>
+      ["", "production"].map((migrationMode) => ({
+        corruption,
+        migrationMode,
+      })),
+    ),
+  )(
+    "rejects $corruption without changes under freeze '$migrationMode'",
+    async ({ corruption, migrationMode }) => {
+      const t = convexTest(schema, modules).withIdentity(identity);
+      const userId = await t.mutation(api.users.ensureCurrent);
+      const current = await t.query(api.users.current);
 
-    await t.run(async (ctx) => {
-      const membership = await ctx.db.query("householdMembers").unique();
+      await t.run(async (ctx) => {
+        const membership = await ctx.db.query("householdMembers").unique();
 
-      if (!membership) {
-        throw new Error("Expected provisioned membership");
-      }
-
-      switch (corruption) {
-        case "duplicate_subject":
-          await ctx.db.insert("users", { clerkSubject: identity.subject });
-          break;
-        case "missing_membership":
-          await ctx.db.delete("householdMembers", membership._id);
-          break;
-        case "multiple_memberships":
-          await ctx.db.insert("householdMembers", {
-            userId,
-            householdId: current.householdId,
-            role: "owner",
-          });
-          break;
-        case "missing_household":
-          await ctx.db.delete("households", current.householdId);
-          break;
-        case "owner_mismatch": {
-          const otherUserId = await ctx.db.insert("users", {
-            clerkSubject: secondIdentity.subject,
-          });
-          await ctx.db.patch("households", current.householdId, {
-            ownerUserId: otherUserId,
-          });
-          break;
+        if (!membership) {
+          throw new Error("Expected provisioned membership");
         }
-      }
-    });
 
-    const readState = () =>
-      t.run(async (ctx) => ({
-        users: await ctx.db.query("users").collect(),
-        households: await ctx.db.query("households").collect(),
-        memberships: await ctx.db.query("householdMembers").collect(),
-      }));
-    const before = await readState();
-    const code =
-      corruption === "duplicate_subject"
-        ? "IDENTITY_CONFLICT"
-        : "INVALID_MEMBERSHIP";
+        switch (corruption) {
+          case "duplicate_subject":
+            await ctx.db.insert("users", { clerkSubject: identity.subject });
+            break;
+          case "missing_membership":
+            await ctx.db.delete("householdMembers", membership._id);
+            break;
+          case "multiple_memberships":
+            await ctx.db.insert("householdMembers", {
+              userId,
+              householdId: current.householdId,
+              role: "owner",
+            });
+            break;
+          case "missing_household":
+            await ctx.db.delete("households", current.householdId);
+            break;
+          case "owner_mismatch": {
+            const otherUserId = await ctx.db.insert("users", {
+              clerkSubject: secondIdentity.subject,
+            });
+            await ctx.db.patch("households", current.householdId, {
+              ownerUserId: otherUserId,
+            });
+            break;
+          }
+        }
+      });
 
-    await expect(t.query(api.users.current)).rejects.toMatchObject({
-      data: { code },
-    });
-    await expect(t.mutation(api.users.ensureCurrent)).rejects.toMatchObject({
-      data: { code },
-    });
-    await expect(t.run(requireOwner)).rejects.toMatchObject({ data: { code } });
-    expect(await readState()).toEqual(before);
-  });
+      const readState = () =>
+        t.run(async (ctx) => ({
+          users: await ctx.db.query("users").collect(),
+          households: await ctx.db.query("households").collect(),
+          memberships: await ctx.db.query("householdMembers").collect(),
+        }));
+      const before = await readState();
+      vi.stubEnv("MIGRATION_MODE", migrationMode);
+      const code =
+        corruption === "duplicate_subject"
+          ? "IDENTITY_CONFLICT"
+          : "INVALID_MEMBERSHIP";
+
+      await expect(t.query(api.users.current)).rejects.toMatchObject({
+        data: { code },
+      });
+      await expect(t.mutation(api.users.ensureCurrent)).rejects.toMatchObject({
+        data: { code },
+      });
+      await expect(t.run(requireOwner)).rejects.toMatchObject({
+        data: { code },
+      });
+      expect(await readState()).toEqual(before);
+    },
+  );
 });

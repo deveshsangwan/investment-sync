@@ -40,3 +40,22 @@ export function parseImportFile(file: ImportFile): ParseResult {
 
   return importer.parse(file);
 }
+
+export * from "./exact-types";
+export * from "./exact-adapter";
+export * from "./numeric";
+export * from "./source";
+
+import { preserveParsedDecimals } from "./exact";
+import type { ExactParseResult } from "./exact-types";
+
+export function parseExactImportFile(file: ImportFile): ExactParseResult {
+  const importer = detectImporter(file);
+  if (!importer) {
+    throw new Error("No importer could detect this file format yet");
+  }
+
+  return preserveParsedDecimals(
+    importer.parse(file, { preserveDecimalMeaning: true }),
+  );
+}

@@ -1,5 +1,6 @@
-import { PageLoading } from "@/components/page-loading";
+import { HoldingDetailClient } from "./holding-detail-client";
 
 export default function Loading() {
-  return <PageLoading page="holding" />;
+  // Use the same authenticated query view even before the route payload arrives.
+  return <HoldingDetailClient />;
 }

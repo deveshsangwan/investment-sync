@@ -1,4 +1,3 @@
-import { isDataConfigured } from "@investment-sync/api";
 import { notFound } from "next/navigation";
 import { parseAssetClass } from "@/lib/asset-classes";
 import { AssetClassClient } from "./asset-class-client";
@@ -15,10 +14,5 @@ export default async function AssetClassPage({
     notFound();
   }
 
-  return (
-    <AssetClassClient
-      assetClass={parsedAssetClass}
-      isDataConfigured={isDataConfigured()}
-    />
-  );
+  return <AssetClassClient assetClass={parsedAssetClass} />;
 }

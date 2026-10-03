@@ -1,4 +1,5 @@
 import {
+  assertSourceWritesAllowed,
   cleanupExpiredImportFiles,
   createApiContext,
   getAppEnv,
@@ -6,6 +7,7 @@ import {
   isImportError,
   logger,
   runImportEffect,
+  SourceWritesPausedError,
 } from "@investment-sync/api";
 import { NextResponse } from "next/server";
 
@@ -29,6 +31,8 @@ export async function GET(request: Request) {
   }
 
   try {
+    assertSourceWritesAllowed();
+
     const result = await runImportEffect(
       cleanupExpiredImportFiles(
         createApiContext({
@@ -38,6 +42,10 @@ export async function GET(request: Request) {
     );
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof SourceWritesPausedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     if (isImportError(error)) {
       logger.error("Import cleanup failed", {
         tag: error._tag,

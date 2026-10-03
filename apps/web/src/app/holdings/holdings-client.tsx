@@ -5,8 +5,9 @@ import { SelectField as FilterSelect } from "@/components/ui/select-field";
 import { Money, useAmountFormatters } from "@/components/amounts";
 
 import { InstrumentIdentity } from "@/components/instrument-identity";
-import type { AppRouter } from "@investment-sync/api";
-import type { inferRouterOutputs } from "@trpc/server";
+import { api } from "@investment-sync/backend/api";
+import type { FunctionReturnType } from "convex/server";
+import { useCachedQuery } from "@/app/query-cache-provider";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -17,11 +18,9 @@ import {
   UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { SetupRequired } from "@/components/dashboard-states";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   EmptyState,
-  ErrorState,
   PageHeader,
   PageShell,
   PortfolioContentSkeleton,
@@ -43,41 +42,100 @@ import {
   labelize,
   numberOrUndefined,
 } from "@/lib/format";
-import { trpc } from "../providers";
+import { ConvexSessionGate } from "../convex-provider";
+import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
-type Position = inferRouterOutputs<AppRouter>["portfolio"]["positions"][
-  | "current"
-  | "exited"][number] & { isExited: boolean };
+import {
+  useHoldingsNavigation,
+  type PositionStatus,
+  type SortKey,
+} from "@/components/holdings-navigation";
 
-type PositionStatus = "current" | "exited" | "all";
-type SortKey = "value" | "pnl" | "return" | "name";
+type Positions = FunctionReturnType<typeof api.portfolio.positions>;
+type Position = Positions["current" | "exited"][number] & { isExited: boolean };
 
 const controlClass =
   "h-11 rounded-[8px] border border-input bg-card px-3 text-sm text-foreground outline-hidden transition-colors hover:border-primary/40 focus:border-primary";
 
-export function HoldingsClient({
-  isDataConfigured,
-}: {
-  isDataConfigured: boolean;
-}) {
-  const { formatInr } = useAmountFormatters();
+export function HoldingsClient() {
+  return (
+    <PageShell>
+      <PageHeader
+        title="Holdings"
+        description="The positions behind your portfolio."
+        action={
+          <Button asChild>
+            <Link href="/uploads">
+              <UploadCloud className="size-4" aria-hidden="true" />
+              Import statement
+            </Link>
+          </Button>
+        }
+      />
+      <ConvexSessionGate
+        loading={<PortfolioContentSkeleton variant="holdings" />}
+      >
+        <ConvexQueryBoundary
+          title="Holdings couldn't be loaded"
+          description="The saved portfolio is unchanged. Try loading the positions again."
+        >
+          <HoldingsData />
+        </ConvexQueryBoundary>
+      </ConvexSessionGate>
+    </PageShell>
+  );
+}
 
-  const query = trpc.portfolio.positions.useQuery(undefined, {
-    enabled: isDataConfigured,
-  });
-  const [search, setSearch] = useState("");
-  const [assetClass, setAssetClass] = useState("all");
-  const [account, setAccount] = useState("all");
-  const [currency, setCurrency] = useState("all");
-  const [status, setStatus] = useState<PositionStatus>("current");
-  const [sort, setSort] = useState<SortKey>("value");
+function HoldingsData() {
+  const { formatInr } = useAmountFormatters();
+  const positions = useCachedQuery(api.portfolio.positions);
+  const { savedView, saveView, isReturningToHoldings } =
+    useHoldingsNavigation();
+  const initialView = isReturningToHoldings ? savedView : null;
+  const [search, setSearch] = useState(initialView?.search ?? "");
+  const [assetClass, setAssetClass] = useState(
+    initialView?.assetClass ?? "all",
+  );
+  const [account, setAccount] = useState(initialView?.account ?? "all");
+  const [currency, setCurrency] = useState(initialView?.currency ?? "all");
+  const [status, setStatus] = useState<PositionStatus>(
+    initialView?.status ?? "current",
+  );
+  const [sort, setSort] = useState<SortKey>(initialView?.sort ?? "value");
+
+  const hasRestoredScroll = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!positions || !initialView || hasRestoredScroll.current) return;
+
+    const restoreScroll = () =>
+      window.scrollTo({ top: initialView.scrollY, behavior: "instant" });
+    restoreScroll();
+    const frame = requestAnimationFrame(() => {
+      restoreScroll();
+      hasRestoredScroll.current = true;
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [positions, initialView]);
+
+  const rememberView = () =>
+    saveView({
+      search,
+      assetClass,
+      account,
+      currency,
+      status,
+      sort,
+      scrollY: window.scrollY,
+    });
 
   const allPositions: Position[] = [
-    ...(query.data?.current.map((item) => ({
+    ...(positions?.current.map((item) => ({
       ...item,
       isExited: false,
     })) ?? []),
-    ...(query.data?.exited.map((item) => ({
+    ...(positions?.exited.map((item) => ({
       ...item,
       isExited: true,
     })) ?? []),
@@ -114,206 +172,173 @@ export function HoldingsClient({
     setSort("value");
   };
 
+  if (!positions) return <PortfolioContentSkeleton variant="holdings" />;
+
   return (
-    <PageShell>
-      <PageHeader
-        title="Holdings"
-        description="The positions behind your portfolio."
-        action={
-          <Button asChild>
-            <Link href="/uploads">
-              <UploadCloud className="size-4" aria-hidden="true" />
-              Import statement
-            </Link>
-          </Button>
-        }
-      />
-
-      {!isDataConfigured ? <SetupRequired /> : null}
-
-      {isDataConfigured && query.isLoading ? (
-        <PortfolioContentSkeleton variant="holdings" />
-      ) : null}
-
-      {isDataConfigured && query.isError ? (
-        <ErrorState
-          title="Holdings couldn't be loaded"
-          description="The saved portfolio is unchanged. Try loading the positions again."
-          onRetry={() => void query.refetch()}
+    <>
+      <section className="mb-6 grid grid-cols-3 overflow-hidden border-b border-border/80 divide-x">
+        <Summary label="Current positions" value={positions.current.length} />
+        <Summary label="Exited positions" value={positions.exited.length} />
+        <Summary
+          label="Current value"
+          value={formatInr(
+            positions.current.reduce(
+              (total, item) => total + item.currentValueInInr,
+              0,
+            ),
+          )}
+          monetary
         />
-      ) : null}
+      </section>
 
-      {query.isSuccess ? (
-        <>
-          <section className="mb-6 grid grid-cols-3 overflow-hidden border-b border-border/80 divide-x">
-            <Summary
-              label="Current positions"
-              value={query.data.current.length}
-            />
-            <Summary
-              label="Exited positions"
-              value={query.data.exited.length}
-            />
-            <Summary
-              label="Current value"
-              value={formatInr(
-                query.data.current.reduce(
-                  (total, item) => total + item.currentValueInInr,
-                  0,
-                ),
-              )}
-              monetary
-            />
-          </section>
-
-          <Card className="mb-5 border-0 bg-transparent shadow-none">
-            <CardContent className="p-0">
-              <div className="grid grid-cols-[minmax(0,1fr)_145px] gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
-                <label className="grid gap-1.5">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Search
-                  </span>
-                  <span className="relative">
-                    <Search
-                      className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <input
-                      className={`${controlClass} w-full pl-9`}
-                      type="search"
-                      placeholder="Search holdings"
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                    />
-                  </span>
-                </label>
-                <FilterSelect
-                  label="Sort holdings"
-                  value={sort}
-                  onChange={(value) => setSort(value as SortKey)}
-                  options={[
-                    ["value", "Largest value"],
-                    ["pnl", "Largest gain"],
-                    ["return", "Best return"],
-                    ["name", "Name A-Z"],
-                  ]}
+      <Card className="mb-5 border-0 bg-transparent shadow-none">
+        <CardContent className="p-0">
+          <div className="grid grid-cols-[minmax(0,1fr)_145px] gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Search
+              </span>
+              <span className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
                 />
-              </div>
-              <details className="mono-disclosure mt-3">
-                <summary className="flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium">
-                  <SlidersHorizontal className="size-4" />
-                  Filters
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {[
-                      status !== "current",
-                      assetClass !== "all",
-                      account !== "all",
-                      currency !== "all",
-                    ].filter(Boolean).length || ""}
-                  </span>
-                  <ChevronDown className="ml-auto size-4" />
-                </summary>
-                <div className="grid gap-3 border-t py-4 sm:grid-cols-2 lg:grid-cols-4">
-                  {" "}
-                  <FilterSelect
-                    label="Position status"
-                    value={status}
-                    onChange={(value) => setStatus(value as PositionStatus)}
-                    options={[
-                      ["current", "Current"],
-                      ["exited", "Exited"],
-                      ["all", "All positions"],
-                    ]}
-                  />
-                  <FilterSelect
-                    label="Asset class"
-                    value={assetClass}
-                    onChange={setAssetClass}
-                    options={[
-                      ["all", "All asset classes"],
-                      ...filters.assetClasses.map<[string, string]>((value) => [
-                        value,
-                        labelize(value),
-                      ]),
-                    ]}
-                  />
-                  <FilterSelect
-                    label="Account"
-                    value={account}
-                    onChange={setAccount}
-                    options={[
-                      ["all", "All accounts"],
-                      ...filters.accounts.map<[string, string]>((value) => [
-                        value,
-                        value,
-                      ]),
-                    ]}
-                  />
-                  <FilterSelect
-                    label="Currency"
-                    value={currency}
-                    onChange={setCurrency}
-                    options={[
-                      ["all", "All currencies"],
-                      ...filters.currencies.map<[string, string]>((value) => [
-                        value,
-                        value,
-                      ]),
-                    ]}
-                  />
-                </div>
-              </details>
-            </CardContent>
-          </Card>
-
-          {visiblePositions.length === 0 ? (
-            <EmptyState
-              icon={BriefcaseBusiness}
-              title="No positions match these filters"
-              description="Clear the filters to return to the complete household view."
-              action={
-                <Button variant="secondary" onClick={resetFilters}>
-                  Clear filters
-                </Button>
-              }
+                <input
+                  className={`${controlClass} w-full pl-9`}
+                  type="search"
+                  placeholder="Search holdings"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </span>
+            </label>
+            <FilterSelect
+              label="Sort holdings"
+              value={sort}
+              onChange={(value) => setSort(value as SortKey)}
+              options={[
+                ["value", "Largest value"],
+                ["pnl", "Largest gain"],
+                ["return", "Best return"],
+                ["name", "Name A-Z"],
+              ]}
             />
-          ) : (
-            <Card className="overflow-hidden border-x-0 rounded-none bg-transparent">
-              <div className="hidden md:block">
-                <Table className="mono-table">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Holding</TableHead>
-                      <TableHead>Account</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead>P&amp;L</TableHead>
-                      <TableHead>Return</TableHead>
-                      <TableHead>Updated</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visiblePositions.map((position) => (
-                      <PositionTableRow
-                        key={`${position.id}-${position.isExited}`}
-                        position={position}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="divide-y md:hidden">
+          </div>
+          <details className="mono-disclosure mt-3">
+            <summary className="flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium">
+              <SlidersHorizontal className="size-4" />
+              Filters
+              <span className="text-xs font-normal text-muted-foreground">
+                {[
+                  status !== "current",
+                  assetClass !== "all",
+                  account !== "all",
+                  currency !== "all",
+                ].filter(Boolean).length || ""}
+              </span>
+              <ChevronDown className="ml-auto size-4" />
+            </summary>
+            <div className="grid gap-3 border-t py-4 sm:grid-cols-2 lg:grid-cols-4">
+              {" "}
+              <FilterSelect
+                label="Position status"
+                value={status}
+                onChange={(value) => setStatus(value as PositionStatus)}
+                options={[
+                  ["current", "Current"],
+                  ["exited", "Exited"],
+                  ["all", "All positions"],
+                ]}
+              />
+              <FilterSelect
+                label="Asset class"
+                value={assetClass}
+                onChange={setAssetClass}
+                options={[
+                  ["all", "All asset classes"],
+                  ...filters.assetClasses.map<[string, string]>((value) => [
+                    value,
+                    labelize(value),
+                  ]),
+                ]}
+              />
+              <FilterSelect
+                label="Account"
+                value={account}
+                onChange={setAccount}
+                options={[
+                  ["all", "All accounts"],
+                  ...filters.accounts.map<[string, string]>((value) => [
+                    value,
+                    value,
+                  ]),
+                ]}
+              />
+              <FilterSelect
+                label="Currency"
+                value={currency}
+                onChange={setCurrency}
+                options={[
+                  ["all", "All currencies"],
+                  ...filters.currencies.map<[string, string]>((value) => [
+                    value,
+                    value,
+                  ]),
+                ]}
+              />
+            </div>
+          </details>
+        </CardContent>
+      </Card>
+
+      {visiblePositions.length === 0 ? (
+        <EmptyState
+          icon={BriefcaseBusiness}
+          title="No positions match these filters"
+          description="Clear the filters to return to the complete household view."
+          action={
+            <Button variant="secondary" onClick={resetFilters}>
+              Clear filters
+            </Button>
+          }
+        />
+      ) : (
+        <Card className="overflow-hidden border-x-0 rounded-none bg-transparent">
+          <div className="hidden md:block">
+            <Table className="mono-table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Holding</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>P&amp;L</TableHead>
+                  <TableHead>Return</TableHead>
+                  <TableHead>Updated</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {visiblePositions.map((position) => (
-                  <PositionCard
+                  <PositionTableRow
+                    onOpen={rememberView}
                     key={`${position.id}-${position.isExited}`}
                     position={position}
                   />
                 ))}
-              </div>
-            </Card>
-          )}
-        </>
-      ) : null}
-    </PageShell>
+              </TableBody>
+            </Table>
+          </div>
+          <div className="divide-y md:hidden">
+            {visiblePositions.map((position) => (
+              <PositionCard
+                onOpen={rememberView}
+                key={`${position.id}-${position.isExited}`}
+                position={position}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
+    </>
   );
 }
 
@@ -338,7 +363,13 @@ function Summary({
   );
 }
 
-function PositionTableRow({ position }: { position: Position }) {
+function PositionTableRow({
+  position,
+  onOpen,
+}: {
+  position: Position;
+  onOpen: () => void;
+}) {
   const { formatInr } = useAmountFormatters();
 
   const tone =
@@ -349,7 +380,8 @@ function PositionTableRow({ position }: { position: Position }) {
         <div className="flex items-center gap-2">
           <Link
             className="min-w-0 max-w-72"
-            href={`/dashboard/holdings/${position.id}`}
+            href={`/dashboard/holdings/${encodeURIComponent(position.id)}`}
+            onNavigate={onOpen}
           >
             <InstrumentIdentity
               name={position.instrumentName}
@@ -391,14 +423,21 @@ function PositionTableRow({ position }: { position: Position }) {
   );
 }
 
-function PositionCard({ position }: { position: Position }) {
+function PositionCard({
+  position,
+  onOpen,
+}: {
+  position: Position;
+  onOpen: () => void;
+}) {
   const { formatInr } = useAmountFormatters();
 
   const tone =
     Number(position.pnlAmountInInr ?? 0) >= 0 ? "positive" : "negative";
   return (
     <Link
-      href={`/dashboard/holdings/${position.id}`}
+      href={`/dashboard/holdings/${encodeURIComponent(position.id)}`}
+      onNavigate={onOpen}
       className="block p-4 transition-colors hover:bg-muted/35"
     >
       <div className="flex items-center justify-between gap-3">
