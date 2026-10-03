@@ -1,6 +1,6 @@
 # Convex migration implementation plan
 
-Status: Implementation through Phase 5 verified in personal development; Phase 6 tooling and generated local rehearsal completed, independently reviewed and verified; separate preview and remaining Phase 1 external gates tracked separately; production cutover not authorized
+Status: Implementation through Phase 5 verified in personal development; Phase 6 tooling and generated local rehearsal completed, independently reviewed and verified; inactive production setup and initial real-data comparison authorized; production cutover not authorized
 
 Phase 1 review and external gates: [`convex-phase-1-review.md`](convex-phase-1-review.md). Phases 3–5 changes, review findings and verification: [`convex-phases-3-5-verification.md`](convex-phases-3-5-verification.md).
 
@@ -9,6 +9,8 @@ Deferred product work outside this migration: [realized sales and accurate exite
 Phase 6 execution and reconciliation evidence: [convex-phase-6-verification.md](convex-phase-6-verification.md). On 2026-10-03 the owner authorized syncing with current Postgres changes and implementing the migration tooling and generated-data rehearsal. Opus is unavailable; independent Codex reviews replace the new Opus review for this work, with that gap recorded. This does not authorize moving real data or changing production traffic.
 
 Phase 6 completed with two fresh generated migrations with identical target semantic/report digests and zero unexplained differences, unchanged full-export replay, and an actual public-API rollback drill covering an expired parsed batch, a new identity and file, exact SQL rows, idempotency, and all household/holding/class views. Both Codex reviewers approved the final code at `7bf2ac5`; workspace checks, dedicated Postgres integration and GitHub CI passed. Production remains on Postgres. The real-data report, production writer freeze/backups, previously recorded pre-production follow-ups and cutover authorization remain Phase 7 work.
+
+On 2026-10-03 the owner authorized creating and configuring an inactive production Convex deployment in `dev-sangwan2001/investment-sync`, deploying the migration backend, and loading and comparing real Postgres/Supabase data. The initial comparison uses a consistent read-only SQL snapshot while the source remains live. This approval does not pause source writers, change the production website, enable native application writes, or authorize cutover. Execution evidence and remaining gates are tracked in [convex-phase-7-verification.md](convex-phase-7-verification.md).
 
 Decision: migrate the web application fully to a Convex-native backend on a separate branch, prove behavior against the current Postgres and Supabase production system, then perform a one-shot production cutover.
 
@@ -872,6 +874,8 @@ Old code deleted: none.
 ### Phase 7: production cutover
 
 Goal: migrate the real dataset and switch the production web application.
+
+Inactive-target preparation and initial real-data comparison are authorized. The final source write pause and traffic cutover remain separate owner decisions. An initial snapshot comparison certifies the copied snapshot only; changes committed after its transaction begins must be captured before cutover. Available source files are copied and verified independently because Supabase Storage does not participate in the SQL transaction.
 
 Major areas:
 
