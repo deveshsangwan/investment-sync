@@ -1,6 +1,6 @@
 # Phase 7 production verification
 
-The owner authorized preparing an inactive production Convex target and loading and comparing real source data on 2026-10-03. The initial comparison passed with zero unexplained differences. The owner separately approved enabling the production Clerk Convex integration, and actual authenticated native queries passed. The live website continues to use Postgres. Source writers have not been paused, traffic cutover is not authorized, and native application writes remain disabled.
+These are preparation results recorded before the owner authorized the final cutover. The owner authorized preparing an inactive production Convex target and loading and comparing real source data on 2026-10-03. The initial comparison passed with zero unexplained differences. The owner separately approved enabling the production Clerk Convex integration, and actual authenticated native queries passed. At that point, the live website used Postgres, source writers were active, and native application writes remained disabled. See the [Phase 8 cutover record](convex-phase-8-cutover.md) for the subsequent merge, deployment, and recovery checks.
 
 The starting revision is `2af61e9f7015e09b7426aa72ba9de2040e82049a`. Tracked files were clean; existing untracked agent configuration and handoff files are unrelated. Opus is unavailable. New backend changes require two independent Codex reviews before deployment.
 
