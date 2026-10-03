@@ -72,6 +72,41 @@ CRON_SECRET=replace-with-a-random-secret
 Uploads need real Supabase-compatible storage. Dashboard/history testing only needs Postgres.
 The Source File cleanup endpoint fails closed when `CRON_SECRET` is absent.
 
+## Configure Convex
+
+Phase 1 keeps application reads on Postgres, but the optional development provider can connect to a personal Convex development deployment. Initialize it from the backend package:
+
+```bash
+pnpm dev:backend
+```
+
+On a new deployment, the first push is expected to fail until `CLERK_JWT_ISSUER_DOMAIN` is configured. Keep this development process open, set the deployment variables below from a second terminal, then let it retry (or restart `pnpm dev:backend`). The initial selection writes `CONVEX_DEPLOYMENT` before the application push; the environment commands must target that same development deployment.
+
+Keep the generated `CONVEX_DEPLOYMENT` in `packages/backend/.env.local`. Add `NEXT_PUBLIC_CONVEX_URL` from `apps/web/.env.example` to your existing `apps/web/.env.local`, preserving its Clerk and database settings. Set it to the development URL printed by the CLI. An anonymous local backend normally uses `http://127.0.0.1:3210`; a personal cloud development deployment uses an `https://…convex.cloud` URL.
+
+In the development Clerk application, activate the Convex integration and copy the application's Frontend API URL, following the [Convex Clerk setup guide](https://docs.convex.dev/auth/clerk). The token audience must be `convex`, matching `applicationID` in `convex/auth.config.ts`. Use that development application's issuer domain below. The provider is enabled only in development; this step does not switch application reads away from Postgres.
+
+In Clerk's development instance, open **Sessions → Customize session token → Claims** and add `"email": "{{user.primary_email_address}}"`, preserving the existing `aud` and any other claims. The integration can authenticate without this claim, but this app needs it to save the sign-in email. Sign out and sign back in after changing claims, then confirm the email is present in the development `users` document. See [Clerk's additional-claims instructions](https://clerk.com/docs/guides/development/integrations/databases/convex).
+
+`CLERK_JWT_ISSUER_DOMAIN` and `APP_ENV` are Convex deployment environment variables, not shell-only variables. Set them on the personal development deployment:
+
+```bash
+pnpm --filter @investment-sync/backend exec convex env set CLERK_JWT_ISSUER_DOMAIN https://your-development-clerk.accounts.dev
+pnpm --filter @investment-sync/backend exec convex env set APP_ENV development
+```
+
+After the backend is running, create the obviously fake development fixture with:
+
+```bash
+pnpm --filter @investment-sync/backend exec convex run testing/seed:fakeDevelopmentData
+```
+
+Use `APP_ENV=test` only for isolated automated-test deployments. Never add production Clerk keys, production data, or production migration credentials to a development or preview deployment.
+
+The seed is repeatable and creates a fake identity, not your signed-in Clerk identity. Signing in provisions your own separate Household. Verify real sign-in against the selected development backend before treating the external Phase 1 gate as complete.
+
+When Convex function modules change, run `pnpm backend:codegen` against the explicitly selected local or personal development backend and commit the generated bindings. Ordinary lint, typecheck, and unit tests use those bindings without deployment credentials; successful unit tests do not prove cloud authentication works.
+
 ## Apply Schema
 
 ```bash

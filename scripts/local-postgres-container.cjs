@@ -50,7 +50,7 @@ function isRunning() {
     const row = rows.find(
       (entry) => entry.configuration?.id === CONTAINER_NAME,
     );
-    return row?.status === "running";
+    return row?.status === "running" || row?.status?.state === "running";
   } catch {
     return false;
   }
@@ -118,6 +118,40 @@ function logs() {
   container(["logs", CONTAINER_NAME]);
 }
 
+function prepareTestDatabase() {
+  failIfNotRunning();
+
+  const existsResult = container(
+    [
+      "exec",
+      CONTAINER_NAME,
+      "psql",
+      "--username",
+      "investment_sync",
+      "--dbname",
+      "postgres",
+      "--tuples-only",
+      "--no-align",
+      "--command",
+      "select 1 from pg_database where datname = 'investment_sync_test'",
+    ],
+    { quiet: true },
+  );
+
+  if ((existsResult.stdout || "").trim() !== "1") {
+    container([
+      "exec",
+      CONTAINER_NAME,
+      "createdb",
+      "--username",
+      "investment_sync",
+      "investment_sync_test",
+    ]);
+  }
+
+  console.log("Local integration-test database is ready");
+}
+
 const command = process.argv[2];
 
 if (command === "up") {
@@ -126,9 +160,11 @@ if (command === "up") {
   down();
 } else if (command === "logs") {
   logs();
+} else if (command === "prepare-test") {
+  prepareTestDatabase();
 } else {
   console.error(
-    "Usage: node scripts/local-postgres-container.cjs <up|down|logs>",
+    "Usage: node scripts/local-postgres-container.cjs <up|prepare-test|down|logs>",
   );
   process.exit(1);
 }
