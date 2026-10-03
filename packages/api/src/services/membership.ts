@@ -6,6 +6,8 @@ import {
   users,
 } from "@investment-sync/db";
 import type { ApiContext } from "../context";
+import { isSourceWritesPaused } from "../config";
+import { assertSourceWritesAllowed } from "../source-writes";
 
 export interface MembershipContext {
   userId: string;
@@ -111,7 +113,9 @@ async function loadMembership(ctx: ApiContext): Promise<MembershipContext> {
   const existing = await selectMembership(ctx.db, clerkUserId);
 
   if (existing) {
-    if (ctx.auth.email) {
+    if (ctx.auth.email && !isSourceWritesPaused()) {
+      assertSourceWritesAllowed();
+
       await ctx.db
         .update(users)
         .set({ email: ctx.auth.email, updatedAt: new Date() })
@@ -121,8 +125,12 @@ async function loadMembership(ctx: ApiContext): Promise<MembershipContext> {
     return existing;
   }
 
+  assertSourceWritesAllowed();
+
   try {
     return await ctx.db.transaction(async (tx) => {
+      assertSourceWritesAllowed();
+
       const [createdUser] = await tx
         .insert(users)
         .values({
@@ -139,6 +147,8 @@ async function loadMembership(ctx: ApiContext): Promise<MembershipContext> {
 
       // Unique on owner_user_id: a concurrent first login raises here and the
       // whole provisioning rolls back instead of creating a second household.
+      assertSourceWritesAllowed();
+
       const [createdHousehold] = await tx
         .insert(households)
         .values({
@@ -149,6 +159,8 @@ async function loadMembership(ctx: ApiContext): Promise<MembershipContext> {
 
       if (!createdHousehold) throw new Error("Failed to create household");
 
+      assertSourceWritesAllowed();
+
       const [createdMember] = await tx
         .insert(householdMembers)
         .values({
@@ -158,12 +170,16 @@ async function loadMembership(ctx: ApiContext): Promise<MembershipContext> {
         })
         .returning({ role: householdMembers.role });
 
+      assertSourceWritesAllowed();
+
       await tx.insert(accounts).values(
         defaultAccounts.map((account) => ({
           householdId: createdHousehold.id,
           ...account,
         })),
       );
+
+      assertSourceWritesAllowed();
 
       return {
         userId: clerkUserId,

@@ -118,10 +118,15 @@ export const publishPortfolio = internalAction({
         rows.length !== input.batch.rowCount ||
         rows.length > rowLimit ||
         utf8Bytes(JSON.stringify(rows)) !== input.batch.normalizedBytes ||
-        input.batch.normalizedBytes > normalizedLimit ||
-        existingFacts.length + rows.length > portfolioLimits.facts
+        input.batch.normalizedBytes > normalizedLimit
       )
         throw new Error("Publication input capacity or manifest mismatch");
+
+      if (existingFacts.length + rows.length > portfolioLimits.facts)
+        throw new ConvexError(
+          "Household history exceeds the supported publication capacity",
+        );
+
       if (!input.batch.parserVersion) throw new Error("Missing parser version");
 
       const builderStarted = performance.now();

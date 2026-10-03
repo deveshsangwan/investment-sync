@@ -9,8 +9,13 @@ import { Clock, Effect } from "effect";
 import { getImportBucketName, validateImportFile } from "../config";
 import { logger } from "../logger";
 import {
+  assertSourceWritesAllowed,
+  SourceWritesPausedError,
+} from "../source-writes";
+import {
   duplicateImportError,
   importEffect,
+  importWriteEffect,
   ImportConflictError,
   type ImportDependencies,
   type ImportError,
@@ -37,6 +42,11 @@ export function uploadAndProcessImport(
   input: ImportFileInput,
 ) {
   return Effect.gen(function* () {
+    yield* Effect.try({
+      try: assertSourceWritesAllowed,
+      catch: toImportError,
+    });
+
     // Before the batch row exists, so a file we refuse outright leaves no trace.
     yield* validateImportInput(input);
 
@@ -150,7 +160,7 @@ function createImportBatch(
     expiresAt: Date;
   },
 ) {
-  return importEffect(() =>
+  return importWriteEffect(() =>
     ctx.db
       .insert(importBatches)
       .values({
@@ -203,7 +213,7 @@ function uploadSourceFile(
   storagePath: string,
   input: ImportFileInput,
 ) {
-  return importEffect(() =>
+  return importWriteEffect(() =>
     ctx.supabase.storage
       .from(getImportBucketName())
       .upload(storagePath, input.content, {
@@ -234,7 +244,7 @@ function writeParsedRows(
     now: Date;
   },
 ) {
-  return importEffect(() =>
+  return importWriteEffect(() =>
     writeParsedRowsInTransaction(ctx, membership, args),
   );
 }
@@ -260,6 +270,8 @@ async function writeParsedRowsInTransaction(
     now: Date;
   },
 ) {
+  assertSourceWritesAllowed();
+
   await ctx.db
     .update(importBatches)
     .set({
@@ -277,7 +289,11 @@ async function writeParsedRowsInTransaction(
       ),
     );
 
+  assertSourceWritesAllowed();
+
   await ctx.db.transaction(async (tx) => {
+    assertSourceWritesAllowed();
+
     await tx.insert(importRows).values(
       parsed.rows.map((row, index) => ({
         importBatchId,
@@ -285,6 +301,9 @@ async function writeParsedRowsInTransaction(
         normalizedPayload: row,
       })),
     );
+
+    assertSourceWritesAllowed();
+
     const updated = await tx
       .update(importBatches)
       .set({ status: "parsed", processedAt: now })
@@ -296,6 +315,9 @@ async function writeParsedRowsInTransaction(
         ),
       )
       .returning({ id: importBatches.id });
+
+    assertSourceWritesAllowed();
+
     if (!updated[0]) {
       throw new ImportConflictError({
         message: "Import Batch changed while it was being parsed",
@@ -308,6 +330,9 @@ export function cleanupExpiredImportFiles(
   ctx: ImportDependencies,
 ): Effect.Effect<{ deleted: number }, ImportError> {
   return Clock.currentTimeMillis.pipe(
+    Effect.tap(() =>
+      Effect.try({ try: assertSourceWritesAllowed, catch: toImportError }),
+    ),
     Effect.flatMap((now) => expiredStoredFiles(ctx, new Date(now))),
     Effect.flatMap((toDelete) => {
       if (toDelete.length === 0) return Effect.succeed({ deleted: 0 });
@@ -319,7 +344,7 @@ export function cleanupExpiredImportFiles(
         // Only clear the paths once storage confirms the delete, so a failed
         // sweep leaves rows pointing at files that still exist.
         Effect.andThen(
-          importEffect(() =>
+          importWriteEffect(() =>
             ctx.db
               .update(importBatches)
               .set({ storagePath: null })
@@ -360,7 +385,7 @@ function expiredStoredFiles(ctx: ImportDependencies, now: Date) {
 }
 
 function removeExpiredFiles(ctx: ImportDependencies, storagePaths: string[]) {
-  return importEffect(() =>
+  return importWriteEffect(() =>
     ctx.supabase.storage.from(getImportBucketName()).remove(storagePaths),
   ).pipe(
     Effect.flatMap((removed) =>
@@ -415,13 +440,15 @@ async function listImportsQuery(
 }
 
 function ensureImportBucket(ctx: ImportDependencies) {
-  return importEffect(() => ensureImportBucketExists(ctx));
+  return importWriteEffect(() => ensureImportBucketExists(ctx));
 }
 
 async function ensureImportBucketExists(ctx: ImportDependencies) {
   const bucket = getImportBucketName();
   const existing = await ctx.supabase.storage.getBucket(bucket);
   if (!existing.error) return;
+
+  assertSourceWritesAllowed();
 
   const created = await ctx.supabase.storage.createBucket(bucket, {
     public: false,
@@ -515,24 +542,31 @@ function markImportFailed(
   now: Date,
   metadata: FailedImportMetadata = {},
 ): Effect.Effect<void> {
-  return Effect.tryPromise(() =>
-    ctx.db
-      .update(importBatches)
-      .set({
-        status: "failed",
-        errors: [message],
-        processedAt: now,
-        ...metadata,
-      })
-      .where(
-        and(
-          eq(importBatches.id, importBatchId),
-          eq(importBatches.householdId, membership.householdId),
-        ),
-      ),
-  ).pipe(
+  return Effect.tryPromise({
+    try: () => {
+      assertSourceWritesAllowed();
+
+      return ctx.db
+        .update(importBatches)
+        .set({
+          status: "failed",
+          errors: [message],
+          processedAt: now,
+          ...metadata,
+        })
+        .where(
+          and(
+            eq(importBatches.id, importBatchId),
+            eq(importBatches.householdId, membership.householdId),
+          ),
+        );
+    },
+    catch: (error) => error,
+  }).pipe(
     Effect.catchAll((error) =>
       Effect.sync(() => {
+        if (error instanceof SourceWritesPausedError) return;
+
         logger.error("Failed to record Import Batch failure", {
           importBatchId,
           error,
@@ -548,13 +582,23 @@ function removeStoredFile(
   ctx: ImportDependencies,
   storagePath: string,
 ): Effect.Effect<boolean> {
-  return Effect.tryPromise(() =>
-    ctx.supabase.storage.from(getImportBucketName()).remove([storagePath]),
-  ).pipe(
+  return Effect.tryPromise({
+    try: () => {
+      assertSourceWritesAllowed();
+
+      return ctx.supabase.storage
+        .from(getImportBucketName())
+        .remove([storagePath]);
+    },
+    catch: (error) => error,
+  }).pipe(
     Effect.map((removed) => removed.error ?? null),
     Effect.catchAll((error: unknown) => Effect.succeed(error)),
     Effect.map((error) => {
       if (!error) return true;
+
+      if (error instanceof SourceWritesPausedError) return false;
+
       logger.error("Failed to delete Source File after import failure", {
         storagePath,
         error,

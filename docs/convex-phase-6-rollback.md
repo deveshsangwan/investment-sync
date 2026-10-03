@@ -1,10 +1,10 @@
 # Phase 6 rollback rehearsal
 
-The reverse adapter restores generated Convex changes into the retained Postgres schema. Production still uses Postgres. The Phase 6 CLI accepts only synthetic artifacts and a dedicated local database whose name starts with `investment_sync_rollback_`. Production replay and application redeployment require the Phase 7 authorization recorded in the migration plan.
+The reverse adapter restores generated Convex changes into the retained Postgres schema. Production still uses Postgres. Synthetic runs require a dedicated local database whose name starts with `investment_sync_rollback_`. The CLI also supports production verification and recovery with separate, expiring operator scopes bound to exact artifacts and named targets. Production replay, source freezes, traffic changes and application redeployment require their own owner authorization.
 
 ## What the adapter verifies
 
-Before any Convex-only write, `rollback.cjs --mode before-writes` reads Postgres in one repeatable-read transaction and compares every retained table with the frozen export. It also compares a fresh frozen Convex export with the archived initial target and verifies that this initial target reconstructs the source dataset without new commits. A new identity counts as a Convex-only write even if no file has been imported. It records the exact old application commit and the SHA-256 of its archived configuration. The commit must exist in Git. The command does not redeploy the application or prove that an external build archive is available.
+Before any Convex-only write, `rollback.cjs --mode before-writes` reads Postgres in one read-only repeatable-read transaction and compares every retained table with the frozen export. It also compares a fresh frozen Convex export with the archived initial target and verifies that this initial target reconstructs the source dataset without new commits. A new identity counts as a Convex-only write even if no file has been imported. It records the exact old application commit and the SHA-256 of its archived configuration. The commit must exist in Git. The command does not redeploy the application or prove that an external build archive is available.
 
 After Convex-only writes, `--mode after-writes` creates a protected replay plan. New users, Households, memberships, accounts, and batches receive deterministic UUIDs. Migrated entities retain their old IDs. Household-scoped Convex instruments share the appropriate global Postgres instrument. The adapter restores complete normalized rows and persisted holding, transaction, and valuation values in publication sequence. A parsed batch can commit after its file expires because replay uses its normalized rows and facts.
 
@@ -77,6 +77,110 @@ ROLLBACK_TEST_DATABASE_URL=postgresql://investment_sync:investment_sync@127.0.0.
 ```
 
 The measured small rehearsal takes about half a second on the local Postgres service. It covers three commits, an expired-file batch, a new identity, exact fact reconciliation, CLI receipts, a forced SQL failure, rerun idempotency, and a divergent database. This duration does not estimate a production replay.
+
+## Production recovery packet
+
+A production verification authorizes only its named operation. A successful before-write check does not freeze source writers, change application traffic or restore a deployment. Preparation of an authorization file does not grant permission to execute a later production apply.
+
+Production uses the complete sealed Phase 6 source snapshot, including `inputDigest`, table manifests, source-file availability and semantic-view coverage. Preserve the complete 25-table target export and enriched migration mappings. Its envelope must contain `schemaVersion: 1`, `sourceKind: "production"`, `projectorVersion: "portfolio-v1"`, the same source `inputDigest` and `evaluationTime`, the named `deployment` and `url`, and the UTC `exportedAt` time. The export must identify exactly one matching sealed `migrationRuns` entry. A before-write baseline must reconstruct the source without new commits; every exported target table and mapping must still match the current packet.
+
+The protected operator environment contains only these settings:
+
+```dotenv
+DATABASE_URL=postgresql://<login>:<password>@<approved-host>:5432/<approved-database>?sslmode=verify-full
+ROLLBACK_DATABASE_ENVIRONMENT=production
+ROLLBACK_CONVEX_DEPLOYMENT=prod:<approved-deployment>
+ROLLBACK_DATABASE_CA_FILE=.migration/<archive>/database-ca.crt
+```
+
+The CA setting is optional when system trust verifies the server. When supplied, the CA file must be protected and its exact bytes must match `databaseCaDigest` in the authorization. TLS certificate validation always stays enabled. The CLI rejects ambient `PG*` variables, URL connection overrides, duplicate environment keys, local production hosts and development targets. It pins host, port, database and login separately in the driver and checks the actual database, session role and `public` schema inside the transaction. Supabase poolers can use a project-qualified login while the actual server role is `postgres`; record both values explicitly.
+
+Create a protected authorization JSON with exactly these fields. Replace the example identities, dates and digest placeholders with the reviewed values:
+
+```json
+{
+  "schemaVersion": 1,
+  "sourceKind": "production",
+  "scope": "before-writes",
+  "authorizationId": "<owner-approval-reference>",
+  "authorizedBy": "<owner>",
+  "authorizedAt": "<UTC timestamp>",
+  "expiresAt": "<UTC timestamp>",
+  "database": {
+    "environment": "production",
+    "purpose": "retained-source",
+    "host": "<approved-host>",
+    "port": 5432,
+    "name": "<approved-database>",
+    "username": "<URL login>",
+    "role": "<actual server role>"
+  },
+  "convex": {
+    "deployment": "prod:<approved-deployment>",
+    "url": "https://<approved-deployment>.convex.cloud",
+    "migrationRunKey": "<sealed migration run>"
+  },
+  "sourceInputDigest": "<sealed source inputDigest>",
+  "sourceDigest": "<normalized retained SQL table digest>",
+  "sourceSnapshotDigest": "<SHA-256 of source snapshot file bytes>",
+  "targetExportDigest": "<SHA-256 of current target packet bytes>",
+  "targetBaselineDigest": "<SHA-256 of initial target packet bytes>",
+  "rollbackCommit": "<full archived Postgres application commit SHA>",
+  "configurationDigest": "<SHA-256 of archived configuration bytes>",
+  "rollbackBuildDigest": "<SHA-256 of archived build bytes>",
+  "environmentDigest": "<SHA-256 of this operator environment file bytes>",
+  "databaseCaDigest": "<SHA-256 of explicit CA bytes>"
+}
+```
+
+Omit `databaseCaDigest` when the environment does not name a CA file. `database.purpose` can instead be `isolated-recovery` for a specifically approved recovery database on the named production server. Recovery database names may contain `rollback` or `recovery`; a database name alone never classifies or authorizes a target. Archive the actual build bytes with the commit, configuration and source packet. Matching their hashes proves the selected archive has not changed; it does not prove a deployed application has been restored.
+
+```sh
+node scripts/convex-migration/rollback.cjs \
+  --target production \
+  --mode before-writes \
+  --apply false \
+  --snapshot .migration/production-recovery/source-snapshot.json \
+  --target-baseline .migration/production-recovery/target-initial.json \
+  --target-export .migration/production-recovery/target-current.json \
+  --env-file .migration/production-recovery/operator.env \
+  --authorization-file .migration/production-recovery/before-authorization.json \
+  --expected-database-host "$APPROVED_DATABASE_HOST" \
+  --expected-database-name "$APPROVED_DATABASE_NAME" \
+  --expected-convex-deployment "$APPROVED_CONVEX_DEPLOYMENT" \
+  --run-id production-recovery-before \
+  --rollback-commit "$POSTGRES_ROLLBACK_COMMIT" \
+  --rollback-config-file .migration/production-recovery/postgres-configuration.json \
+  --rollback-build-file .migration/production-recovery/postgres-build.tar.gz
+```
+
+For an after-write plan, use `--mode after-writes --apply false`, a new run ID, and a separate authorization with `scope: "after-writes-plan"`. Remove `targetBaselineDigest` and omit `--target-baseline`. Add these evidence records:
+
+```json
+{
+  "sourceReadOnly": {
+    "writersDisabled": true,
+    "evidenceReference": "<source freeze evidence>",
+    "confirmedAt": "<UTC timestamp before target export>",
+    "validUntil": "<UTC timestamp covering authorization expiry>"
+  },
+  "targetDrained": {
+    "writersDisabled": true,
+    "activeParses": 0,
+    "activePublications": 0,
+    "pendingJobs": 0,
+    "evidenceReference": "<target drain evidence>",
+    "confirmedAt": "<UTC timestamp before target export>",
+    "validUntil": "<UTC timestamp covering authorization expiry>"
+  }
+}
+```
+
+Planning verifies Postgres against the source in a read-only transaction and writes a protected plan and receipt. Review every resulting change and retain the exact `reverse-replay-plan.json` bytes. Its SHA-256 is recorded as `planArtifactDigest` in the receipt.
+
+Production apply requires another authorization with `scope: "after-writes-apply"`, the same frozen export, current writer evidence, and these additional fields: `reviewedPlanDigest`, `replayDigest`, `reviewedAt`, and `reviewedBy`. The review time must fall between the target export and owner authorization. Use `--mode after-writes --apply true --reviewed-plan .migration/<reviewed-plan-run>/reverse-replay-plan.json`, the apply authorization file, and a fresh run ID. The CLI recomputes the plan from the bound packets and requires the complete plan and replay checksum to equal the reviewed artifact before opening a write connection. A plan approval cannot be reused as apply approval.
+
+SQL apply qualifies all retained tables with `public`, locks them before checking for custom triggers, rules, row-level security or table inheritance, and rejects such custom write behavior. It verifies the actual target identity and approval expiry before writing, then reconciles the result within the same transaction. Statement and lock timeouts limit waiting, and expiry is checked again before the transaction returns. Receipts preserve the authorization identity, dates and all artifact digests. Actual application restoration remains a separate operator step.
 
 ## Recovery gates
 

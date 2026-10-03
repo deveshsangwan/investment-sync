@@ -280,7 +280,7 @@ async function readSqlTables(sql) {
       return `'${column}', ${expression}`;
     });
     const rows = await sql.unsafe(
-      `select jsonb_build_object(${entries.join(", ")}) as row from "${table}" order by id`,
+      `select jsonb_build_object(${entries.join(", ")}) as row from "public"."${table}" order by id`,
     );
     tables[table] = rows.map((item) => item.row);
   }
@@ -288,24 +288,36 @@ async function readSqlTables(sql) {
   return normalizeSqlTables(tables);
 }
 
-async function verifyBeforeWrites(sql, sourceTables) {
+async function verifyBeforeWrites(sql, sourceTables, expectedDatabaseName) {
   return sql.begin(
     "isolation level repeatable read read only",
     async (transaction) => {
+      await configureRecoveryTimeouts(transaction, expectedDatabaseName);
+      await verifyDatabaseIdentity(transaction, expectedDatabaseName, true);
+
       const currentTables = await readSqlTables(transaction);
       if (digest(currentTables) !== digest(normalizeSqlTables(sourceTables)))
         throw new Error("Postgres differs from the frozen source snapshot");
+
+      requireCurrentScope(expectedDatabaseName);
 
       return {
         sourceDigest: digest(currentTables),
         counts: tableCounts(currentTables),
         unchanged: true,
+        readOnlyTransaction: true,
       };
     },
   );
 }
 
-async function applyReverseReplay(sql, plan) {
+async function applyReverseReplay(sql, plan, expectedDatabaseName) {
+  if (
+    typeof expectedDatabaseName === "object" &&
+    plan.sourceKind !== "production"
+  )
+    throw new Error("Production replay requires a production plan");
+
   const desiredTables = normalizeSqlTables(plan.tables);
   const baselineTables = normalizeSqlTables(plan.sourceTables);
   if (
@@ -317,17 +329,35 @@ async function applyReverseReplay(sql, plan) {
   }
 
   return sql.begin("isolation level serializable", async (transaction) => {
-    // The old build and every source writer must stay paused throughout replay.
+    await configureRecoveryTimeouts(transaction, expectedDatabaseName);
+
+    // Lock before any SELECT establishes the serializable snapshot so commits
+    // made while waiting for a source writer remain visible to reconciliation.
     await transaction.unsafe(
       `lock table ${Object.keys(TABLE_COLUMNS)
-        .map((table) => `"${table}"`)
+        .map((table) => `"public"."${table}"`)
         .join(", ")} in exclusive mode`,
     );
+    await verifyDatabaseIdentity(transaction, expectedDatabaseName);
+
+    if (typeof expectedDatabaseName === "object") {
+      const sideEffects = await transaction.unsafe(
+        "select 1 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[]) and not t.tgisinternal union all select 1 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[]) and (c.relkind <> 'r' or c.relrowsecurity or c.relhassubclass) union all select 1 from pg_catalog.pg_inherits i join pg_catalog.pg_class c on c.oid = i.inhrelid or c.oid = i.inhparent join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[]) union all select 1 from pg_catalog.pg_rewrite r join pg_catalog.pg_class c on c.oid = r.ev_class join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any($1::text[])",
+        [Object.keys(TABLE_COLUMNS)],
+      );
+      if (sideEffects.length)
+        throw new Error(
+          "Production replay refuses custom database write behavior",
+        );
+    }
+
     const currentTables = await readSqlTables(transaction);
     const currentDigest = digest(currentTables);
     const desiredDigest = digest(desiredTables);
 
     if (currentDigest === desiredDigest) {
+      requireCurrentScope(expectedDatabaseName);
+
       return {
         applied: false,
         alreadyApplied: true,
@@ -340,6 +370,8 @@ async function applyReverseReplay(sql, plan) {
       throw new Error("Refusing reverse replay into divergent Postgres data");
 
     for (const [table, rows] of Object.entries(desiredTables)) {
+      requireCurrentScope(expectedDatabaseName);
+
       const previous = new Map(
         baselineTables[table].map((row) => [row.id, row]),
       );
@@ -360,7 +392,7 @@ async function applyReverseReplay(sql, plan) {
           JSON_COLUMNS.has(column) ? JSON.stringify(row[column]) : row[column],
         );
         await transaction.unsafe(
-          `insert into "${table}" (${columns.map((column) => `"${column}"`).join(", ")}) values (${placeholders.join(", ")}) on conflict (id) do update set ${updates.join(", ")}`,
+          `insert into "public"."${table}" (${columns.map((column) => `"${column}"`).join(", ")}) values (${placeholders.join(", ")}) on conflict (id) do update set ${updates.join(", ")}`,
           values,
         );
       }
@@ -372,6 +404,8 @@ async function applyReverseReplay(sql, plan) {
         "Reverse replay reconciliation failed; transaction rolled back",
       );
 
+    requireCurrentScope(expectedDatabaseName);
+
     return {
       applied: true,
       alreadyApplied: false,
@@ -379,6 +413,62 @@ async function applyReverseReplay(sql, plan) {
       counts: tableCounts(actualTables),
     };
   });
+}
+
+async function verifyDatabaseIdentity(
+  sql,
+  expectedDatabase,
+  isReadOnly = false,
+) {
+  const [identity] = await sql.unsafe(
+    "select current_database() as database_name, current_user as database_user, session_user as session_user, current_schema() as schema_name, current_setting('transaction_read_only') as read_only",
+  );
+  if (isReadOnly && identity?.read_only !== "on")
+    throw new Error("Rollback verification requires a read-only transaction");
+
+  if (expectedDatabase === undefined) return;
+
+  const name =
+    typeof expectedDatabase === "string"
+      ? expectedDatabase
+      : expectedDatabase.name;
+  if (
+    identity?.database_name !== name ||
+    (typeof expectedDatabase === "object" &&
+      (identity.database_user !== expectedDatabase.username ||
+        identity.session_user !== expectedDatabase.username ||
+        identity.schema_name !== "public"))
+  )
+    throw new Error(
+      "Postgres session does not match the expected recovery database",
+    );
+
+  requireCurrentScope(expectedDatabase);
+}
+
+async function configureRecoveryTimeouts(sql, expectedDatabase) {
+  requireCurrentScope(expectedDatabase);
+
+  if (typeof expectedDatabase === "object") {
+    const remaining = Date.parse(expectedDatabase.expiresAt) - Date.now();
+    await sql.unsafe(
+      `set local statement_timeout = '${Math.max(1, Math.min(remaining, 60000))}ms'`,
+    );
+    await sql.unsafe(
+      `set local lock_timeout = '${Math.max(1, Math.min(remaining, 10000))}ms'`,
+    );
+  }
+}
+
+function requireCurrentScope(expectedDatabase) {
+  if (
+    typeof expectedDatabase === "object" &&
+    (!Number.isFinite(Date.parse(expectedDatabase.expiresAt)) ||
+      Date.parse(expectedDatabase.expiresAt) <= Date.now())
+  )
+    throw new Error(
+      "Production recovery operator scope expired during verification",
+    );
 }
 
 function tableCounts(tables) {

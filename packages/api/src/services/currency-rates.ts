@@ -2,6 +2,11 @@ import { currencyRates, type Database } from "@investment-sync/db";
 import { and, eq, sql } from "drizzle-orm";
 import { Clock, Data, Effect, Schedule, Schema, SynchronizedRef } from "effect";
 import { logger } from "../logger";
+import { isSourceWritesPaused } from "../config";
+import {
+  assertSourceWritesAllowed,
+  SourceWritesPausedError,
+} from "../source-writes";
 
 const USD_INR_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const USD_INR_MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -87,6 +92,18 @@ function loadUsdInrRate(
         return Effect.succeed({ rate: persisted, isStale: false });
       }
 
+      if (isSourceWritesPaused()) {
+        const stale = newestUsableStale(cached, persisted, now);
+
+        return stale
+          ? Effect.succeed({ rate: stale, isStale: true })
+          : Effect.fail(
+              new CurrencyRateUnavailableError({
+                message: "USD/INR exchange rate is unavailable",
+              }),
+            );
+      }
+
       return fetchUsdInrRateOnce().pipe(
         Effect.retry({
           times: 1,
@@ -105,7 +122,10 @@ function loadUsdInrRate(
         Effect.tap((rate) => persistUsdInrRateEffect(db, rate)),
         Effect.map((rate) => ({ rate, isStale: false })),
         Effect.catchAll((error) => {
-          logger.warn("USD/INR rate fetch failed", { error: error.message });
+          if (!(error.cause instanceof SourceWritesPausedError)) {
+            logger.warn("USD/INR rate fetch failed", { error: error.message });
+          }
+
           const stale = newestUsableStale(cached, persisted, now);
           return stale
             ? Effect.succeed({ rate: stale, isStale: true })
@@ -122,15 +142,18 @@ function loadUsdInrRate(
 
 function fetchUsdInrRateOnce() {
   return Effect.tryPromise({
-    try: (signal) =>
-      fetch(FRANKFURTER_USD_INR_URL, {
+    try: (signal) => {
+      assertSourceWritesAllowed();
+
+      return fetch(FRANKFURTER_USD_INR_URL, {
         headers: { accept: "application/json" },
         signal,
-      }),
+      });
+    },
     catch: (cause) =>
       new CurrencyRateProviderError({
         message: "Frankfurter request failed",
-        retryable: true,
+        retryable: !(cause instanceof SourceWritesPausedError),
         cause,
       }),
   }).pipe(
@@ -179,6 +202,9 @@ function fetchUsdInrRateOnce() {
 
 async function persistUsdInrRate(db: Database | undefined, rate: CachedRate) {
   if (!db) return;
+
+  assertSourceWritesAllowed();
+
   await db
     .insert(currencyRates)
     .values({
@@ -205,6 +231,8 @@ function persistUsdInrRateEffect(db: Database | undefined, rate: CachedRate) {
   }).pipe(
     Effect.catchAll((error) =>
       Effect.sync(() => {
+        if (error instanceof SourceWritesPausedError) return;
+
         logger.warn("USD/INR rate persistence failed", {
           error: error instanceof Error ? error.message : String(error),
         });

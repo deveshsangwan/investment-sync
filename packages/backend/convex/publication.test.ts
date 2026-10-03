@@ -7,6 +7,7 @@ import { projectionRecords } from "./model/publicationProjection";
 import { chunkRows, digest, parseRows, utf8Bytes } from "./model/importLimits";
 import schema from "./schema";
 import { modules } from "./test.setup";
+import { portfolioLimits } from "./model/portfolioLimits";
 
 afterEach(() => {
   vi.clearAllTimers();
@@ -362,6 +363,67 @@ describe("production publication readiness", () => {
     } finally {
       diagnostics.mockRestore();
     }
+  });
+
+  it("reports combined history capacity without publishing the incoming import", async () => {
+    const { t, owner, prepared, args } = await smallPublication(
+      "fake-capacity-combined-history",
+      capacityRows(0).slice(0, 1),
+      false,
+    );
+    const row = capacityRows(0)[0];
+    if (!row || row.kind !== "holding")
+      throw new Error("Missing holding fixture");
+
+    await t.run(async (ctx) => {
+      let historyBytes = 0;
+      for (let index = 0; index < portfolioLimits.facts; index++) {
+        const factJson = JSON.stringify({
+          row,
+          provenance: {
+            batchId: "fake-history",
+            parserVersion: "fake-capacity-decimal-v1",
+            sequence: 0,
+            rowNumber: index + 1,
+            fallbackDate: "2025-01-01",
+          },
+        });
+        historyBytes += utf8Bytes(factJson);
+        await ctx.db.insert("holdingSnapshots", {
+          householdId: prepared.householdId,
+          key: `fake-history-${index}`,
+          positionKey: "fake-position",
+          instrumentKey: "fake-instrument",
+          sourceGroupKey: "fake-group",
+          date: "2025-01-01",
+          factJson,
+        });
+      }
+      expect(historyBytes).toBeLessThan(portfolioLimits.householdFactBytes);
+    });
+
+    await t.action(internal.actions.publishPortfolio.publishPortfolio, args);
+    await expect(
+      owner.query(api.imports.get, { batchId: prepared.batchId }),
+    ).resolves.toMatchObject({
+      status: "parsed",
+      errorMessage:
+        "Household history exceeds the supported publication capacity",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("holdingSnapshots").collect()).toHaveLength(
+        portfolioLimits.facts,
+      );
+      expect(await ctx.db.query("importDedupeKeys").collect()).toHaveLength(0);
+      expect(
+        await ctx.db.get("portfolioVersions", args.versionId),
+      ).toMatchObject({
+        publicationState: "failed",
+      });
+      expect(
+        await ctx.db.get("households", prepared.householdId),
+      ).not.toHaveProperty("activePortfolioVersionId");
+    });
   });
 
   it("explains derived-size rejection after a normalized row fits parsing", async () => {

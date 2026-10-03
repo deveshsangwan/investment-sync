@@ -2,7 +2,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const { createRequire } = require("node:module");
-const nodeCrypto = require("node:crypto");
 const {
   assertAllowedArguments,
   createProtectedRunDirectory,
@@ -18,7 +17,13 @@ const {
 const {
   applyReverseReplay,
   verifyBeforeWrites,
+  stableJson,
 } = require("./reverse-replay-postgres.cjs");
+const { readSnapshot } = require("./phase6-artifacts.cjs");
+const {
+  artifactDigest,
+  requireProductionRecovery,
+} = require("./rollback-production.cjs");
 
 async function main() {
   const argumentsMap = parseArguments(process.argv.slice(2));
@@ -32,6 +37,13 @@ async function main() {
     "apply",
     "rollback-commit",
     "rollback-config-file",
+    "target",
+    "authorization-file",
+    "expected-database-host",
+    "expected-database-name",
+    "expected-convex-deployment",
+    "rollback-build-file",
+    "reviewed-plan",
   ]);
   const mode = argumentsMap.get("mode");
   if (!["before-writes", "after-writes"].includes(mode))
@@ -55,30 +67,133 @@ async function main() {
   const rollbackConfiguration = readProtectedFile(
     argumentsMap.get("rollback-config-file"),
   );
-  const sourceSnapshot = JSON.parse(
-    readProtectedFile(argumentsMap.get("snapshot")),
-  );
-  if (sourceSnapshot.sourceKind !== "synthetic")
-    throw new Error(
-      "Phase 6 rollback refuses production data; production replay requires Phase 7 authorization",
-    );
+  const sourceContents = readProtectedFile(argumentsMap.get("snapshot"));
+  const sourceSnapshot = JSON.parse(sourceContents);
+  if (!["synthetic", "production"].includes(sourceSnapshot.sourceKind))
+    throw new Error("Rollback source classification is unknown");
+
+  const targetContents = readProtectedFile(argumentsMap.get("target-export"));
+  const targetSnapshot = JSON.parse(targetContents);
+  const baselineContents =
+    mode === "before-writes"
+      ? readProtectedFile(argumentsMap.get("target-baseline"))
+      : undefined;
+  const initialTarget = baselineContents
+    ? JSON.parse(baselineContents)
+    : undefined;
 
   const envFile = argumentsMap.get("env-file");
   if (!envFile) throw new Error("Pass an explicit --env-file");
+  const environmentContents = readProtectedFile(envFile);
+  const environmentKeys = environmentContents
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.slice(0, line.indexOf("=")).trim());
+  if (new Set(environmentKeys).size !== environmentKeys.length)
+    throw new Error("Rollback environment contains duplicate settings");
+
   const environment = loadExplicitEnvironment(path.resolve(envFile));
+  const plan = buildReverseReplayPlan({
+    sourceSnapshot,
+    targetSnapshot: mode === "before-writes" ? initialTarget : targetSnapshot,
+  });
   const parsed = new URL(environment.DATABASE_URL ?? "");
-  if (
-    !["postgres:", "postgresql:"].includes(parsed.protocol) ||
-    !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
-    !/^\/investment_sync_rollback_[a-z0-9_]+$/.test(parsed.pathname)
-  )
-    throw new Error(
-      "Synthetic replay requires a dedicated local investment_sync_rollback_ database",
+  let production;
+  let authorizationContents;
+  if (sourceSnapshot.sourceKind === "production") {
+    if (
+      stableJson(readSnapshot(argumentsMap.get("snapshot"))) !==
+      stableJson(sourceSnapshot)
+    )
+      throw new Error("Production source artifact changed during validation");
+    authorizationContents = readProtectedFile(
+      argumentsMap.get("authorization-file"),
     );
-  const postgres = createRequire(
-    path.resolve(process.cwd(), "packages/db/package.json"),
-  )("postgres");
-  const sql = postgres(parsed.toString(), { max: 1, onnotice: () => {} });
+    const rollbackBuild = readProtectedFile(
+      argumentsMap.get("rollback-build-file"),
+      null,
+    );
+    const reviewedPlanContents = argumentsMap.has("reviewed-plan")
+      ? readProtectedFile(argumentsMap.get("reviewed-plan"))
+      : undefined;
+    production = requireProductionRecovery({
+      argumentsMap,
+      environment,
+      authorization: JSON.parse(authorizationContents),
+      sourceSnapshot,
+      sourceContents,
+      targetSnapshot,
+      targetContents,
+      baselineSnapshot: initialTarget,
+      baselineContents,
+      rollbackCommit,
+      rollbackConfiguration,
+      rollbackBuild,
+      databaseCa: environment.ROLLBACK_DATABASE_CA_FILE
+        ? readProtectedFile(environment.ROLLBACK_DATABASE_CA_FILE, null)
+        : undefined,
+      environmentContents,
+      plan,
+      reviewedPlanContents,
+      reviewedPlan: reviewedPlanContents
+        ? JSON.parse(reviewedPlanContents)
+        : undefined,
+    });
+  } else {
+    if (
+      [
+        "target",
+        "authorization-file",
+        "expected-database-host",
+        "expected-database-name",
+        "expected-convex-deployment",
+        "rollback-build-file",
+        "reviewed-plan",
+      ].some((name) => argumentsMap.has(name)) ||
+      Object.keys(process.env).some((key) => key.startsWith("PG")) ||
+      parsed.search ||
+      parsed.hash ||
+      !parsed.username ||
+      !parsed.password ||
+      !["postgres:", "postgresql:"].includes(parsed.protocol) ||
+      !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+      !/^\/investment_sync_rollback_[a-z0-9_]+$/.test(parsed.pathname)
+    )
+      throw new Error(
+        "Synthetic replay requires a dedicated local investment_sync_rollback_ database",
+      );
+  }
+
+  const receipt = {
+    schemaVersion: 1,
+    sourceKind: sourceSnapshot.sourceKind,
+    mode,
+    apply: argumentsMap.get("apply") === "true",
+    rollbackCommit,
+    configurationDigest: artifactDigest(rollbackConfiguration),
+    applicationRestored: false,
+    ...(production
+      ? {
+          productionAuthorization: {
+            ...production.receipt,
+            authorizationDigest: artifactDigest(authorizationContents),
+          },
+        }
+      : {}),
+  };
+  if (mode === "before-writes") {
+    receipt.targetVerification = verifyNoConvexWrites(
+      initialTarget,
+      targetSnapshot,
+    );
+    if (
+      plan.newCommittedBatches.length ||
+      plan.sourceDigest !== plan.replayDigest
+    )
+      throw new ReverseReplayError("target_baseline_differs_from_source");
+  }
+
   const runDirectory = createProtectedRunDirectory(runId);
   if (
     fs.existsSync(path.join(runDirectory, "rollback-receipt.json")) ||
@@ -87,55 +202,42 @@ async function main() {
     throw new Error(
       "Use a new rollback run ID; existing artifacts cannot be overwritten",
     );
-  const receipt = {
-    schemaVersion: 1,
-    sourceKind: "synthetic",
-    mode,
-    rollbackCommit,
-    configurationDigest: nodeCrypto
-      .createHash("sha256")
-      .update(rollbackConfiguration)
-      .digest("hex"),
-    applicationRestored: false,
-  };
+  const postgres = createRequire(
+    path.resolve(process.cwd(), "packages/db/package.json"),
+  )("postgres");
+  const sql = postgres({
+    host: parsed.hostname,
+    port: Number(parsed.port || 5432),
+    database: parsed.pathname.slice(1),
+    username: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    max: 1,
+    onnotice: () => {},
+    ...production?.postgresOptions,
+  });
 
   try {
     if (mode === "before-writes") {
-      const initialTarget = JSON.parse(
-        readProtectedFile(argumentsMap.get("target-baseline")),
-      );
-      const currentTarget = JSON.parse(
-        readProtectedFile(argumentsMap.get("target-export")),
-      );
-      receipt.targetVerification = verifyNoConvexWrites(
-        initialTarget,
-        currentTarget,
-      );
-      const initialPlan = buildReverseReplayPlan({
-        sourceSnapshot,
-        targetSnapshot: initialTarget,
-      });
-      if (
-        initialPlan.newCommittedBatches.length ||
-        initialPlan.sourceDigest !== initialPlan.replayDigest
-      )
-        throw new ReverseReplayError("target_baseline_differs_from_source");
       receipt.verification = await verifyBeforeWrites(
         sql,
         sourceSnapshot.tables,
+        production?.databaseIdentity,
       );
     } else {
-      const targetSnapshot = JSON.parse(
-        readProtectedFile(argumentsMap.get("target-export")),
-      );
-      const plan = buildReverseReplayPlan({ sourceSnapshot, targetSnapshot });
       writeProtectedJson(runDirectory, "reverse-replay-plan.json", plan);
       receipt.planDigest = plan.replayDigest;
+      receipt.planArtifactDigest = artifactDigest(
+        `${JSON.stringify(plan, null, 2)}\n`,
+      );
       receipt.newCommittedBatches = plan.newCommittedBatches.length;
       receipt.verification =
         argumentsMap.get("apply") === "true"
-          ? await applyReverseReplay(sql, plan)
-          : await verifyBeforeWrites(sql, sourceSnapshot.tables);
+          ? await applyReverseReplay(sql, plan, production?.databaseIdentity)
+          : await verifyBeforeWrites(
+              sql,
+              sourceSnapshot.tables,
+              production?.databaseIdentity,
+            );
     }
 
     writeProtectedJson(runDirectory, "rollback-receipt.json", receipt);
@@ -147,7 +249,7 @@ async function main() {
   }
 }
 
-function readProtectedFile(fileName) {
+function readProtectedFile(fileName, encoding = "utf8") {
   if (!fileName)
     throw new Error("A required protected artifact path is missing");
   const root = path.resolve(process.cwd(), ".migration");
@@ -174,7 +276,7 @@ function readProtectedFile(fileName) {
       throw new Error("Rollback artifact directories must be private");
   }
 
-  return fs.readFileSync(target, "utf8");
+  return fs.readFileSync(target, encoding);
 }
 
 if (require.main === module) {
@@ -193,4 +295,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { readProtectedFile };
+module.exports = { main, readProtectedFile };

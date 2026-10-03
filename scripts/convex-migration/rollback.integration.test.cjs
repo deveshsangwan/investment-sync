@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 const { execFileSync } = require("node:child_process");
+const { randomUUID } = require("node:crypto");
 const test = require("node:test");
 const {
   createRollbackFixture,
@@ -73,13 +74,97 @@ test(
         fixture.sourceSnapshot.tables,
       );
       assert.equal(before.unchanged, true);
+      assert.equal(before.readOnlyTransaction, true);
+      const identity = {
+        name: databaseName,
+        username: decodeURIComponent(parsed.username),
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      };
+      await sql.unsafe(
+        "create temp table users as select * from public.users with no data",
+      );
+      const protectedBefore = await verifyBeforeWrites(
+        sql,
+        fixture.sourceSnapshot.tables,
+        identity,
+      );
+      assert.equal(protectedBefore.readOnlyTransaction, true);
+      await sql.unsafe("drop table pg_temp.users");
+      await assert.rejects(
+        verifyBeforeWrites(sql, fixture.sourceSnapshot.tables, {
+          ...identity,
+          name: "wrong_database",
+        }),
+        /expected recovery database/,
+      );
+      await assert.rejects(
+        verifyBeforeWrites(sql, fixture.sourceSnapshot.tables, {
+          ...identity,
+          username: "wrong_role",
+        }),
+        /expected recovery database/,
+      );
+      await assert.rejects(
+        verifyBeforeWrites(sql, fixture.sourceSnapshot.tables, {
+          ...identity,
+          expiresAt: new Date(Date.now() - 1000).toISOString(),
+        }),
+        /scope expired/,
+      );
+      await assert.rejects(
+        sql.begin(
+          "isolation level repeatable read read only",
+          async (transaction) => {
+            await transaction.unsafe(
+              "update public.users set email = 'generated-forbidden@example.invalid'",
+            );
+          },
+        ),
+        /read-only transaction/,
+      );
+      assert.equal(digest(await readSqlTables(sql)), before.sourceDigest);
       const plan = buildReverseReplayPlan(fixture);
+
+      await assertReplayRejectsConcurrentCommit({
+        postgres,
+        databaseUrl: parsed.toString(),
+        admin,
+        plan,
+        identity,
+      });
+      assert.equal(digest(await readSqlTables(sql)), before.sourceDigest);
+
+      await sql.unsafe("create table public.generated_parent (id uuid)");
+      await sql.unsafe(
+        "alter table public.users inherit public.generated_parent",
+      );
+      await assert.rejects(
+        applyReverseReplay(
+          sql,
+          { ...plan, sourceKind: "production" },
+          identity,
+        ),
+        /custom database write behavior/,
+      );
+      assert.equal(digest(await readSqlTables(sql)), before.sourceDigest);
+      await sql.unsafe(
+        "alter table public.users no inherit public.generated_parent",
+      );
+      await sql.unsafe("drop table public.generated_parent");
 
       await sql.unsafe(
         "create function pg_temp.reject_replay() returns trigger language plpgsql as $$ begin raise exception 'synthetic interrupted write'; end $$",
       );
       await sql.unsafe(
         "create trigger reject_replay before insert on transactions for each row execute function pg_temp.reject_replay()",
+      );
+      await assert.rejects(
+        applyReverseReplay(
+          sql,
+          { ...plan, sourceKind: "production" },
+          identity,
+        ),
+        /custom database write behavior/,
       );
       await assert.rejects(
         applyReverseReplay(sql, plan),
@@ -105,7 +190,11 @@ test(
         0o600,
       );
 
-      const applied = await applyReverseReplay(sql, plan);
+      const applied = await applyReverseReplay(
+        sql,
+        { ...plan, sourceKind: "production" },
+        identity,
+      );
       assert.equal(applied.applied, true);
       assert.equal(applied.counts.households, 2);
       assert.equal(applied.counts.import_batches, 3);
@@ -157,6 +246,79 @@ test(
     }
   },
 );
+
+async function assertReplayRejectsConcurrentCommit({
+  postgres,
+  databaseUrl,
+  admin,
+  plan,
+  identity,
+}) {
+  const writer = postgres(databaseUrl, { max: 1, onnotice: () => {} });
+  const replayer = postgres(databaseUrl, { max: 1, onnotice: () => {} });
+  const userId = randomUUID();
+  let replayResult;
+
+  try {
+    const [{ pid }] = await replayer.unsafe("select pg_backend_pid() as pid");
+    await writer.unsafe("begin");
+    await writer.unsafe("lock table public.users in row exclusive mode");
+
+    replayResult = applyReverseReplay(
+      replayer,
+      { ...plan, sourceKind: "production" },
+      identity,
+    ).then(
+      (value) => ({ status: "fulfilled", value }),
+      (error) => ({ status: "rejected", error }),
+    );
+
+    const deadline = Date.now() + 5000;
+    let isWaitingForLock = false;
+    while (Date.now() < deadline) {
+      const [activity] = await admin.unsafe(
+        "select wait_event_type from pg_catalog.pg_stat_activity where pid = $1",
+        [pid],
+      );
+      if (activity?.wait_event_type === "Lock") {
+        isWaitingForLock = true;
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal(
+      isWaitingForLock,
+      true,
+      "Replay must be waiting for the writer",
+    );
+
+    await writer.unsafe(
+      "insert into public.users (id, clerk_user_id, email) values ($1, 'synthetic_concurrent', 'concurrent@example.invalid')",
+      [userId],
+    );
+    await writer.unsafe("commit");
+
+    const result = await replayResult;
+    assert.equal(result.status, "rejected");
+    assert.match(result.error.message, /divergent Postgres data/);
+    const currentTables = await readSqlTables(writer);
+    assert.equal(
+      currentTables.users.length,
+      plan.sourceTables.users.length + 1,
+    );
+    assert.equal(
+      currentTables.transactions.length,
+      plan.sourceTables.transactions.length,
+    );
+    await writer.unsafe("delete from public.users where id = $1", [userId]);
+  } finally {
+    await writer.unsafe("rollback");
+    if (replayResult) await replayResult;
+    await writer.end();
+    await replayer.end();
+  }
+}
 
 function prepareCliArtifacts(fixture, databaseUrl) {
   const root = path.resolve(process.cwd(), ".migration");

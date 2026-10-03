@@ -15,9 +15,10 @@ import {
   type NormalizedImportRow,
 } from "@investment-sync/importers";
 import { Clock, Effect } from "effect";
+import { assertSourceWritesAllowed } from "../source-writes";
 import {
   duplicateImportError,
-  importEffect,
+  importWriteEffect,
   ImportConflictError,
   type ImportDependencies,
   ImportNotFoundError,
@@ -51,7 +52,7 @@ export function commitImport(
 ) {
   return Clock.currentTimeMillis.pipe(
     Effect.flatMap((now) =>
-      importEffect(() =>
+      importWriteEffect(() =>
         commitImportPromise(
           dependencies,
           membership,
@@ -70,6 +71,8 @@ async function commitImportPromise(
   committedAt: Date,
 ) {
   const committed = await ctx.db.transaction(async (tx) => {
+    assertSourceWritesAllowed();
+
     const db: ImportDatabase = tx;
     // ponytail: the constant key serializes every import commit to prevent
     // identity races; scope by normalized identities when throughput requires it.
@@ -155,6 +158,9 @@ async function commitImportPromise(
         accountRows.push(row.payload);
       }
     }
+
+    assertSourceWritesAllowed();
+
     const accountIds = await ensureAccounts(
       db,
       membership.householdId,
@@ -193,6 +199,8 @@ async function commitImportPromise(
     });
 
     if (holdingValues.length > 0) {
+      assertSourceWritesAllowed();
+
       await db
         .insert(holdingSnapshots)
         .values(holdingValues)
@@ -251,6 +259,8 @@ async function commitImportPromise(
     });
 
     if (transactionValues.length > 0) {
+      assertSourceWritesAllowed();
+
       await db
         .insert(transactions)
         .values(transactionValues)
@@ -291,6 +301,8 @@ async function commitImportPromise(
     });
 
     if (valuationValues.length > 0) {
+      assertSourceWritesAllowed();
+
       await db
         .insert(portfolioValuations)
         .values(valuationValues)
@@ -310,12 +322,16 @@ async function commitImportPromise(
     }
 
     const committedRowIds = parsedRows.map((row) => row.id);
+    assertSourceWritesAllowed();
+
     if (committedRowIds.length > 0) {
       await db
         .update(importRows)
         .set({ isCommitted: true })
         .where(inArray(importRows.id, committedRowIds));
     }
+
+    assertSourceWritesAllowed();
 
     await db
       .update(importBatches)
@@ -326,6 +342,8 @@ async function commitImportPromise(
           eq(importBatches.householdId, membership.householdId),
         ),
       );
+
+    assertSourceWritesAllowed();
 
     return parsedRows.length;
   });
@@ -364,6 +382,8 @@ async function ensureAccounts(
   );
 
   if (missing.length > 0) {
+    assertSourceWritesAllowed();
+
     await db
       .insert(accounts)
       .values(
@@ -437,6 +457,8 @@ async function ensureInstruments(
   );
 
   if (missing.length > 0) {
+    assertSourceWritesAllowed();
+
     await db
       .insert(instruments)
       .values(
