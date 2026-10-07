@@ -222,6 +222,13 @@ export function UploadsClient() {
       <PageHeader
         title="Imports"
         description="Select a statement, check what was detected, then apply it. Nothing changes in your portfolio until you apply."
+        action={
+          hasUploadPermission ? (
+            <Button asChild variant="outline">
+              <Link href="/holdings/manual">Add manually</Link>
+            </Button>
+          ) : undefined
+        }
         meta={
           <p className="text-xs text-muted-foreground">
             Source files are kept for 30 days. Import history stays available
@@ -569,7 +576,10 @@ export function UploadsClient() {
                             {batch.fileName}
                           </p>
                           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            {sourceLabel(batch.sourceType)} · uploaded{" "}
+                            {sourceLabel(batch.sourceType)} ·{" "}
+                            {batch.sourceType === "manual_snapshot"
+                              ? "entered"
+                              : "uploaded"}{" "}
                             {formatDate(batch.createdAt)} ·{" "}
                             {batch.rowCount.toLocaleString("en-IN")} normalized
                             rows
@@ -867,9 +877,13 @@ function historyWorkflow(batch: {
 function historyRetention(batch: {
   status: string;
   fileAvailable: boolean;
-  expiresAt: number;
+  expiresAt: number | null;
   processedAt: number | null;
 }) {
+  if (batch.expiresAt === null) {
+    return { label: "Entered manually · value history retained" };
+  }
+
   if (!batch.fileAvailable) {
     return {
       label: batch.processedAt

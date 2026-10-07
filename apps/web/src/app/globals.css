@@ -621,6 +621,14 @@ select {
   border-color: hsl(var(--foreground) / 0.4);
   background: hsl(var(--secondary));
 }
+
+.select-trigger:focus-visible,
+.manual-entry-input:focus-visible {
+  outline: none;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 1px hsl(var(--ring));
+}
+
 .select-content {
   z-index: 70;
   min-width: var(--radix-select-trigger-width);

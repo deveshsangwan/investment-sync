@@ -42,6 +42,7 @@ export interface NormalizedHoldingRow {
   accountName: string;
   provider: string;
   instrumentName: string;
+  policyId?: string;
   symbol?: string;
   isin?: string;
   assetClass: AssetClass;
@@ -60,6 +61,7 @@ export interface NormalizedTransactionRow {
   accountName: string;
   provider: string;
   instrumentName: string;
+  policyId?: string;
   symbol?: string;
   assetClass: AssetClass;
   currency: Currency;
@@ -155,6 +157,7 @@ export const normalizedHoldingRowSchema = z.object({
   accountName: z.string().min(1),
   provider: z.string().min(1),
   instrumentName: z.string().min(1),
+  policyId: z.string().min(1).optional(),
   symbol: z.string().min(1).optional(),
   isin: z.string().min(1).optional(),
   assetClass: assetClassSchema,
@@ -173,6 +176,7 @@ export const normalizedTransactionRowSchema = z.object({
   accountName: z.string().min(1),
   provider: z.string().min(1),
   instrumentName: z.string().min(1),
+  policyId: z.string().min(1).optional(),
   symbol: z.string().min(1).optional(),
   assetClass: assetClassSchema,
   currency: currencySchema,

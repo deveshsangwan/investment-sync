@@ -43,6 +43,7 @@ export const performanceDataQualityValidator = v.union(
 );
 
 export const publicHoldingValidator = v.object({
+  manualPolicyId: v.optional(v.string()),
   id: v.string(),
   accountId: v.string(),
   instrumentId: v.string(),

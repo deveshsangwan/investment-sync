@@ -33,7 +33,7 @@ export const batchView = v.object({
   parserVersion: v.union(v.string(), v.null()),
   sourceType: v.union(v.string(), v.null()),
   fileAvailable: v.boolean(),
-  expiresAt: v.number(),
+  expiresAt: v.union(v.number(), v.null()),
   processedAt: v.union(v.number(), v.null()),
   committedAt: v.union(v.number(), v.null()),
   committedVersionId: v.union(v.id("portfolioVersions"), v.null()),

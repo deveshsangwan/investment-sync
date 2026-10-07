@@ -54,6 +54,22 @@ export async function commitBatch(
       digest: version.digest,
     };
   }
+  if (batch.manualPolicyId) {
+    const policy = await ctx.db.get("manualPolicies", batch.manualPolicyId);
+
+    if (
+      !policy ||
+      policy.householdId !== batch.householdId ||
+      policy.latestBatchId !== batch._id
+    ) {
+      throw new ConvexError({
+        code: "CONFLICT",
+        message:
+          "This entry has been replaced by a newer value. Open the policy to update it.",
+      });
+    }
+  }
+
   if (batch.status === "publishing" && batch.publishingVersionId) {
     const version = await ctx.db.get(
       "portfolioVersions",

@@ -1,4 +1,5 @@
 import type { IdentifiedFact } from "@investment-sync/portfolio-domain";
+import { instrumentKey } from "@investment-sync/portfolio-domain";
 import type { WithoutSystemFields } from "convex/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -54,12 +55,13 @@ export async function ensureInstrument(
   const symbol = value.symbol?.trim().toUpperCase();
   if (
     value.key !==
-    JSON.stringify([
-      value.assetClass,
-      value.currency,
-      symbol ? "symbol" : "name",
-      symbol || value.name.trim().toLowerCase(),
-    ])
+    instrumentKey({
+      assetClass: value.assetClass,
+      currency: value.currency,
+      symbol,
+      instrumentName: value.name,
+      policyId: value.policyId,
+    })
   )
     throw new Error("Instrument logical key does not match identity");
 
@@ -73,13 +75,19 @@ export async function ensureInstrument(
     if (
       existing.assetClass !== value.assetClass ||
       existing.currency !== value.currency ||
+      existing.policyId !== value.policyId ||
       existing.symbol?.trim().toUpperCase() !== symbol ||
       (!symbol &&
+        !value.policyId &&
         existing.name.trim().toLowerCase() !== value.name.trim().toLowerCase())
     )
       throw new Error("Conflicting instrument identity");
 
-    // A symbol identifies an instrument independently of later display-name changes.
+    if (value.policyId && existing.name !== value.name) {
+      await ctx.db.patch("instruments", existing._id, { name: value.name });
+    }
+
+    // A symbol or policy ID identifies an instrument independently of its name.
     return existing._id;
   }
 
@@ -193,6 +201,7 @@ export async function persistIdentities(
         householdId,
         key: identity.instrumentKey,
         name: row.instrumentName.trim(),
+        policyId: row.policyId,
         symbol: row.symbol?.trim() || undefined,
         assetClass: row.assetClass,
         currency: row.currency,

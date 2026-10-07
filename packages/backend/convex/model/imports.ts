@@ -93,7 +93,7 @@ export async function readVerifiedRows(
 }
 
 export async function batchToView(ctx: QueryCtx, batch: Doc<"importBatches">) {
-  const file = await sourceFile(ctx, batch._id);
+  const file = batch.manualPolicyId ? null : await sourceFile(ctx, batch._id);
   return {
     id: batch._id,
     fileName: batch.fileName,
@@ -105,8 +105,8 @@ export async function batchToView(ctx: QueryCtx, batch: Doc<"importBatches">) {
     errorMessage: batch.errorMessage ?? null,
     parserVersion: batch.parserVersion ?? null,
     sourceType: batch.sourceType ?? null,
-    fileAvailable: Boolean(file.storageId && file.status === "stored"),
-    expiresAt: file.expiresAt,
+    fileAvailable: Boolean(file?.storageId && file.status === "stored"),
+    expiresAt: file?.expiresAt ?? null,
     processedAt: batch.processedAt ?? null,
     committedAt: batch.committedAt ?? null,
     committedVersionId: batch.committedVersionId ?? null,

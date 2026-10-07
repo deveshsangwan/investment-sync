@@ -4,6 +4,7 @@ import {
   summarizePerformance,
   summarizePortfolio,
   xirrByAssetClass,
+  type ResolvedXirr,
 } from "@investment-sync/analytics";
 import type { AssetClass, Currency } from "@investment-sync/importers";
 import { npsDetailsSchema } from "@investment-sync/importers/nps-details";
@@ -188,6 +189,9 @@ function portfolioOverview(
   quote: ValuationQuote,
 ) {
   const current = currentPositions(projection);
+  const hasManualPolicies = current.some((position) =>
+    isManualPolicy(position.holding),
+  );
   const currencies = [
     ...currentCurrencies(projection),
     ...projection.cashFlows.map((fact) => fact.row.currency),
@@ -219,12 +223,39 @@ function portfolioOverview(
     byAssetClass: xirrByAssetClass({ holdings: performanceHoldings }),
     asOfDate: projection.asOfDate,
   };
+
+  if (hasManualPolicies) {
+    // Snapshot totals do not provide the payment dates required for an XIRR
+    // covering the whole portfolio, even when another asset has cash flows.
+    performance.xirr = undefined;
+    performance.cagr = undefined;
+    performance.dataQuality = "insufficient_data";
+    performance.byAssetClass = performance.byAssetClass.map((asset) =>
+      current.some(
+        (position) =>
+          position.holding.row.assetClass === asset.assetClass &&
+          isManualPolicy(position.holding),
+      )
+        ? { ...asset, xirr: undefined, dataQuality: "insufficient_data" }
+        : asset,
+    );
+  }
+
   const historicalTimeline = projection.timeline.map((point) =>
     timelinePoint(point, rate, projection.hasExplicitValuations),
   );
   const last = historicalTimeline.at(-1);
   let timeline = historicalTimeline;
-  if (summary.asOfDate && (!last || summary.asOfDate >= last.snapshotDate)) {
+  // Reported totals can include assets absent from detailed holdings. The
+  // combined timeline already carries these totals alongside manual policies.
+  const canUseHoldingsSummary =
+    !projection.hasExplicitValuations || !hasManualPolicies;
+
+  if (
+    canUseHoldingsSummary &&
+    summary.asOfDate &&
+    (!last || summary.asOfDate >= last.snapshotDate)
+  ) {
     const currentPoint = {
       snapshotDate: summary.asOfDate,
       investedAmount: summary.investedAmount,
@@ -302,12 +333,14 @@ function assetClassDetail(
     date: new Date(point.snapshotDate),
     ...convertedTimelineAmounts(point, rate),
   }));
-  const resolved = resolveAssetClassXirr({
-    holdings: selected.map((position) =>
-      performanceHolding(position.holding, rate),
-    ),
-    valuations,
-  });
+  const resolved = selected.some((position) => isManualPolicy(position.holding))
+    ? { xirr: undefined, dataQuality: "insufficient_data" as const }
+    : resolveAssetClassXirr({
+        holdings: selected.map((position) =>
+          performanceHolding(position.holding, rate),
+        ),
+        valuations,
+      });
 
   return {
     assetClass: asset.assetClass,
@@ -413,7 +446,11 @@ function positionXirr(
   position: PositionProjection,
   rate: number | undefined,
   acrossAccounts: boolean,
-) {
+): ResolvedXirr {
+  if (isManualPolicy(position.holding)) {
+    return { dataQuality: "insufficient_data" };
+  }
+
   const history = acrossAccounts
     ? position.instrumentHistory
     : position.history;
@@ -438,9 +475,16 @@ function positionXirr(
   });
 }
 
+function isManualPolicy(fact: HoldingFact): boolean {
+  return Boolean(
+    fact.row.policyId && fact.row.sourceType === "manual_snapshot",
+  );
+}
+
 function publicHolding(fact: HoldingFact, rate?: number) {
   const { row } = fact;
   return {
+    ...(row.policyId ? { manualPolicyId: row.policyId } : {}),
     id: fact.positionKey,
     accountId: fact.accountKey,
     instrumentId: fact.instrumentKey,

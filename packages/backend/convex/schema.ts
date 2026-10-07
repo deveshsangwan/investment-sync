@@ -98,6 +98,7 @@ export default defineSchema({
   }).index("by_householdId_and_key", ["householdId", "key"]),
   instruments: defineTable({
     ...legacyFields,
+    policyId: v.optional(v.string()),
     isin: v.optional(v.string()),
     exchange: v.optional(v.string()),
     providerMetadataJson: v.optional(v.string()),
@@ -302,6 +303,9 @@ export default defineSchema({
   }).index("by_base_and_quote_and_provider", ["base", "quote", "provider"]),
   importBatches: defineTable({
     ...legacyFields,
+    manualPolicyId: v.optional(v.id("manualPolicies")),
+    manualRequestId: v.optional(v.string()),
+    manualInputHash: v.optional(v.string()),
     legacyStatus: v.optional(v.string()),
     legacyDeclaredRowCount: v.optional(v.number()),
     legacyErrors: v.optional(v.array(v.string())),
@@ -336,6 +340,10 @@ export default defineSchema({
     publishingVersionId: v.optional(v.id("portfolioVersions")),
   })
     .index("by_householdId", ["householdId"])
+    .index("by_householdId_and_manualRequestId", [
+      "householdId",
+      "manualRequestId",
+    ])
     .index("by_householdId_and_status", ["householdId", "status"])
     .index("by_householdId_and_status_and_committedAt", [
       "householdId",
@@ -344,6 +352,13 @@ export default defineSchema({
     ])
     .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_status_and_stagingExpiresAt", ["status", "stagingExpiresAt"]),
+  manualPolicies: defineTable({
+    householdId: v.id("households"),
+    provider: v.string(),
+    name: v.string(),
+    createdAt: v.number(),
+    latestBatchId: v.optional(v.id("importBatches")),
+  }).index("by_householdId", ["householdId"]),
   sourceFiles: defineTable({
     legacyStoragePath: v.optional(v.string()),
     batchId: v.id("importBatches"),

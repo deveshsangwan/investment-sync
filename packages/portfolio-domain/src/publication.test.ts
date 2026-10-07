@@ -66,6 +66,31 @@ function publish(
   });
 }
 
+function manualPolicy(overrides: Partial<NormalizedHoldingRow> = {}) {
+  const row = holding({
+    policyId: "policy-one",
+    sourceType: "manual_snapshot",
+    accountName: "Bajaj Life",
+    provider: "Bajaj Life",
+    instrumentName: "Goal Assure",
+    symbol: undefined,
+    assetClass: "ulip",
+    ...overrides,
+  });
+
+  if (row.kind !== "holding") throw new Error("Expected a holding");
+
+  return {
+    ...row,
+    source: {
+      group: `manual-policy:${row.policyId}`,
+      completeness: "partial" as const,
+      granularity: "instrument" as const,
+      priority: 0,
+    },
+  };
+}
+
 const quote = {
   status: "fresh" as const,
   rate: "80",
@@ -74,6 +99,146 @@ const quote = {
 };
 
 describe("portfolio publication", () => {
+  it("carries unrelated holdings across manual updates without backfilling or inferring payment dates", () => {
+    const original = publish([
+      holding({ sourceDate: "2024-01-01" }),
+      transaction({ tradeDate: "2023-01-01" }),
+    ]);
+    expect(
+      valuePortfolioPublication(original.projection).overview.performance
+        .dataQuality,
+    ).toBe("exact");
+    const first = publish([manualPolicy()], original.facts, 2);
+    const updated = publish(
+      [
+        manualPolicy({
+          sourceDate: "2026-01-01",
+          currentValue: 130,
+          pnlAmount: 30,
+        }),
+      ],
+      first.facts,
+      3,
+    );
+    const result = valuePortfolioPublication(updated.projection);
+
+    expect(result.positions.current).toHaveLength(2);
+    expect(
+      result.overview.timeline.map((point) => [
+        point.snapshotDate,
+        point.currentValue,
+      ]),
+    ).toEqual([
+      ["2024-01-01", 120],
+      ["2025-01-01", 240],
+      ["2026-01-01", 250],
+    ]);
+    expect(result.overview.performance.xirr).toBeUndefined();
+    expect(result.overview.performance.cagr).toBeUndefined();
+    expect(result.overview.performance.dataQuality).toBe("insufficient_data");
+    const ulip = result.assetClassDetails.find(
+      (asset) => asset.assetClass === "ulip",
+    );
+    expect(ulip?.summary.xirr).toBeUndefined();
+    expect(ulip?.summary.xirrDataQuality).toBe("insufficient_data");
+    const detail = result.holdingDetails.find(
+      (item) => item.holding.manualPolicyId,
+    );
+    expect(detail?.holding.xirr).toBeUndefined();
+    expect(detail?.holding.xirrDataQuality).toBe("insufficient_data");
+    expect(detail?.transactions).toEqual([]);
+  });
+
+  it("adds manual values to reported portfolio history without replacing imported totals", () => {
+    const valuation = (date: string, currentValue: number) =>
+      adaptLegacyRow({
+        kind: "valuation",
+        sourceType: "investment_portfolio_xlsx",
+        valuationDate: date,
+        investedAmount: 1000,
+        currentValue,
+        currency: "INR",
+        metadata: {},
+      });
+    const original = publish([
+      holding({ sourceDate: "2024-12-01" }),
+      valuation("2024-12-01", 1100),
+      valuation("2025-02-01", 1300),
+    ]);
+    const first = publish([manualPolicy()], original.facts, 2);
+    const updated = publish(
+      [
+        manualPolicy({
+          sourceDate: "2025-03-01",
+          currentValue: 130,
+          pnlAmount: 30,
+        }),
+      ],
+      first.facts,
+      3,
+    );
+
+    expect(
+      updated.projection.timeline.map((point) => [
+        point.snapshotDate,
+        point.totals[0]?.currentValue,
+      ]),
+    ).toEqual([
+      ["2024-12-01", "1100"],
+      ["2025-01-01", "1220"],
+      ["2025-02-01", "1420"],
+      ["2025-03-01", "1430"],
+    ]);
+    expect(
+      valuePortfolioPublication(updated.projection).overview.timeline.map(
+        (point) => [point.snapshotDate, point.currentValue],
+      ),
+    ).toEqual([
+      ["2024-12-01", 1100],
+      ["2025-01-01", 1220],
+      ["2025-02-01", 1420],
+      ["2025-03-01", 1430],
+    ]);
+  });
+
+  it("applies backdated identity corrections without replacing newer values or immutable facts", () => {
+    const original = publish([
+      manualPolicy({ sourceDate: "2025-03-01", currentValue: 130 }),
+    ]);
+    const corrected = publish(
+      [
+        manualPolicy({
+          sourceDate: "2025-01-15",
+          provider: "HDFC Life",
+          accountName: "HDFC Life",
+          instrumentName: "Corrected name",
+          currentValue: 125,
+        }),
+      ],
+      original.facts,
+      2,
+    );
+    const result = valuePortfolioPublication(corrected.projection);
+
+    expect(result.positions.current).toHaveLength(1);
+    expect(result.positions.current[0]).toMatchObject({
+      provider: "HDFC Life",
+      instrumentName: "Corrected name",
+      currentValue: "130",
+      snapshotDate: "2025-03-01",
+    });
+    expect(result.holdingDetails[0]?.holding).toMatchObject({
+      provider: "HDFC Life",
+      instrumentName: "Corrected name",
+      currentValue: "130",
+    });
+    expect(corrected.facts[0]).toEqual(original.facts[0]);
+    expect(corrected.facts[0]?.row).toMatchObject({
+      provider: "Bajaj Life",
+      instrumentName: "Goal Assure",
+    });
+  });
+
   it("hashes canonical immutable inputs, including metadata and provenance", () => {
     const first = publish([
       holding({ metadata: { note: "first", nested: { a: 1, b: 2 } } }),

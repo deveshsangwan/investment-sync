@@ -16,6 +16,7 @@ import {
   selectPositions,
   snapshotTimeline,
   valuationTimeline,
+  timelineWithManualPolicies,
 } from "./sourceSnapshots";
 import type {
   HoldingFact,
@@ -126,8 +127,11 @@ export function buildPortfolioPublication(
           .filter((fact) => fact.row.assetClass === assetClass)
           .map((fact) => fact.row),
       ),
-      timeline: snapshotTimeline(
+      timeline: timelineWithManualPolicies(
         eligible.filter((fact) => fact.row.assetClass === assetClass),
+        snapshotTimeline(
+          eligible.filter((fact) => fact.row.assetClass === assetClass),
+        ),
       ),
     }));
   const projection = {
@@ -137,9 +141,13 @@ export function buildPortfolioPublication(
     detailPositions,
     totals,
     assetClasses,
-    timeline: valuations.length
-      ? valuationTimeline(valuations)
-      : snapshotTimeline(eligible),
+    timeline: timelineWithManualPolicies(
+      eligible,
+      valuations.length
+        ? valuationTimeline(valuations)
+        : snapshotTimeline(eligible),
+      valuations.length > 0,
+    ),
     hasExplicitValuations: valuations.length > 0,
     valuations,
     cashFlows: transactions,
@@ -193,6 +201,10 @@ function resolveFacts(facts: PortfolioFact[]) {
     string,
     { instrumentName: string; symbol?: string; isin?: string }
   >();
+  const policyNames = new Map<
+    string,
+    Pick<HoldingRow, "accountName" | "provider" | "instrumentName">
+  >();
 
   for (const fact of facts) {
     const { provenance } = fact;
@@ -217,6 +229,14 @@ function resolveFacts(facts: PortfolioFact[]) {
       continue;
     }
 
+    if (fact.row.policyId && fact.row.sourceType === "manual_snapshot") {
+      policyNames.set(fact.row.policyId, {
+        accountName: fact.row.accountName.trim(),
+        provider: fact.row.provider.trim(),
+        instrumentName: fact.row.instrumentName.trim(),
+      });
+    }
+
     const account = accountKey(fact.row);
     const instrument = instrumentKey(fact.row);
     if (!accountNames.has(account))
@@ -235,12 +255,16 @@ function resolveFacts(facts: PortfolioFact[]) {
     const row = {
       ...fact.row,
       ...accountNames.get(account),
-      ...instrumentNames.get(instrument),
+      ...(fact.row.policyId ? {} : instrumentNames.get(instrument)),
     };
 
     if (row.kind === "holding") {
       const snapshotDate = row.sourceDate ?? provenance.fallbackDate;
-      const key = JSON.stringify([account, instrument, snapshotDate]);
+      const key = JSON.stringify(
+        row.policyId
+          ? [positionKey(row), snapshotDate]
+          : [account, instrument, snapshotDate],
+      );
       identifiedFacts.push({
         ...fact,
         identity: {
@@ -330,7 +354,17 @@ function resolveFacts(facts: PortfolioFact[]) {
 
   return {
     identifiedFacts,
-    holdings: [...holdings.values()],
+    // Names follow the latest submitted correction, while financial values
+    // follow snapshot dates. Immutable source facts retain their original names.
+    holdings: [...holdings.values()].map((holding) => {
+      const names = holding.row.policyId
+        ? policyNames.get(holding.row.policyId)
+        : undefined;
+
+      return names
+        ? { ...holding, row: { ...holding.row, ...names } }
+        : holding;
+    }),
     transactions: [...transactions.values()].sort(
       (a, b) =>
         compareText(a.row.tradeDate, b.row.tradeDate) ||
