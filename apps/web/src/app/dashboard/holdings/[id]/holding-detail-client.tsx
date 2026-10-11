@@ -94,6 +94,7 @@ export function HoldingDetailClient() {
 
 function HoldingData({ positionKey }: { positionKey: string }) {
   const detail = useCachedQuery(api.portfolio.holdingDetail, { positionKey });
+  const current = useCachedQuery(api.users.current, {});
 
   if (detail === undefined)
     return (
@@ -112,7 +113,7 @@ function HoldingData({ positionKey }: { positionKey: string }) {
 
   return (
     <>
-      <header className="mb-8 flex items-start gap-4">
+      <header className="mb-8 flex flex-wrap items-start gap-4">
         <InstrumentMark
           symbol={holding.symbol}
           isin={holding.isin}
@@ -144,6 +145,15 @@ function HoldingData({ positionKey }: { positionKey: string }) {
             </span>
           </div>
         </div>
+        {holding.manualPolicyId && current?.role === "owner" ? (
+          <Button variant="outline" asChild className="ml-auto">
+            <Link
+              href={`/holdings/manual?policy=${encodeURIComponent(holding.manualPolicyId)}`}
+            >
+              Update value
+            </Link>
+          </Button>
+        ) : null}
       </header>
       <HoldingContent data={detail} />
     </>
@@ -173,6 +183,7 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
   const emptyTransactions = transactionEmptyState(
     Boolean(data.npsDetails),
     holding.xirrDataQuality,
+    Boolean(holding.manualPolicyId),
   );
 
   return (
@@ -223,13 +234,13 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
       <section className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel
           title="Value history"
-          description="Current value and invested amount in INR across dated imports."
+          description="Current value and invested amount in INR across dated updates."
         >
           {data.history.length < 2 ? (
             <EmptyState
               icon={LineChart}
               title="Only one dated snapshot so far"
-              description="This position needs a second import from a different date before a trend means anything."
+              description="Add a value from another date to see a trend."
             />
           ) : (
             <PortfolioTimelineChart
@@ -244,7 +255,9 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
 
         <Panel title="Position facts">
           <dl className="divide-y divide-hairline text-sm">
-            <Fact label="Quantity" value={formatQuantity(holding.quantity)} />
+            {holding.manualPolicyId ? null : (
+              <Fact label="Quantity" value={formatQuantity(holding.quantity)} />
+            )}
             <Fact
               label="Share of portfolio"
               value={
@@ -259,8 +272,12 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
             />
             <Fact label="Account" value={holding.accountName} />
             <Fact label="Provider" value={labelize(holding.provider)} />
-            <Fact label="ISIN" value={holding.isin ?? "N/A"} />
-            <Fact label="Exchange" value={holding.exchange ?? "N/A"} />
+            {holding.manualPolicyId ? null : (
+              <>
+                <Fact label="ISIN" value={holding.isin ?? "N/A"} />
+                <Fact label="Exchange" value={holding.exchange ?? "N/A"} />
+              </>
+            )}
             <Fact label="Dated snapshots" value={`${data.history.length}`} />
           </dl>
         </Panel>
@@ -277,7 +294,9 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
       <section className="mt-10">
         <h2 className="text-[0.82rem] font-semibold">Transactions</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Imported cash flows used for return calculations.
+          {holding.manualPolicyId
+            ? "Manual values do not include individual payments."
+            : "Imported cash flows used for return calculations."}
         </p>
 
         {data.transactions.length === 0 ? (
@@ -359,8 +378,8 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
       </section>
 
       <p className="mt-6 text-xs text-muted-foreground">
-        Figures come from imported statements. Investment Sync does not fetch
-        live prices.
+        Figures come from statements and manual entries. Investment Sync does
+        not fetch live prices.
       </p>
     </>
   );
@@ -375,7 +394,19 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function transactionEmptyState(hasNpsDetails: boolean, dataQuality?: string) {
+function transactionEmptyState(
+  hasNpsDetails: boolean,
+  dataQuality?: string,
+  hasManualPolicy = false,
+) {
+  if (hasManualPolicy) {
+    return {
+      title: "Payment dates not recorded",
+      description:
+        "This policy records values only. Payment dates are needed to calculate XIRR.",
+    };
+  }
+
   if (hasNpsDetails && dataQuality === "source_provided") {
     return {
       title: "No normalized transactions",

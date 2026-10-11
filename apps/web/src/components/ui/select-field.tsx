@@ -9,11 +9,15 @@ export function SelectField({
   value,
   options,
   onChange,
+  placeholder,
+  disabled = false,
 }: {
   label: string;
   value: string;
   options: readonly (readonly [string, string])[];
   onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
 
@@ -22,10 +26,13 @@ export function SelectField({
       <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
         {label}
       </label>
-      <Select.Root value={value} onValueChange={onChange}>
-        <Select.Trigger id={id} className="select-trigger">
-          <span className="truncate">
-            <Select.Value />
+      <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
+        <Select.Trigger
+          id={id}
+          className="select-trigger disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="min-w-0 truncate">
+            <Select.Value placeholder={placeholder} />
           </span>
           <Select.Icon asChild>
             <ChevronDown
@@ -51,7 +58,9 @@ export function SelectField({
                   value={optionValue}
                   className="select-option"
                 >
-                  <Select.ItemText>{optionLabel}</Select.ItemText>
+                  <span className="min-w-0 break-words">
+                    <Select.ItemText>{optionLabel}</Select.ItemText>
+                  </span>
                   <Select.ItemIndicator className="ml-auto flex shrink-0">
                     <Check className="size-4" aria-hidden="true" />
                   </Select.ItemIndicator>

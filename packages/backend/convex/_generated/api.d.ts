@@ -17,6 +17,7 @@ import type * as currencyRates from "../currencyRates.js";
 import type * as importCleanup from "../importCleanup.js";
 import type * as importWorkers from "../importWorkers.js";
 import type * as imports from "../imports.js";
+import type * as manualPolicies from "../manualPolicies.js";
 import type * as migration from "../migration.js";
 import type * as migrationAudit from "../migrationAudit.js";
 import type * as migrationProjectionWorkers from "../migrationProjectionWorkers.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   importCleanup: typeof importCleanup;
   importWorkers: typeof importWorkers;
   imports: typeof imports;
+  manualPolicies: typeof manualPolicies;
   migration: typeof migration;
   migrationAudit: typeof migrationAudit;
   migrationProjectionWorkers: typeof migrationProjectionWorkers;

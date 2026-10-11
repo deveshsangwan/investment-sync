@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./api": "./src/api.ts",
+    "./manual-entry": "./src/manual-entry.ts",
     "./import-limits": "./src/import-limits.ts"
   },
   "scripts": {
