@@ -4,8 +4,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
+    "build": "tsc-rs --noEmit",
+    "typecheck": "tsc-rs --noEmit",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests --no-file-parallelism"
   },

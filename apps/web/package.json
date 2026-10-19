@@ -7,7 +7,7 @@
     "dev": "next dev",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc-rs --noEmit"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.9.9",

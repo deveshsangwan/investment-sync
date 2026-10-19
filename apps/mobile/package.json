@@ -5,12 +5,12 @@
   "main": "expo-router/entry",
   "scripts": {
     "android": "expo start --android",
-    "build": "tsc --noEmit",
+    "build": "tsc-rs --noEmit",
     "dev": "expo start",
     "ios": "expo start --ios",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc-rs --noEmit"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.6.9",
