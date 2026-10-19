@@ -32,4 +32,4 @@ This is an early compiler release. Its [known problems](https://github.com/pingd
 
 The migration keeps the existing module resolution, strictness, aliases, and framework configs. Native side-effect import checking requires the web app's empty CSS module declaration. The rehearsal fixture now imports Drizzle and Postgres by package name, with root development dependencies at the already locked versions, to avoid duplicate type identities from direct imports through another workspace's `node_modules`.
 
-To roll back, revert the compiler migration commit with `git revert <migration-commit>` and run `pnpm install --frozen-lockfile`. This restores the previous scripts, configuration, and lockfile together.
+To roll back, revert this PR's commits in reverse order with `git revert`, or revert the single squash commit if it was squashed. Then run `pnpm install --frozen-lockfile`. This restores the previous scripts, configuration, build-script policy, and lockfile together.
