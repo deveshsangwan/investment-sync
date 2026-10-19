@@ -22,7 +22,9 @@ Vitest's optional compiler typechecker is not enabled here. Tests, migration exp
 
 ## Installation and compatibility
 
-Use the repository's pinned pnpm version and `pnpm install --frozen-lockfile`. Keep optional dependencies enabled: the compiler requires a matching native `@tsc-rs/*` package. CI uses Ubuntu x64 with Node 24 and `@tsc-rs/linux-x64@0.7.0`. The lockfile also includes the release's Linux arm64, macOS x64/arm64, and Windows x64/arm64 packages; those platforms are not exercised by this repository's CI. A Rust toolchain is unnecessary. The package's postinstall only optimizes startup, so it needs no additional pnpm build-script permission.
+Use the repository's pinned pnpm version and `pnpm install --frozen-lockfile`. Keep optional dependencies enabled: the compiler requires a matching native `@tsc-rs/*` package. CI uses Ubuntu x64 with Node 24 and `@tsc-rs/linux-x64@0.7.0`. The lockfile also includes the release's Linux arm64, macOS x64/arm64, and Windows x64/arm64 packages; those platforms are not exercised by this repository's CI. A Rust toolchain is unnecessary.
+
+`allowBuilds` explicitly sets `tsc-rs: false`. Its postinstall only optimizes startup; the shipped Node launcher runs the native binary without it. Recording this decision prevents pnpm 11's `ERR_PNPM_IGNORED_BUILDS` in CI while granting no additional build-script permission.
 
 Verify the npm release with `pnpm list tsc-rs --depth 0`. `pnpm exec tsc-rs --version` reports the underlying TypeScript `7.1.0-dev` revision instead of the npm package version. Editor TypeScript selection stays unchanged.
 
