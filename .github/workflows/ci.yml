@@ -44,9 +44,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @investment-sync/db migrate
       - run: pnpm lint
-      - run: pnpm typecheck
+      - name: Typecheck workspaces with tsc-rs
+        run: |
+          pnpm exec tsc-rs --version
+          pnpm typecheck
       - run: pnpm lint:migration-tools
-      - run: pnpm typecheck:migration-tools
+      - name: Typecheck migration tools with tsc-rs
+        run: pnpm typecheck:migration-tools
       - run: pnpm test
       - run: pnpm test:migration-tools
         env:

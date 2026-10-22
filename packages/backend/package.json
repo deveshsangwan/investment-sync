@@ -8,11 +8,11 @@
     "./import-limits": "./src/import-limits.ts"
   },
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc-rs --noEmit",
     "codegen": "convex codegen",
     "lint": "eslint .",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc-rs --noEmit"
   },
   "dependencies": {
     "convex": "^1.45.0",

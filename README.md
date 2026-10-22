@@ -27,8 +27,12 @@ Original uploaded files are retained for 30 days by default. Normalized portfoli
 
 For fake local portfolio data without production records, see `docs/local-development.md`.
 
+## Typechecking
+
+`pnpm typecheck`, `pnpm typecheck:migration-tools`, and compiler-only workspace builds use the exact `tsc-rs@0.7.0` release in standard mode. Next.js, Expo, ESLint, and Convex retain JavaScript TypeScript for their own tooling. See [compiler commands and compatibility notes](docs/typechecking.md).
+
 ## Build outputs
 
-`apps/web` is the only workspace that emits build artifacts (`next build` → `.next/**`); every other package's `build` is `tsc --noEmit`, which exists purely to fail on type errors. So `turbo.json` defaults `build` outputs to `[]` and overrides only `@investment-sync/web#build` — otherwise Turbo logs a "no output files found" warning for each package on every uncached execution even though nothing is wrong.
+`apps/web` is the only workspace that emits build artifacts (`next build` → `.next/**`); every other package's `build` is `tsc-rs --noEmit`, which exists purely to fail on type errors. So `turbo.json` defaults `build` outputs to `[]` and overrides only `@investment-sync/web#build` — otherwise Turbo logs a "no output files found" warning for each package on every uncached execution even though nothing is wrong.
 
 **If you add a workspace that does emit build artifacts, give it its own `<package>#build` override in `turbo.json`.** A `package#task` entry replaces the generic task outright rather than merging into it, so the override must repeat `dependsOn` as well. Without one the package inherits `outputs: []` and Turbo will report a cache hit while restoring nothing.

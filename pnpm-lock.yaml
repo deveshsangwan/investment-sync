@@ -17,6 +17,9 @@ importers:
       '@types/node':
         specifier: ^24.13.1
         version: 24.13.1
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(gel@2.2.0)(postgres@3.4.9)
       eslint:
         specifier: ^9.18.0
         version: 9.39.4(jiti@2.7.0)
@@ -29,9 +32,15 @@ importers:
       globals:
         specifier: ^17.6.0
         version: 17.6.0
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
       prettier:
         specifier: ^3.4.2
         version: 3.8.3
+      tsc-rs:
+        specifier: 0.7.0
+        version: 0.7.0
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -3399,6 +3408,42 @@ packages:
 
   '@trpc/server@10.45.4':
     resolution: {integrity: sha512-5MuyK5sDuFVGHOT9EMVHgRjP5I5j3RqGymcb5D47UOp8tzn6LH0g1lEgYrAsOZ12vmk1gpxMw/v/y4xHHK/Qdg==}
+
+  '@tsc-rs/darwin-arm64@0.7.0':
+    resolution: {integrity: sha512-3execGkNh7DXNZr03dhQP2wqmsjB1Q4OJnTMgKIibjeQMsjNK8HTalJZPIG6PkiXeusXUweHP3+4yJjbi5auNw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@tsc-rs/darwin-x64@0.7.0':
+    resolution: {integrity: sha512-Wi3CNYWgyIOcWTQjihXCFPTul+aTEXVq1og8rO22Cq6/Mz6lKk+9YSXycWOkJql6D0uE0l/S1nMStq4mx7ydpA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@tsc-rs/linux-arm64@0.7.0':
+    resolution: {integrity: sha512-sm+xPELgQGKOoFeklJAmIi99Fi3fIUFgGPYQclC/IiVdUTzHtKw6yg6JRNEI74JIaSxGRAGbtmHcVvTkC93ZLw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@tsc-rs/linux-x64@0.7.0':
+    resolution: {integrity: sha512-gyDPxVNmasL/RMPXzutxhaUqyLlPLTcPhWl5pWCkuZdV0dUfGpR4PG5h1Nht9Db3MMHs9ixzl+uS6Nc5+qA/jg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@tsc-rs/win32-arm64@0.7.0':
+    resolution: {integrity: sha512-dPLJLH5iXgBzMRiuSGz4awMu8dxOI2iXRN0ZDqs/LolZ1ShbjmgIcH1bwQeObdyFwyen44c6vK8mFIiJELsv4Q==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@tsc-rs/win32-x64@0.7.0':
+    resolution: {integrity: sha512-n/bJeMWvr0KbBPYVXroe23ia82Q6ZizUBYhgoZvsUasK4RfZ/rsJdIoP1Jpcw0ONXEbC8AKwHVi8BSOiUlSOuw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [win32]
 
   '@turbo/darwin-64@2.9.16':
     resolution: {integrity: sha512-jLjApWTSNd7JZ5JaLYfelW1ytnGQOvB7ivl+2RD1xQvJTbi8I9gBjzcga7tDZVPyaxpl10YTfJt3BrYXR18KDw==}
@@ -6770,6 +6815,11 @@ packages:
 
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
+
+  tsc-rs@0.7.0:
+    resolution: {integrity: sha512-diVCBljoXLQjvXRkIuamR3QRrmNyqgYDePKA5SFXTSDPSjku2a2JXj/bOxG4DoPUbYkzWl/XFu1689z/46TCaA==}
+    engines: {node: '>=16.20.0'}
+    hasBin: true
 
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
@@ -10269,6 +10319,24 @@ snapshots:
       react-dom: 19.1.0(react@19.1.0)
 
   '@trpc/server@10.45.4': {}
+
+  '@tsc-rs/darwin-arm64@0.7.0':
+    optional: true
+
+  '@tsc-rs/darwin-x64@0.7.0':
+    optional: true
+
+  '@tsc-rs/linux-arm64@0.7.0':
+    optional: true
+
+  '@tsc-rs/linux-x64@0.7.0':
+    optional: true
+
+  '@tsc-rs/win32-arm64@0.7.0':
+    optional: true
+
+  '@tsc-rs/win32-x64@0.7.0':
+    optional: true
 
   '@turbo/darwin-64@2.9.16':
     optional: true
@@ -14101,6 +14169,15 @@ snapshots:
       typescript: 5.9.3
 
   ts-interface-checker@0.1.13: {}
+
+  tsc-rs@0.7.0:
+    optionalDependencies:
+      '@tsc-rs/darwin-arm64': 0.7.0
+      '@tsc-rs/darwin-x64': 0.7.0
+      '@tsc-rs/linux-arm64': 0.7.0
+      '@tsc-rs/linux-x64': 0.7.0
+      '@tsc-rs/win32-arm64': 0.7.0
+      '@tsc-rs/win32-x64': 0.7.0
 
   tslib@2.8.1: {}
 

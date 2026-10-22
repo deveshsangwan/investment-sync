@@ -8,4 +8,5 @@ allowBuilds:
   core-js: true
   esbuild: true
   sharp: true
+  tsc-rs: false
   utf-8-validate: true
