@@ -281,8 +281,9 @@ async function commitImportPromise(
     if (transactionValues.length > 0) {
       assertSourceWritesAllowed();
 
+      // Drizzle requires column targets for its upsert API; this index includes expressions.
       await db.execute(sql`
-        ${db.insert(transactions).values(transactionValues)}
+        ${db.insert(transactions).values(transactionValues).getSQL()}
         on conflict (household_id, account_id, instrument_id, trade_date, type,
           (case when metadata->'realizedSale' is not null then 0::numeric else amount end), currency,
           (coalesce(metadata->>'realizedSaleIdentity', '')))

@@ -89,7 +89,9 @@ describeDb("import service integration", () => {
     const ctx = createApiContext({
       auth: { userId: fixture.clerkUserId, email: fixture.email },
       db,
-      supabase: createClient("https://fake.invalid", "fake-test-key", { auth: { persistSession: false } }),
+      supabase: createClient("https://fake.invalid", "fake-test-key", {
+        auth: { persistSession: false },
+      }),
     });
 
     await Promise.all([
@@ -101,6 +103,7 @@ describeDb("import service integration", () => {
       .from(transactions)
       .where(eq(transactions.householdId, fixture.membership.householdId));
     expect(persisted).toHaveLength(3);
+
     expect(
       new Set(persisted.map((row) => row.metadata.realizedSaleIdentity)).size,
     ).toBe(3);

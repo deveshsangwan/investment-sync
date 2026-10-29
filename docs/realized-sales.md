@@ -26,7 +26,7 @@ Cross-account canonical position selection remains owned by #15. This change sco
 
 ## Retained SQL and recovery
 
-The SQL importer stores the same sale metadata. Migration `0012_realized_sale_identity` extends the transaction unique index with the realized lot occurrence identity and removes proceeds from identity for tagged sales. Existing transactions keep the old financial identity. The SQL upsert updates corrected execution-lot proceeds, quantity and metadata. SQL portfolio calculations also exclude partial realized reports from XIRR.
+The SQL importer stores the same sale metadata, including a validated source identity and occurrence number so migration preserves identical lots even when overlap upserts move them between batches. Migration `0012_realized_sale_identity` extends the transaction unique index with the realized lot occurrence identity and removes proceeds from identity for tagged sales. Existing transactions keep the old financial identity. The SQL upsert updates corrected execution-lot proceeds, quantity and metadata. SQL portfolio calculations also exclude partial realized reports from XIRR.
 
 Apply the migration before using the retained SQL writer or replaying realized activity into SQL. This is a code requirement, not authorization to operate a database. Reverse replay retains separate lot occurrences and updates stable execution-lot corrections. No table columns or archived SQL snapshot formats change. Legacy SQL numeric columns retain their existing scales; the active exact Convex path preserves source decimal precision.
 

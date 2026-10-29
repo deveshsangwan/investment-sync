@@ -1,4 +1,7 @@
-import { realizedSaleIdentity } from "@investment-sync/importers";
+import {
+  realizedSaleIdentity,
+  parseStoredRealizedSaleIdentity,
+} from "@investment-sync/importers";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
@@ -314,6 +317,10 @@ function resolveFacts(facts: PortfolioFact[]) {
       continue;
     }
 
+    const storedSale =
+      row.metadata.realizedSale && row.metadata.realizedSaleIdentity
+        ? parseStoredRealizedSaleIdentity(row.metadata.realizedSaleIdentity)
+        : undefined;
     const fingerprint = JSON.stringify([
       account,
       instrument,
@@ -321,12 +328,14 @@ function resolveFacts(facts: PortfolioFact[]) {
       row.source.group,
       row.tradeDate,
       row.type,
-      realizedSaleIdentity(row) ?? scaled(row.amount, 4),
+      storedSale?.[0] ?? realizedSaleIdentity(row) ?? scaled(row.amount, 4),
       row.currency,
     ]);
     const batchFingerprint = JSON.stringify([provenance.batchId, fingerprint]);
-    const occurrence = (occurrences.get(batchFingerprint) ?? 0) + 1;
-    occurrences.set(batchFingerprint, occurrence);
+    const nextOccurrence = (occurrences.get(batchFingerprint) ?? 0) + 1;
+    occurrences.set(batchFingerprint, nextOccurrence);
+    // SQL overlap upserts can leave separate occurrences attached to different batches.
+    const occurrence = storedSale?.[1] ?? nextOccurrence;
     const occurrenceKey = JSON.stringify([fingerprint, occurrence]);
     identifiedFacts.push({
       ...fact,

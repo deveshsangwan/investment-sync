@@ -78,7 +78,10 @@ export interface NormalizedTransactionRow {
   quantity?: number;
   price?: number;
   amount: number;
-  metadata: Record<string, unknown> & { realizedSale?: RealizedSale };
+  metadata: Record<string, unknown> & {
+    realizedSale?: RealizedSale;
+    realizedSaleIdentity?: string;
+  };
 }
 
 export interface NormalizedValuationRow {
@@ -205,6 +208,7 @@ export const normalizedTransactionRowSchema = z.object({
   amount: z.number().finite(),
   metadata: z
     .object({
+      realizedSaleIdentity: z.string().optional(),
       realizedSale: realizedSaleSchema
         .extend({ acquisitionDate: isoDateSchema.optional() })
         .optional(),

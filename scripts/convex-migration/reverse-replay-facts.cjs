@@ -214,7 +214,10 @@ function replayFacts({
       currency: row.currency,
       notes: previous?.notes ?? null,
       metadata: saleIdentity
-        ? { ...row.metadata, realizedSaleIdentity: saleIdentity }
+        ? {
+            ...row.metadata,
+            realizedSaleIdentity: saleIdentity,
+          }
         : row.metadata,
       created_at: previous?.created_at ?? createdAt,
     };

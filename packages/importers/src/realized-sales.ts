@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { canonicalizeDecimal } from "./numeric";
 import type { RealizedSale } from "./types";
 
@@ -34,4 +35,14 @@ export function realizedSaleIdentity(row: {
     sale.costBasis,
     sale.realizedPnl,
   ]);
+}
+
+const storedSaleIdentitySchema = z.tuple([
+  z.string().min(1),
+  z.number().int().positive(),
+]);
+
+export function parseStoredRealizedSaleIdentity(value: string) {
+  const parsed: unknown = JSON.parse(value);
+  return storedSaleIdentitySchema.parse(parsed);
 }

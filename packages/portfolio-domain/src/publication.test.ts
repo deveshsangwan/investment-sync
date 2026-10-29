@@ -1,3 +1,4 @@
+import { realizedSaleIdentity } from "@investment-sync/importers";
 import { describe, expect, it } from "vitest";
 import { adaptLegacyRow } from "@investment-sync/importers/exact-adapter";
 import type {
@@ -867,4 +868,85 @@ it("reprocesses execution lots with corrected reported proceeds and keeps exact 
   });
   expect(second.projection.cashFlows).toEqual([]);
   expect(second.facts).toHaveLength(3);
+});
+
+it("retains SQL sale occurrences split across batches by overlapping upserts", () => {
+  const lot = transaction({
+    type: "sell",
+    amount: 20,
+    quantity: 1,
+    metadata: {
+      realizedSale: {
+        acquisitionDate: "2023-01-01",
+        costBasis: "10",
+        realizedPnl: "10",
+      },
+    },
+  });
+  if (lot.kind !== "transaction") throw new Error("Expected sale");
+  const first = publish([
+    holding(),
+    {
+      ...lot,
+      numericProvenance: { amount: "persisted_decimal" },
+      metadata: {
+        ...lot.metadata,
+        realizedSaleIdentity: JSON.stringify([realizedSaleIdentity(lot), 2]),
+      },
+    },
+  ]);
+  const second = publish(
+    [
+      {
+        ...lot,
+        numericProvenance: { amount: "persisted_decimal" },
+        metadata: {
+          ...lot.metadata,
+          realizedSaleIdentity: JSON.stringify([realizedSaleIdentity(lot), 1]),
+        },
+      },
+    ],
+    first.facts,
+    2,
+  );
+  const third = publish([lot, lot], second.facts, 3);
+
+  expect(second.projection.positions[0]?.transactions).toHaveLength(2);
+  expect(third.projection.positions[0]?.transactions).toHaveLength(2);
+});
+
+it("matches idless SQL sale identity after numeric rounding and exact source reprocessing", () => {
+  const row = transaction({
+    type: "sell",
+    amount: 20.123456,
+    quantity: 1.12345678901,
+    metadata: {
+      realizedSale: {
+        acquisitionDate: "2023-01-01",
+        costBasis: "10",
+        realizedPnl: "10.123456",
+      },
+    },
+  });
+  if (row.kind !== "transaction") throw new Error("Expected sale");
+  const storedIdentity = JSON.stringify([realizedSaleIdentity(row), 1]);
+  const first = publish([
+    holding(),
+    {
+      ...row,
+      amount: "20.1235",
+      quantity: "1.123456789",
+      numericProvenance: {
+        amount: "persisted_decimal",
+        quantity: "persisted_decimal",
+      },
+      metadata: { ...row.metadata, realizedSaleIdentity: storedIdentity },
+    },
+  ]);
+  const second = publish([row], first.facts, 2);
+
+  expect(second.projection.positions[0]?.transactions).toHaveLength(1);
+  expect(second.projection.positions[0]?.transactions[0]?.row.amount).toBe(
+    "20.123456",
+  );
 });
