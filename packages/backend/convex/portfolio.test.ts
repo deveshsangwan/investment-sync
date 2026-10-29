@@ -225,9 +225,130 @@ async function commitAdditionalPortfolio(
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 describe("public portfolio reads", () => {
+  it("serves post-cutover imports and policy updates to existing and new native sessions in isolated households", async () => {
+    vi.stubEnv("SOURCE_WRITES_PAUSED", "true");
+    const importedRow = holding();
+
+    if (importedRow.kind !== "holding")
+      throw new Error("Expected an imported holding");
+
+    const state = await setupPortfolio([
+      {
+        ...importedRow,
+        investedAmount: "100.25",
+        currentValue: "120.75",
+        pnlAmount: "20.5",
+      },
+      holding({
+        accountName: "Second fake account",
+        symbol: "BETA",
+        instrumentName: "BETA",
+        currentValue: 30,
+        investedAmount: 20,
+        pnlAmount: 10,
+      }),
+    ]);
+    const { t, owner } = state;
+    const existing = t.withIdentity({
+      ...ownerIdentity,
+      tokenIdentifier: "fake|new_native_session",
+    });
+    const newcomer = t.withIdentity({
+      ...ownerIdentity,
+      subject: "native_new_owner",
+      tokenIdentifier: "fake|native_new_owner",
+    });
+
+    // The imported identity keeps its original Household; a new identity does
+    // not need the retained SQL provisioning path or source write permission.
+
+    const [existingId, newcomerId] = await Promise.all([
+      existing.mutation(api.users.ensureCurrent),
+      newcomer.mutation(api.users.ensureCurrent),
+    ]);
+    expect(existingId).not.toBe(newcomerId);
+    const [oldProfile, nativeProfile, newProfile] = await Promise.all([
+      owner.query(api.users.current),
+      existing.query(api.users.current),
+      newcomer.query(api.users.current),
+    ]);
+    expect(nativeProfile.householdId).toBe(oldProfile.householdId);
+    expect(newProfile.householdId).not.toBe(oldProfile.householdId);
+
+    const policy = await owner.mutation(api.manualPolicies.create, {
+      provider: "Fake Life",
+      name: "Fake policy",
+      investedAmount: "10.25",
+      currentValue: "12.50",
+      sourceDate: "2025-03-01",
+      requestId: crypto.randomUUID(),
+    });
+    async function publishPolicy(batchId: typeof policy.batchId) {
+      const batch = await t.run((ctx) => ctx.db.get("importBatches", batchId));
+
+      if (!batch?.publishingVersionId)
+        throw new Error("Expected policy publication");
+
+      await t.action(internal.actions.publishPortfolio.publishPortfolio, {
+        versionId: batch.publishingVersionId,
+        attempt: batch.publicationAttempt ?? 1,
+      });
+    }
+    await publishPolicy(policy.batchId);
+    const before = await existing.query(api.portfolio.positions);
+    expect(before.current).toHaveLength(3);
+    const imported = before.current.find(
+      (item) => item.accountName === "Fake Stocks",
+    );
+    expect(imported).toMatchObject({
+      currentValue: "120.75",
+      currentValueInInr: 120.75,
+    });
+    expect(new Set(before.current.map((item) => item.id)).size).toBe(3);
+
+    const update = await owner.mutation(api.manualPolicies.updateValue, {
+      provider: "Fake Life",
+      name: "Fake policy",
+      investedAmount: "10.25",
+      currentValue: "14.75",
+      sourceDate: "2025-03-02",
+      requestId: crypto.randomUUID(),
+      policyId: policy.policyId,
+      expectedBatchId: policy.batchId,
+    });
+    await publishPolicy(update.batchId);
+    const [overview, positions, emptyOverview, emptyPositions] =
+      await Promise.all([
+        existing.query(api.portfolio.overview),
+        existing.query(api.portfolio.positions),
+        newcomer.query(api.portfolio.overview),
+        newcomer.query(api.portfolio.positions),
+      ]);
+    expect(overview.summary.currentValue).toBe(165.5);
+    expect(
+      positions.current.find((item) => item.manualPolicyId === policy.policyId),
+    ).toMatchObject({
+      currentValue: "14.75",
+      currentValueInInr: 14.75,
+      snapshotDate: "2025-03-02",
+    });
+    expect(positions.current.find((item) => item.id === imported?.id)).toEqual(
+      imported,
+    );
+    expect(emptyOverview.summary.currentValue).toBe(0);
+    expect(emptyPositions).toEqual({ current: [], exited: [] });
+    await expect(t.query(api.portfolio.overview)).rejects.toMatchObject({
+      data: { code: "UNAUTHENTICATED" },
+    });
+    await expect(t.query(api.portfolio.positions)).rejects.toMatchObject({
+      data: { code: "UNAUTHENTICATED" },
+    });
+  });
+
   it("preserves portfolio summation order when hydrating detail views", async () => {
     const state = await setupPortfolio([
       holding({

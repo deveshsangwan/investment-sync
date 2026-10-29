@@ -5,7 +5,7 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 ## Apps
 
 - `apps/web`: Next.js App Router web app and server API routes.
-- `apps/mobile`: Expo Router app for read-only portfolio views.
+- `apps/mobile`: Expo Router app for read-only portfolio views from the active Convex backend. See [mobile configuration and session behavior](docs/mobile-convex.md).
 
 ## Packages
 

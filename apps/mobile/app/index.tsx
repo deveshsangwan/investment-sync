@@ -3,9 +3,10 @@ import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppButton, PageHeader, StatePanel } from "../src/mobile-ui";
+import { AppButton, PageHeader } from "../src/mobile-ui";
 import { type Theme, useTheme } from "../src/theme";
-import { trpc } from "../src/trpc";
+import { api } from "@investment-sync/backend/api";
+import { useQuery } from "convex/react";
 
 const currency = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -19,46 +20,30 @@ const percentage = new Intl.NumberFormat("en-IN", {
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const summary = trpc.portfolio.summary.useQuery();
+  const overview = useQuery(api.portfolio.overview);
+  const summary = overview?.summary;
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
+    <SafeAreaView edges={["left", "right"]} style={styles.screen}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <PageHeader
           description={
-            summary.data?.asOfDate
-              ? `As of ${formatDate(summary.data.asOfDate)}`
+            summary?.asOfDate
+              ? `As of ${formatDate(summary.asOfDate)}`
               : "Latest committed positions"
           }
           eyebrow="Household portfolio"
           title="Overview"
         />
 
-        {summary.isLoading ? <LoadingPanel styles={styles} /> : null}
+        {summary === undefined ? <LoadingPanel styles={styles} /> : null}
 
-        {summary.isError ? (
-          <StatePanel
-            action={
-              <AppButton
-                label="Try loading the portfolio again"
-                onPress={() => void summary.refetch()}
-                variant="secondary"
-              >
-                Try again
-              </AppButton>
-            }
-            description="Your saved data has not changed."
-            title="Portfolio unavailable"
-            tone="error"
-          />
-        ) : null}
-
-        {summary.isSuccess && summary.data ? (
+        {summary !== undefined ? (
           <View style={styles.sections}>
             <View style={styles.hero}>
               <Text style={styles.metricLabel}>Current value</Text>
@@ -67,25 +52,25 @@ export default function DashboardScreen() {
                 numberOfLines={1}
                 style={styles.heroValue}
               >
-                {currency.format(summary.data.currentValue)}
+                {currency.format(summary.currentValue)}
               </Text>
               <View style={styles.heroStats}>
                 <Metric
                   label="Invested"
                   styles={styles}
-                  value={currency.format(summary.data.investedAmount)}
+                  value={currency.format(summary.investedAmount)}
                 />
                 <Metric
                   label="Gain / loss"
                   styles={styles}
-                  tone={summary.data.pnlAmount >= 0 ? "positive" : "negative"}
-                  value={currency.format(summary.data.pnlAmount)}
+                  tone={summary.pnlAmount >= 0 ? "positive" : "negative"}
+                  value={currency.format(summary.pnlAmount)}
                 />
                 <Metric
                   label="Return"
                   styles={styles}
-                  tone={summary.data.pnlPercent >= 0 ? "positive" : "negative"}
-                  value={`${percentage.format(summary.data.pnlPercent)}%`}
+                  tone={summary.pnlPercent >= 0 ? "positive" : "negative"}
+                  value={`${percentage.format(summary.pnlPercent)}%`}
                 />
               </View>
             </View>
@@ -95,13 +80,13 @@ export default function DashboardScreen() {
               <Text style={styles.sectionDescription}>
                 Share of current household value.
               </Text>
-              {summary.data.allocationByAssetClass.length === 0 ? (
+              {summary.allocationByAssetClass.length === 0 ? (
                 <Text style={styles.emptyText}>
                   Import data on the web app to build your allocation.
                 </Text>
               ) : (
                 <View style={styles.allocationList}>
-                  {summary.data.allocationByAssetClass.map((item, index) => (
+                  {summary.allocationByAssetClass.map((item, index) => (
                     <View
                       key={item.assetClass}
                       style={[

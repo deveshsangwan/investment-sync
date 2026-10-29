@@ -11,7 +11,8 @@
     "src",
     "expo-env.d.ts",
     ".expo/types/**/*.ts",
-    "jest.config.cjs",
-    "native-tests"
+    "vitest.config.ts",
+    "native-tests",
+    "jest.config.cjs"
   ]
 }
