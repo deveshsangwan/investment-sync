@@ -557,10 +557,8 @@ describeDb("import service integration", () => {
         { status: "fulfilled", value: { committed: 1 } },
       ]);
       const beforeReplay = await storedCommitState(fixture);
-      expect(beforeReplay.batch[0]).toMatchObject({
-        status: "committed",
-        committedAt: expect.any(Date),
-      });
+      expect(beforeReplay.batch[0]?.status).toBe("committed");
+      expect(beforeReplay.batch[0]?.committedAt).toBeInstanceOf(Date);
       expect(beforeReplay.rows).toHaveLength(1);
       expect(beforeReplay.rows[0]).toMatchObject({ isCommitted: true });
       expect(beforeReplay.holdings).toHaveLength(1);
