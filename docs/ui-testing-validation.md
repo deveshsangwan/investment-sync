@@ -1,0 +1,43 @@
+# Issue #23 validation receipts
+
+Validated in the thread-bound worktree on 2026-10-30. Base main was `73930483798f2cfd7fe68b8069810ffcf99ee3f8`. The branch includes mobile dependency [PR #71](https://github.com/deveshsangwan/investment-sync/pull/71), head `ccfb17cfc011458b42c648b44250d14fe45f9db3`. Merge that PR first.
+
+All financial fixtures and identities were generated fake data. No cloud deployment, production operation, real fixture, or production credential was used. No browser claim below includes hosted Clerk sign-in or Next middleware. Native tests use fake transport and do not establish backend or device behavior.
+
+## Successful checks
+
+| Exact command                                                                                                                                                                        | Exit | Result                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm install --frozen-lockfile`                                                                                                                                                     | 0    | Initial dependency install                                                                                                                 |
+| `pnpm install --frozen-lockfile --offline`                                                                                                                                           | 0    | Final manifest/lockfile consistency                                                                                                        |
+| `DATABASE_URL=postgresql://issue23@127.0.0.1:55423/investment_sync_issue23 pnpm --filter @investment-sync/db migrate`                                                                | 0    | Fresh isolated PostgreSQL schema migrated                                                                                                  |
+| `TEST_DATABASE_URL=postgresql://issue23@127.0.0.1:55423/investment_sync_issue23 DATABASE_URL=postgresql://issue23@127.0.0.1:55423/investment_sync_issue23 pnpm test --concurrency=1` | 0    | All 8 workspaces; 558 tests passed, none skipped. Seven unchanged workspace results were reused from the preceding successful package runs |
+| `pnpm --filter @investment-sync/mobile test`                                                                                                                                         | 0    | 25 Vitest tests plus 5 Jest screen tests; none skipped                                                                                     |
+| `E2E_CONVEX_BINARY=/home/agent/.cache/convex/binaries/precompiled-2026-09-11-157eb19/convex-local-backend pnpm --filter @investment-sync/web test:e2e`                               | 0    | 5 Chromium scenarios passed, none skipped; final run after review fixes took 14.6 seconds                                                  |
+| `pnpm --filter @investment-sync/backend exec vitest run convex/testing/browserSeed.test.ts`                                                                                          | 0    | 2 fixture/auth-guard tests passed                                                                                                          |
+| `pnpm typecheck --concurrency=1`                                                                                                                                                     | 0    | All 8 workspaces                                                                                                                           |
+| `pnpm lint --concurrency=1`                                                                                                                                                          | 0    | All 8 workspaces; one existing Next image warning in `instrument-mark.tsx`                                                                 |
+| `pnpm exec eslint apps/web/e2e packages/backend/src/testing/browserSeed.ts`                                                                                                          | 0    | Final review fixes                                                                                                                         |
+| `pnpm lint:migration-tools`                                                                                                                                                          | 0    | Migration tooling preserved                                                                                                                |
+| `pnpm typecheck:migration-tools`                                                                                                                                                     | 0    | Migration tooling typecheck                                                                                                                |
+| `ROLLBACK_TEST_DATABASE_URL=postgresql://issue23:issue23@127.0.0.1:55423/investment_sync_rollback_issue23 pnpm test:migration-tools`                                                 | 0    | 70 tests passed; zero failures, cancellations, skips, or todos                                                                             |
+| `pnpm format:check`                                                                                                                                                                  | 0    | Repository formatting                                                                                                                      |
+| `git diff --check`                                                                                                                                                                   | 0    | No whitespace errors                                                                                                                       |
+
+Workspace test counts were API 170, Convex backend 148, importers 73, web 67, portfolio domain 48, analytics 21, database 1, mobile Vitest 25, and mobile Jest 5. Browser tests are separate from the 558 workspace tests.
+
+## Local database and corrections during validation
+
+Docker's socket was unavailable to the agent. Existing locally installed PostgreSQL 16.14 binaries were used to initialize a new `/tmp/issue23-postgres/data` cluster on loopback port 55423, with synthetic role `issue23`. No other thread's database or checkout was used. All mandatory SQL tests ran. The rollback test creates and removes its own dedicated database beneath the supplied database-name prefix.
+
+An initial rollback-tool invocation used a URL without a password. Its CLI correctly rejected that configuration, yielding 69 passes and one failure. Repeating with the explicit fake `issue23:issue23` credentials passed all 70 tests. An earlier migration-tools typecheck invocation returned 1 without diagnostics under host load; its isolated rerun returned 0.
+
+Early native and browser runs exposed fixture setup, selector, timeout, and migration-integration mistakes. Those were corrected before the successful receipts above. The first full workspace run passed seven packages and failed the unfinished native adaptation; the final run passed all eight. During initial host saturation, utility commands and dependency installation were slow; no timeout was treated as a pass.
+
+## Review
+
+Separate standards and requirements reviews examined the full main diff and the #23 changes relative to #71, including untracked files. Findings were child-process cleanup races, parser retry completion polling, and guard spacing. All were fixed and the affected browser, fixture, lint, and format checks were repeated. No review finding remains open.
+
+The browser test uses independent contexts for concurrent upload and apply operations. Exactly one competing file commits; the other is rejected, and the dashboard total stays unchanged. The native multi-account assertion exercises a controlled query response independently of #15's backend cross-account selection work.
+
+Clerk's hosted authentication UI, Next middleware/server rendering, cloud deployment behavior, and native device/simulator execution were not tested. The pinned browser backend runner currently supports Linux x64. See [setup and test boundaries](ui-testing.md).
