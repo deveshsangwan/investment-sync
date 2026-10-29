@@ -57,17 +57,18 @@ it.each([
         headers: { authorization: "Bearer fake-cleanup-key" },
       }),
     );
-    const body = await response.json();
+    const body: unknown = await response.json();
+    const requestId = response.headers.get("x-request-id");
 
     expect(response.status).toBe(status);
     expect(body).toEqual({
       error: message,
       code,
-      requestId: expect.any(String),
+      requestId,
     });
-    expect(response.headers.get("x-request-id")).toBe(body.requestId);
+    expect(requestId).toEqual(expect.any(String));
     expect(log).toHaveBeenCalledWith("Import cleanup failed", {
-      requestId: body.requestId,
+      requestId,
       code,
       error,
     });

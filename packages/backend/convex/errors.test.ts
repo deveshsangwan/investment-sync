@@ -6,6 +6,11 @@ import schema from "./schema";
 import { withMutationDiagnostics } from "./model/errors";
 import { modules } from "./test.setup";
 
+const errorMatcher: unknown = expect.any(Error);
+const stringMatcher: unknown = expect.any(String);
+const safeMessageMatcher: unknown =
+  expect.not.stringContaining("fake-provider");
+
 const identity = {
   subject: "error_contract_owner",
   issuer: "https://example.clerk.accounts.dev",
@@ -81,7 +86,7 @@ it("correlates independent concurrent mutation failures and hides database detai
       diagnosticId: data.diagnosticId,
       batchId: reservations[index]?.batchId,
       requestId: undefined,
-      error: expect.any(Error),
+      error: errorMatcher,
     });
   }
 
@@ -108,15 +113,13 @@ it.each([
       withMutationDiagnostics(
         "test.operation",
         { requestId: "fake-request" },
-        async () => {
-          throw cause;
-        },
+        () => Promise.reject(cause),
       ),
     ).rejects.toMatchObject({
       data: {
         code,
-        message: expect.not.stringContaining("fake-provider"),
-        diagnosticId: expect.any(String),
+        message: safeMessageMatcher,
+        diagnosticId: stringMatcher,
       },
     });
     expect(log).toHaveBeenCalledWith(

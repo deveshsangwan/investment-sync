@@ -468,10 +468,11 @@ describe("import lifecycle", () => {
         errorMessage:
           "This file could not be parsed. Try again or choose another file.",
       });
+      const errorMatcher: unknown = expect.any(Error);
       expect(diagnostics).toHaveBeenCalledWith("Import parsing failed", {
         batchId: state.batchId,
         attempt: 1,
-        error: expect.any(Error),
+        error: errorMatcher,
       });
     } finally {
       diagnostics.mockRestore();

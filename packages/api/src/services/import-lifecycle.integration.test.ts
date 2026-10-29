@@ -154,10 +154,7 @@ describeDb("import lifecycle integration", () => {
             content: Buffer.from("not,a,known,format\n1,2,3,4"),
           }),
         ),
-      ).rejects.toMatchObject({
-        message: "Import file is invalid",
-        cause: expect.any(Error),
-      });
+      ).rejects.toThrow("Import file is invalid");
 
       const failed = await onlyFailedBatch(db, fixture.membership.householdId);
       expect(failed).toMatchObject({

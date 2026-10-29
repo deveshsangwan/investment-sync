@@ -189,18 +189,19 @@ describe("upload error contract", () => {
       const log = vi.spyOn(logger, "error").mockImplementation(() => {});
 
       const response = await POST(uploadRequest());
-      const body = await response.json();
+      const body: unknown = await response.json();
+      const requestId = response.headers.get("x-request-id");
 
       expect(response.status).toBe(status);
       expect(body).toEqual({
         error: message,
         code,
-        requestId: expect.any(String),
+        requestId,
       });
-      expect(response.headers.get("x-request-id")).toBe(body.requestId);
+      expect(requestId).toEqual(expect.any(String));
       expect(JSON.stringify(body)).not.toContain(privateMessage);
       expect(log).toHaveBeenCalledWith("Import upload failed", {
-        requestId: body.requestId,
+        requestId,
         code,
         error,
       });
@@ -220,9 +221,10 @@ describe("upload error contract", () => {
       code: "VALIDATION",
       error: "Check the file or entry values and try again.",
     });
+    const wrappedFailure: unknown = expect.objectContaining({ cause });
     expect(log).toHaveBeenCalledWith(
       "Import upload failed",
-      expect.objectContaining({ error: expect.objectContaining({ cause }) }),
+      expect.objectContaining({ error: wrappedFailure }),
     );
     expect(dependencies.ensureMembership).not.toHaveBeenCalled();
   });
@@ -254,16 +256,27 @@ describe("upload error contract", () => {
 
     const responses = await Promise.all(requests.map(POST));
     const bodies = await Promise.all(
-      responses.map((response) => response.json()),
+      responses.map(async (response) => {
+        const body: unknown = await response.json();
+        return body;
+      }),
+    );
+    const requestIds = responses.map((response) =>
+      response.headers.get("x-request-id"),
     );
 
-    expect(new Set(bodies.map((body) => body.requestId)).size).toBe(2);
+    expect(new Set(requestIds).size).toBe(2);
     for (const [index, body] of bodies.entries()) {
-      expect(body.code).toBe("VALIDATION");
+      const requestId = requestIds[index];
+      const wrappedFailure: unknown = expect.objectContaining({
+        cause: failures[index],
+      });
+      expect(requestId).toEqual(expect.any(String));
+      expect(body).toMatchObject({ code: "VALIDATION", requestId });
       expect(log).toHaveBeenCalledWith("Import upload failed", {
-        requestId: body.requestId,
+        requestId,
         code: "VALIDATION",
-        error: expect.objectContaining({ cause: failures[index] }),
+        error: wrappedFailure,
       });
     }
   });

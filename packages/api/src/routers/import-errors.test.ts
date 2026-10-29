@@ -34,10 +34,12 @@ it.each([
     expect(error.code).toBe(code);
     expect(error.message).toBe(message);
     expect(error.cause).toBe(cause);
+    const anyString: unknown = expect.any(String);
+
     expect(log).toHaveBeenCalledWith("Import request failed", {
       importBatchId: "fake-batch",
-      requestId: expect.any(String),
-      code: expect.any(String),
+      requestId: anyString,
+      code: anyString,
       error: cause,
     });
   },

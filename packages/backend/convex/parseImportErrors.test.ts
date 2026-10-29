@@ -39,9 +39,10 @@ it("stores a safe parse failure and logs the original cause with batch and attem
   expect(batch.errorMessage).toBe(
     "This file could not be parsed. Try again or choose another file.",
   );
+  const wrappedFailure: unknown = expect.objectContaining({ cause: failure });
   expect(log).toHaveBeenCalledWith("Import parsing failed", {
     batchId,
     attempt: 1,
-    error: expect.objectContaining({ cause: failure }),
+    error: wrappedFailure,
   });
 }, 30_000);
