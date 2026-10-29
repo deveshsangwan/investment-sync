@@ -527,7 +527,7 @@ describeDb("import service integration", () => {
       // Hold the production commit lock until both real transactions are waiting.
       // A shared max:1 pool would serialize requests before they reached Postgres.
       await lockClient`select pg_advisory_lock(hashtext('investment-sync-import-commit'))`;
-      const commits = Promise.all([
+      const commits = Promise.allSettled([
         runImportEffect(
           commitImport(firstCtx, fixture.membership, fixture.batchId),
         ),
@@ -549,9 +549,13 @@ describeDb("import service integration", () => {
         );
       } finally {
         await lockClient`select pg_advisory_unlock(hashtext('investment-sync-import-commit'))`;
+        await commits;
       }
 
-      expect(await commits).toEqual([{ committed: 1 }, { committed: 1 }]);
+      expect(await commits).toEqual([
+        { status: "fulfilled", value: { committed: 1 } },
+        { status: "fulfilled", value: { committed: 1 } },
+      ]);
       const beforeReplay = await storedCommitState(fixture);
       expect(beforeReplay.batch[0]).toMatchObject({
         status: "committed",
