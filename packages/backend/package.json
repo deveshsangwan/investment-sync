@@ -5,7 +5,8 @@
   "exports": {
     "./api": "./src/api.ts",
     "./manual-entry": "./src/manual-entry.ts",
-    "./import-limits": "./src/import-limits.ts"
+    "./import-limits": "./src/import-limits.ts",
+    "./errors": "./src/errors.ts"
   },
   "scripts": {
     "build": "tsc-rs --noEmit",

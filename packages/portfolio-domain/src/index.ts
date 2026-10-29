@@ -8,3 +8,5 @@ export type {
   PortfolioViewSelection,
   PublicHolding,
 } from "./valuation";
+export { publicError, narrowPublicError, isPublicErrorCode } from "./errors";
+export type { PublicError, PublicErrorCode } from "./errors";
