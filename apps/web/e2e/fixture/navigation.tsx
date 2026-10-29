@@ -15,6 +15,7 @@ export default function Link(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
       {...props}
       onClick={(event) => {
         event.preventDefault();
+
         if (!props.href) return;
 
         window.history.pushState({}, "", props.href);

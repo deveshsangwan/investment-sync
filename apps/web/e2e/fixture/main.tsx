@@ -23,6 +23,7 @@ function App() {
 }
 
 const root = document.getElementById("root");
+
 if (!root) throw new Error("Missing browser test root");
 
 createRoot(root).render(<App />);

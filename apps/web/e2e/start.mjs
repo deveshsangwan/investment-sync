@@ -17,6 +17,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const backend = resolve(web, "../../packages/backend");
 const binary = process.env.E2E_CONVEX_BINARY;
+
 if (!binary)
   throw new Error(
     "Set E2E_CONVEX_BINARY to the pinned local Convex binary. See docs/ui-testing.md.",
@@ -25,6 +26,7 @@ if (!binary)
 const binaryHash = createHash("sha256")
   .update(await readFile(binary))
   .digest("hex");
+
 if (
   binaryHash !==
   "36c41a7fc2deb8aff06ee6701493767f441c9fe4ec0fc27be59229c6af29027f"
@@ -37,22 +39,30 @@ if (
 const workspace = await mkdtemp(resolve(tmpdir(), "investment-sync-e2e-"));
 const children = [];
 let issuerServer;
-let stopping = false;
-async function cleanup() {
-  if (stopping) return;
-  stopping = true;
+let cleanupPromise;
+function cleanup() {
+  if (cleanupPromise) return cleanupPromise;
 
-  issuerServer?.close();
-  for (const child of children.reverse()) child.kill("SIGTERM");
-  await Promise.all(
-    children.map((child) =>
-      child.exitCode === null
-        ? new Promise((done) => child.once("exit", done))
-        : Promise.resolve(),
-    ),
-  );
-  await rm(workspace, { recursive: true, force: true });
+  cleanupPromise = (async () => {
+    issuerServer?.close();
+    for (const { child } of children.toReversed()) child.kill("SIGTERM");
+
+    await Promise.all(children.map(({ closed }) => closed));
+    await rm(workspace, { recursive: true, force: true });
+  })();
+
+  return cleanupPromise;
 }
+
+function trackChild(child) {
+  // Register before exit or spawn failure so cleanup can also join children
+  // that have already ended, including those terminated by a signal.
+  const closed = new Promise((done) => child.once("close", done));
+  children.push({ child, closed });
+
+  return child;
+}
+
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.once(signal, () => void cleanup().then(() => process.exit(0)));
 }
@@ -70,7 +80,7 @@ function launch(command, args, cwd, extraEnvironment = {}) {
     env: { ...environment, ...extraEnvironment },
     stdio: ["ignore", "inherit", "inherit"],
   });
-  children.push(child);
+  trackChild(child);
   child.on("error", (error) => {
     console.error(error);
     void cleanup().then(() => process.exit(1));
@@ -90,7 +100,7 @@ async function runCli(args, adminKey) {
     ],
     { cwd: workspace, env: environment, stdio: ["ignore", "pipe", "pipe"] },
   );
-  children.push(child);
+  trackChild(child);
   let output = "";
   child.stderr.on("data", (data) => {
     output += data.toString();
@@ -104,16 +114,20 @@ async function runCli(args, adminKey) {
 }
 async function waitForBackend(child) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (child.exitCode !== null)
+    if (child.exitCode !== null || child.signalCode !== null)
       throw new Error("Local backend exited during startup");
+
     try {
       const response = await fetch("http://127.0.0.1:3218/version");
+
       if (response.ok) return;
     } catch {
       /* The local process has not bound its port yet. */
     }
+
     await new Promise((done) => setTimeout(done, 200));
   }
+
   throw new Error("Local backend startup timed out");
 }
 

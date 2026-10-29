@@ -18,6 +18,7 @@ export const seed = internalMutation({
       .query("householdMembers")
       .withIndex("by_user", (q) => q.eq("userId", ownerId))
       .unique();
+
     if (!membership) throw new Error("Test owner was not provisioned");
 
     const viewerId = await ctx.db.insert("users", {

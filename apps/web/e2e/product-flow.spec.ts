@@ -8,6 +8,7 @@ test.describe.configure({ mode: "serial" });
 const fixtures = parserGoldenFixtures();
 function fixture(name: string) {
   const value = fixtures.find((candidate) => candidate.name === name);
+
   if (!value) throw new Error(`Missing fake parser fixture: ${name}`);
 
   return {
@@ -210,13 +211,18 @@ test("invalid parser input fails, retries the retained source, and leaves the po
   ).toBeVisible();
 
   await expect.poll(() => retryAccepted).toBe(true);
-  const history = await client.query(api.imports.list, {
-    paginationOpts: { cursor: null, numItems: 20 },
-  });
-  const failed = history.page.find(
-    (batch) => batch.fileName === "fake-invalid.csv",
-  );
-  expect(failed).toMatchObject({ status: "failed", fileAvailable: true });
+  await expect
+    .poll(async () => {
+      const history = await client.query(api.imports.list, {
+        paginationOpts: { cursor: null, numItems: 20 },
+      });
+      const failed = history.page.find(
+        (batch) => batch.fileName === "fake-invalid.csv",
+      );
+
+      return { status: failed?.status, fileAvailable: failed?.fileAvailable };
+    })
+    .toEqual({ status: "failed", fileAvailable: true });
   expect(
     (await client.query(api.portfolio.overview, {})).summary.currentValue,
   ).toBe(500.5);
