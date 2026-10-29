@@ -10,14 +10,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { getFunctionName } from "convex/server";
 import type { Id } from "@investment-sync/backend/api";
 import { ConvexError } from "convex/values";
+import userEvent from "@testing-library/user-event";
 import { HouseholdManagement } from "./household-management";
 import { AccountManagement } from "./account-management";
-import { AcceptInvitation } from "../../app/join/page";
+import { AcceptInvitation } from "./accept-invitation";
 
 const mocks = vi.hoisted(() => ({
-  mutation: vi.fn(),
-  action: vi.fn(),
-  query: vi.fn(),
+  mutation: vi.fn<(...args: unknown[]) => Promise<null>>(),
+  action: vi.fn<(...args: unknown[]) => Promise<{ token: string }>>(),
+  query: vi.fn<(name: string) => unknown>(),
 }));
 vi.mock("convex/react", () => ({
   useMutation: () => mocks.mutation,
@@ -107,7 +108,8 @@ it("lets an owner create a usable link and revoke a pending invitation", async (
       email: "invitee@example.invalid",
     }),
   );
-  const link = screen.getByLabelText<HTMLInputElement>("Invitation link");
+  const link =
+    await screen.findByLabelText<HTMLInputElement>("Invitation link");
   expect(link.value).toBe(
     `${window.location.origin}/join#invite=${"a".repeat(64)}`,
   );
@@ -159,8 +161,9 @@ it("shows viewers members and accounts without owner management controls or invi
 });
 
 it("renames and archives an account and offers unarchive for saved accounts", async () => {
+  const user = userEvent.setup();
   const view = render(<AccountManagement accounts={[account]} isOwner />);
-  fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+  await user.click(screen.getByRole("button", { name: "Rename" }));
   fireEvent.change(screen.getByLabelText("Account name"), {
     target: { value: "New name" },
   });
@@ -214,4 +217,13 @@ it("accepts only after a click and keeps failed invitations retryable with an ac
   );
   await screen.findByRole("link", { name: "Open household accounts" });
   expect(mocks.mutation).toHaveBeenLastCalledWith({ token: "b".repeat(64) });
+});
+
+it("removes the selected viewer only after explicit confirmation", async () => {
+  render(<HouseholdManagement current={current} />);
+  fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  expect(mocks.mutation).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+  await screen.findByText("Member removed.");
+  expect(mocks.mutation).toHaveBeenCalledWith({ memberId });
 });

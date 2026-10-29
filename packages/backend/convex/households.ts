@@ -377,7 +377,12 @@ export const transferOwnership = mutation({
 export const auditEvents = query({
   args: {},
   returns: v.array(
-    v.object({ action: v.string(), target: v.string(), createdAt: v.number() }),
+    v.object({
+      actorUserId: v.id("users"),
+      action: v.string(),
+      target: v.string(),
+      createdAt: v.number(),
+    }),
   ),
   handler: async (ctx) => {
     const { household } = await requireOwner(ctx);
@@ -386,7 +391,8 @@ export const auditEvents = query({
       .withIndex("by_householdId", (q) => q.eq("householdId", household._id))
       .order("desc")
       .take(50);
-    return events.map(({ action, target, createdAt }) => ({
+    return events.map(({ actorUserId, action, target, createdAt }) => ({
+      actorUserId,
       action,
       target,
       createdAt,

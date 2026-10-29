@@ -1,25 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { api } from "@investment-sync/backend/api";
 import { PageHeader, PageShell, Panel } from "../../components/portfolio-ui";
 import { Button } from "../../components/ui/button";
 import { ConvexSessionGate } from "../convex-provider";
-import { useManagementOperation } from "../../features/households/use-management-operation";
+import { AcceptInvitation } from "../../features/households/accept-invitation";
 
 export default function JoinPage() {
-  const [token, setToken] = useState("");
+  const token = useSyncExternalStore(
+    subscribeToInvitationChanges,
+    readInvitationToken,
+    () => "",
+  );
   const { isLoaded, isSignedIn } = useAuth();
-
-  useEffect(() => {
-    setToken(
-      new URLSearchParams(window.location.hash.slice(1)).get("invite") ?? "",
-    );
-  }, []);
 
   const returnUrl = `/join#invite=${encodeURIComponent(token)}`;
 
@@ -60,38 +54,16 @@ export default function JoinPage() {
   );
 }
 
-export function AcceptInvitation({ token }: { token: string }) {
-  const router = useRouter();
-  const accept = useMutation(api.households.acceptInvite);
-  const operation = useManagementOperation();
-  const [isAccepted, setAccepted] = useState(false);
+function readInvitationToken() {
+  return new URLSearchParams(window.location.hash.slice(1)).get("invite") ?? "";
+}
 
-  return (
-    <div className="space-y-3">
-      {isAccepted ? (
-        <Button asChild>
-          <Link href="/settings">Open household accounts</Link>
-        </Button>
-      ) : (
-        <Button
-          disabled={operation.isPending}
-          onClick={() =>
-            void operation.run(async () => {
-              await accept({ token });
-              window.history.replaceState(null, "", "/join");
-              setAccepted(true);
-              router.replace("/settings");
-            }, "Invitation accepted. You can now view this household.")
-          }
-        >
-          {operation.isPending
-            ? "Accepting invitation…"
-            : "Accept invitation as viewer"}
-        </Button>
-      )}
-      <p role="status" className="text-sm">
-        {operation.message}
-      </p>
-    </div>
-  );
+function subscribeToInvitationChanges(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  window.addEventListener("popstate", onChange);
+
+  return () => {
+    window.removeEventListener("hashchange", onChange);
+    window.removeEventListener("popstate", onChange);
+  };
 }
