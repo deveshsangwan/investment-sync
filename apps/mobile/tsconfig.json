@@ -6,5 +6,12 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["app", "src", "expo-env.d.ts", ".expo/types/**/*.ts"]
+  "include": [
+    "app",
+    "src",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts",
+    "jest.config.cjs",
+    "native-tests"
+  ]
 }

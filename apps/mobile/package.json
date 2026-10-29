@@ -9,8 +9,9 @@
     "dev": "expo start",
     "ios": "expo start --ios",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc-rs --noEmit"
+    "test": "jest --runInBand",
+    "typecheck": "tsc-rs --noEmit",
+    "test:native": "jest --runInBand"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.6.9",
