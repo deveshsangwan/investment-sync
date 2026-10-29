@@ -220,6 +220,13 @@ export const acceptInvite = mutation({
     const { identity, user } = await requireCurrentMembership(ctx);
     if (!/^[a-f0-9]{64}$/.test(args.token)) throw invalidInvite();
 
+    if (!identity.email || identity.emailVerified === undefined)
+      throw new ConvexError({
+        code: "VERIFIED_EMAIL_UNAVAILABLE",
+        message:
+          "Your verified sign-in email is unavailable. Verify your email, then sign out and sign in. If this persists, contact the app administrator.",
+      });
+
     const invite = await ctx.db
       .query("householdInvites")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", digest(args.token)))
@@ -294,6 +301,19 @@ export const removeMember = mutation({
         userId: member.userId,
         role: "owner",
       });
+    }
+
+    const pendingInvites = await ctx.db
+      .query("householdInvites")
+      .withIndex("by_householdId_and_status", (q) =>
+        q.eq("householdId", household._id).eq("status", "pending"),
+      )
+      .take(65);
+    for (const invite of pendingInvites) {
+      if (invite.email === removedUser.email?.trim().toLowerCase())
+        await ctx.db.patch("householdInvites", invite._id, {
+          status: "revoked",
+        });
     }
 
     await ctx.db.delete("householdMembers", member._id);

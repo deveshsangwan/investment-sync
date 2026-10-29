@@ -212,3 +212,41 @@ it("freezes management writes during migration verification", async () => {
     }),
   ).rejects.toThrow("disabled during migration");
 });
+
+it("revokes outstanding links for a removed member and serializes acceptance against revocation", async () => {
+  const { owner, invitee } = await setup();
+  await invitee.mutation(
+    api.households.acceptInvite,
+    await owner.action(api.actions.householdInvites.create, {
+      email: "invitee@example.invalid",
+    }),
+  );
+  const pending = await owner.action(api.actions.householdInvites.create, {
+    email: "invitee@example.invalid",
+  });
+  const member = (await owner.query(api.households.members)).find(
+    (member) => member.role === "viewer",
+  );
+  if (!member) throw new Error("Missing viewer");
+  await owner.mutation(api.households.removeMember, { memberId: member.id });
+  await expect(
+    invitee.mutation(api.households.acceptInvite, pending),
+  ).rejects.toThrow();
+
+  const racing = await owner.action(api.actions.householdInvites.create, {
+    email: "invitee@example.invalid",
+  });
+  const [invite] = await owner.query(api.households.pendingInvites);
+  if (!invite) throw new Error("Missing invite");
+  const outcomes = await Promise.allSettled([
+    owner.mutation(api.households.revokeInvite, { inviteId: invite.id }),
+    invitee.mutation(api.households.acceptInvite, racing),
+  ]);
+  expect(outcomes[0]?.status).toBe("fulfilled");
+  await expect(
+    invitee.mutation(api.households.acceptInvite, racing),
+  ).rejects.toThrow();
+  expect(
+    (await owner.query(api.households.members)).length,
+  ).toBeLessThanOrEqual(2);
+});
