@@ -805,6 +805,15 @@ it("renames without changing import identity; archive immediately changes every 
   expect(
     (await owner.query(api.portfolio.positions)).current[0]?.accountName,
   ).toBe("Renamed portfolio");
+  const renamedKey = beforePositions.current[0]?.id;
+  if (!renamedKey) throw new Error("Missing position");
+  expect(
+    (
+      await owner.query(api.portfolio.holdingDetail, {
+        positionKey: renamedKey,
+      })
+    )?.holding.accountName,
+  ).toBe("Renamed portfolio");
   await owner.mutation(api.accounts.update, {
     accountKey: account.id,
     isArchived: true,

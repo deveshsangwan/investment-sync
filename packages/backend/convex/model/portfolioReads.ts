@@ -247,9 +247,7 @@ export async function completeProjection(
   const [positions, summary, facts, scopes, timeline] = await Promise.all([
     ctx.db
       .query("portfolioPositions")
-      .withIndex("by_versionId_and_positionKey", (q) =>
-        q.eq("versionId", versionId),
-      )
+      .withIndex("by_versionId_and_status", (q) => q.eq("versionId", versionId))
       .take(portfolioLimits.positions + 1),
     portfolioSummary(ctx, versionId),
     historyByVersion(ctx, versionId),

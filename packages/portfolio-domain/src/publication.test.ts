@@ -867,3 +867,22 @@ it("archives selected sources without reviving overlaps, retaining exact facts a
     buildPortfolioPublication({ existingFacts: archived.facts }).projection,
   ).toEqual(original.projection);
 });
+
+it("uses the latest visible date after archival regardless of indexed position ordering", () => {
+  const original = publish([
+    holding({ accountName: "A", symbol: "A", sourceDate: "2025-03-01" }),
+    holding({ accountName: "B", symbol: "B", sourceDate: "2025-04-01" }),
+    holding({ accountName: "C", symbol: "C", sourceDate: "2025-06-01" }),
+  ]);
+  const archivedAccount = original.projection.positions.find(
+    (position) => position.holding.row.symbol === "C",
+  )?.holding.accountKey;
+  if (!archivedAccount) throw new Error("Missing account");
+  const reordered = {
+    ...original.projection,
+    positions: [...original.projection.positions].reverse(),
+  };
+  expect(
+    visibleAccountProjection(reordered, new Set([archivedAccount])).asOfDate,
+  ).toBe("2025-04-01");
+});

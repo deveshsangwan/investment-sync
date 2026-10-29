@@ -30,6 +30,7 @@ import type * as migrationAudit from "../migrationAudit.js";
 import type * as migrationProjectionWorkers from "../migrationProjectionWorkers.js";
 import type * as migrationPublication from "../migrationPublication.js";
 import type * as migrationViews from "../migrationViews.js";
+import type * as model_accountVisibility from "../model/accountVisibility.js";
 import type * as model_auth from "../model/auth.js";
 import type * as model_currencyRates from "../model/currencyRates.js";
 import type * as model_importLimits from "../model/importLimits.js";
@@ -89,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   migrationProjectionWorkers: typeof migrationProjectionWorkers;
   migrationPublication: typeof migrationPublication;
   migrationViews: typeof migrationViews;
+  "model/accountVisibility": typeof model_accountVisibility;
   "model/auth": typeof model_auth;
   "model/currencyRates": typeof model_currencyRates;
   "model/importLimits": typeof model_importLimits;

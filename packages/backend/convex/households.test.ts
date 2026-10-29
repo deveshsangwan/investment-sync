@@ -34,6 +34,9 @@ it("joins as viewer while preserving a provisioned invitee's household and data"
   const { t, owner, invitee } = await setup();
   const prior = await invitee.query(api.users.current);
   await t.run((ctx) =>
+    ctx.db.patch("users", prior.id, { email: "stale@example.invalid" }),
+  );
+  await t.run((ctx) =>
     ctx.db.insert("accounts", {
       householdId: prior.householdId,
       key: "fake",
@@ -49,6 +52,7 @@ it("joins as viewer while preserving a provisioned invitee's household and data"
   await invitee.mutation(api.households.acceptInvite, { token });
   const current = await invitee.query(api.users.current);
   expect(current.role).toBe("viewer");
+  expect(current.email).toBe("invitee@example.invalid");
   expect(current.householdId).toBe(
     (await owner.query(api.users.current)).householdId,
   );
@@ -249,4 +253,68 @@ it("revokes outstanding links for a removed member and serializes acceptance aga
   expect(
     (await owner.query(api.households.members)).length,
   ).toBeLessThanOrEqual(2);
+});
+
+it("blocks transfer during publication and allows only one of two independent concurrent transfers", async () => {
+  const { t, owner, invitee, foreign } = await setup();
+  await invitee.mutation(
+    api.households.acceptInvite,
+    await owner.action(api.actions.householdInvites.create, {
+      email: "invitee@example.invalid",
+    }),
+  );
+  await foreign.mutation(
+    api.households.acceptInvite,
+    await owner.action(api.actions.householdInvites.create, {
+      email: "foreign@example.invalid",
+    }),
+  );
+  const members = (await owner.query(api.households.members)).filter(
+    (member) => member.role === "viewer",
+  );
+  const [first, second] = members;
+  if (!first || !second) throw new Error("Missing viewers");
+  const { householdId } = await owner.query(api.users.current);
+  await t.run(async (ctx) => {
+    const versionId = await ctx.db.insert("portfolioVersions", {
+      householdId,
+      sequence: 1,
+      digest: "fake",
+      createdAt: 1,
+      factCount: 0,
+      currentCount: 0,
+      exitedCount: 0,
+      expiresAt: 2,
+    });
+    await ctx.db.patch("households", householdId, {
+      publishingVersionId: versionId,
+    });
+  });
+  await expect(
+    owner.mutation(api.households.transferOwnership, {
+      memberId: first.id,
+      confirm: "TRANSFER",
+    }),
+  ).rejects.toThrow("current import");
+  await t.run((ctx) =>
+    ctx.db.patch("households", householdId, { publishingVersionId: undefined }),
+  );
+  const outcomes = await Promise.allSettled([
+    owner.mutation(api.households.transferOwnership, {
+      memberId: first.id,
+      confirm: "TRANSFER",
+    }),
+    owner.mutation(api.households.transferOwnership, {
+      memberId: second.id,
+      confirm: "TRANSFER",
+    }),
+  ]);
+  expect(
+    outcomes.filter((outcome) => outcome.status === "fulfilled"),
+  ).toHaveLength(1);
+  expect(
+    (await invitee.query(api.households.members)).filter(
+      (member) => member.role === "owner",
+    ),
+  ).toHaveLength(1);
 });

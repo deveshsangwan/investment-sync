@@ -47,7 +47,11 @@ export function visibleAccountProjection(
     ...projection,
     positions,
     detailPositions,
-    asOfDate: current[0]?.holding.snapshotDate ?? null,
+    asOfDate:
+      current
+        .map((position) => position.holding.snapshotDate)
+        .sort()
+        .at(-1) ?? null,
     totals: nativeTotals(current.map((position) => position.holding.row)),
     assetClasses: projection.assetClasses.map((asset) => ({
       ...asset,

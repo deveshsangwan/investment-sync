@@ -264,6 +264,7 @@ export const acceptInvite = mutation({
       });
     await ctx.db.patch("users", user._id, {
       currentHouseholdId: household._id,
+      email: invite.email,
     });
     await ctx.db.patch("householdInvites", invite._id, { status: "accepted" });
     await audit(ctx, household._id, user._id, "invite.accepted", user._id);

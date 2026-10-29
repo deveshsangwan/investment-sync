@@ -51,19 +51,22 @@ export function applyAccountNames(
       account.displayName ?? account.name,
     ]),
   );
+  const renameHolding = (
+    holding: PortfolioProjection["positions"][number]["holding"],
+  ) => ({
+    ...holding,
+    row: {
+      ...holding.row,
+      accountName: names.get(holding.accountKey) ?? holding.row.accountName,
+    },
+  });
   const renamePosition = (
     position: PortfolioProjection["positions"][number],
   ) => ({
     ...position,
-    holding: {
-      ...position.holding,
-      row: {
-        ...position.holding.row,
-        accountName:
-          names.get(position.holding.accountKey) ??
-          position.holding.row.accountName,
-      },
-    },
+    holding: renameHolding(position.holding),
+    history: position.history.map(renameHolding),
+    instrumentHistory: position.instrumentHistory.map(renameHolding),
   });
 
   return {
