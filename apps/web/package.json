@@ -6,8 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc-rs --noEmit"
+    "test": "vitest run",
+    "typecheck": "tsc-rs --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.9.9",
