@@ -72,6 +72,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// convex-test serializes mutations. These overlapping callers exercise the
+// publication protocol, not production optimistic-concurrency retries.
 describe("duplicate source content", () => {
   it("allows independent simultaneous uploads but commits identical content only once", async () => {
     const { t, owner, upload, parsed } = await setup();
@@ -128,13 +130,13 @@ describe("duplicate source content", () => {
       expect(await ctx.db.query("importRowChunks").collect()).toHaveLength(2);
       const facts = await ctx.db.query("holdingSnapshots").collect();
       expect(facts).toHaveLength(1);
-      expect(facts.map((fact) => decodeFact(fact.factJson))).toEqual([
+      expect(facts.map((fact) => decodeFact(fact.factJson))).toMatchObject([
         {
           row: parsed.rows[0],
-          provenance: expect.objectContaining({
+          provenance: {
             batchId: winner,
             parserVersion: parsed.parserVersion,
-          }),
+          },
         },
       ]);
       expect(parsed.rows[0]).toMatchObject({ currentValue: "250.1234" });

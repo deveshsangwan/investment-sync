@@ -55,8 +55,8 @@ describeDb("duplicate source content integration", () => {
     const first = connect();
     const second = connect();
     const sessions = await Promise.all([
-      first.client`select pg_backend_pid() as pid`,
-      second.client`select pg_backend_pid() as pid`,
+      first.client<{ pid: number }[]>`select pg_backend_pid() as pid`,
+      second.client<{ pid: number }[]>`select pg_backend_pid() as pid`,
     ]);
     expect(new Set(sessions.map((rows) => rows[0]?.pid)).size).toBe(2);
 
@@ -174,6 +174,53 @@ describeDb("duplicate source content integration", () => {
       _tag: "ImportConflictError",
       message: "Duplicate Import",
     });
+  });
+
+  it("enforces the committed unique key across independent writes without the service lock", async () => {
+    const first = connect();
+    const second = connect();
+    const membership = await createHousehold(first.db);
+    const ids = await Promise.all(
+      [first, second].map(({ db }) =>
+        createBatch(db, membership, [], "tickertape_stock_csv", {
+          fileHash,
+          parserVersion,
+        }),
+      ),
+    );
+
+    const results = await Promise.allSettled(
+      [first, second].map(({ db }, index) => {
+        const id = ids[index];
+        if (!id) throw new Error("Missing test batch");
+
+        return db
+          .update(importBatches)
+          .set({ status: "committed" })
+          .where(eq(importBatches.id, id));
+      }),
+    );
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toMatchObject([
+      {
+        reason: {
+          cause: {
+            code: "23505",
+            constraint_name: "import_batches_committed_file_parser_idx",
+          },
+        },
+      },
+    ]);
+    expect(
+      await first.db
+        .select()
+        .from(importBatches)
+        .where(eq(importBatches.status, "committed")),
+    ).toHaveLength(1);
   });
 
   it("allows parser-version reprocessing and the same content in another household", async () => {
