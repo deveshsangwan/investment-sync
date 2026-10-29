@@ -1,3 +1,4 @@
+import { parseVestedSales } from "./vested-sales";
 import { parseSourceDecimal } from "./numeric";
 import { getSourceDecimals, withSourceDecimals } from "./source-decimals";
 import * as XLSX from "xlsx";
@@ -57,7 +58,7 @@ function workbookRows(
 
 export const vestedDrivewealthImporter: PortfolioImporter = {
   sourceType: "vested_drivewealth_xlsx",
-  parserVersion: "vested-drivewealth-v1",
+  parserVersion: "vested-drivewealth-v2",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -70,9 +71,11 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
       type: "buffer",
       bookSheets: true,
     });
-    const hasVestedSheets =
-      workbook.SheetNames.includes("Unrealized P&L - Summary ") ||
-      workbook.SheetNames.includes("Realized P&L - Summary ");
+    const hasVestedSheets = workbook.SheetNames.some((name) =>
+      ["Unrealized P&L - Summary", "Realized P&L - Summary"].includes(
+        name.trim(),
+      ),
+    );
     return {
       sourceType: "vested_drivewealth_xlsx",
       confidence: hasVestedSheets ? 0.95 : 0,
@@ -83,7 +86,13 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
   },
   parse(file: ImportFile): ParseResult {
     const workbook = createWorkbookContext(file);
-    const rows = workbookRows(workbook, "Unrealized P&L - Summary ");
+    const vestedRows = (name: string) =>
+      workbookRows(
+        workbook,
+        workbook.workbook.SheetNames.find((sheet) => sheet.trim() === name) ??
+          name,
+      );
+    const rows = vestedRows("Unrealized P&L - Summary");
     const headerRow = findHeaderRow(rows, [
       "Security",
       "Quantity",
@@ -130,14 +139,21 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
       ];
     });
 
+    const sales = parseVestedSales(
+      vestedRows("Realized P&L - Breakdown"),
+      vestedRows("Realized P&L - Summary"),
+    );
+
     return {
       sourceType: "vested_drivewealth_xlsx",
       parserVersion: this.parserVersion,
-      rows: holdings,
-      warnings:
-        holdings.length === 0
+      rows: [...holdings, ...sales.transactions],
+      warnings: [
+        ...sales.warnings,
+        ...(holdings.length === 0
           ? ["No Vested holdings were parsed from the workbook"]
-          : [],
+          : []),
+      ],
     };
   },
 };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { canonicalDecimalSchema } from "./numeric";
 import { isValidCalendarDateParts } from "./calendar";
 
 export type ImportSourceType =
@@ -55,6 +56,15 @@ export interface NormalizedHoldingRow {
   metadata: Record<string, unknown>;
 }
 
+export const realizedSaleSchema = z.object({
+  acquisitionDate: z.string().optional(),
+  costBasis: canonicalDecimalSchema,
+  realizedPnl: canonicalDecimalSchema,
+  executionId: z.string().min(1).optional(),
+  lotId: z.string().min(1).optional(),
+});
+export type RealizedSale = z.infer<typeof realizedSaleSchema>;
+
 export interface NormalizedTransactionRow {
   kind: "transaction";
   sourceType: ImportSourceType;
@@ -77,7 +87,7 @@ export interface NormalizedTransactionRow {
   quantity?: number;
   price?: number;
   amount: number;
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> & { realizedSale?: RealizedSale };
 }
 
 export interface NormalizedValuationRow {
@@ -193,7 +203,13 @@ export const normalizedTransactionRowSchema = z.object({
   quantity: z.number().finite().optional(),
   price: z.number().finite().optional(),
   amount: z.number().finite(),
-  metadata: metadataSchema,
+  metadata: z
+    .object({
+      realizedSale: realizedSaleSchema
+        .extend({ acquisitionDate: isoDateSchema.optional() })
+        .optional(),
+    })
+    .catchall(z.unknown()),
 }) satisfies z.ZodType<NormalizedTransactionRow>;
 
 export const normalizedValuationRowSchema = z.object({
