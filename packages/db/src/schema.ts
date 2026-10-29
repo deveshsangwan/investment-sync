@@ -296,8 +296,9 @@ export const transactions = pgTable(
       table.instrumentId,
       table.tradeDate,
       table.type,
-      table.amount,
+      sql`(case when ${table.metadata}->'realizedSale' is not null then 0::numeric else ${table.amount} end)`,
       table.currency,
+      sql`coalesce(${table.metadata}->>'realizedSaleIdentity', '')`,
     ),
   }),
 );

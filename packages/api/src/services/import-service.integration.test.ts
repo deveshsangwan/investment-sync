@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -46,6 +47,66 @@ describeDb("import service integration", () => {
 
   beforeEach(async () => {
     await resetDatabase(db);
+  });
+
+  it("retains distinct realized lots through concurrent overlapping SQL imports", async () => {
+    const sale = {
+      ...transactionRow({
+        type: "sell",
+        tradeDate: "2025-02-15",
+        quantity: 1,
+        amount: 20,
+      }),
+      sourceType: "vested_drivewealth_xlsx",
+      metadata: {
+        realizedSale: {
+          acquisitionDate: "2024-01-01",
+          costBasis: "10",
+          realizedPnl: "10",
+        },
+      },
+    };
+    const distinctSale = {
+      ...sale,
+      quantity: 2,
+      metadata: {
+        realizedSale: {
+          acquisitionDate: "2024-02-01",
+          costBasis: "15",
+          realizedPnl: "5",
+        },
+      },
+    };
+    const rows = [sale, sale, distinctSale];
+    const fixture = await createFixture(rows);
+    const secondBatch = await createBatchIn(
+      db,
+      fixture.membership,
+      [...rows].reverse(),
+      "vested_drivewealth_xlsx",
+      { parserVersion: "vested-next" },
+    );
+    const ctx = createApiContext({
+      auth: { userId: fixture.clerkUserId, email: fixture.email },
+      db,
+      supabase: createClient("https://fake.invalid", "fake-test-key", { auth: { persistSession: false } }),
+    });
+
+    await Promise.all([
+      runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
+      runImportEffect(commitImport(ctx, fixture.membership, secondBatch)),
+    ]);
+    const persisted = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.householdId, fixture.membership.householdId));
+    expect(persisted).toHaveLength(3);
+    expect(
+      new Set(persisted.map((row) => row.metadata.realizedSaleIdentity)).size,
+    ).toBe(3);
+    expect(persisted.map((row) => row.metadata.realizedSale)).toContainEqual(
+      distinctSale.metadata.realizedSale,
+    );
   });
 
   it("commits rows transactionally and exposes matching overview data", async () => {

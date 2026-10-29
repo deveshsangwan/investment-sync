@@ -52,7 +52,12 @@ export async function cashFlowRows(
         currency: transactions.currency,
       })
       .from(transactions)
-      .where(eq(transactions.householdId, ctx.membership.householdId)),
+      .where(
+        and(
+          eq(transactions.householdId, ctx.membership.householdId),
+          sql`${transactions.metadata}->'realizedSale' is null`,
+        ),
+      ),
   );
 }
 
@@ -214,6 +219,7 @@ export async function transactionsByHoldingPositions(
       and(
         eq(transactions.householdId, ctx.membership.householdId),
         inArray(transactions.instrumentId, instrumentIds),
+        sql`${transactions.metadata}->'realizedSale' is null`,
       ),
     )
     .orderBy(transactions.tradeDate);

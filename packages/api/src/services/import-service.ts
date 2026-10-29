@@ -11,6 +11,7 @@ import {
 } from "@investment-sync/db";
 import {
   normalizedImportRowSchema,
+  realizedSaleIdentity,
   type NormalizedHoldingRow,
   type NormalizedImportRow,
 } from "@investment-sync/importers";
@@ -231,8 +232,19 @@ async function commitImportPromise(
         });
     }
 
+    const saleOccurrences = new Map<string, number>();
     const transactionValues = parsedRows.flatMap(({ payload }) => {
       if (payload.kind !== "transaction") return [];
+
+      const saleIdentity = realizedSaleIdentity(payload);
+      const occurrenceScope = JSON.stringify([
+        accountKey(payload),
+        instrumentKey(payload),
+        saleIdentity,
+      ]);
+      const occurrence = (saleOccurrences.get(occurrenceScope) ?? 0) + 1;
+      saleOccurrences.set(occurrenceScope, occurrence);
+
       return [
         {
           householdId: membership.householdId,
@@ -253,7 +265,15 @@ async function commitImportPromise(
           price: payload.price?.toString(),
           amount: payload.amount.toString(),
           currency: payload.currency,
-          metadata: payload.metadata,
+          metadata: saleIdentity
+            ? {
+                ...payload.metadata,
+                realizedSaleIdentity: JSON.stringify([
+                  saleIdentity,
+                  occurrence,
+                ]),
+              }
+            : payload.metadata,
         },
       ];
     });
@@ -261,26 +281,18 @@ async function commitImportPromise(
     if (transactionValues.length > 0) {
       assertSourceWritesAllowed();
 
-      await db
-        .insert(transactions)
-        .values(transactionValues)
-        .onConflictDoUpdate({
-          target: [
-            transactions.householdId,
-            transactions.accountId,
-            transactions.instrumentId,
-            transactions.tradeDate,
-            transactions.type,
-            transactions.amount,
-            transactions.currency,
-          ],
-          set: {
-            importBatchId,
-            quantity: sql`excluded.quantity`,
-            price: sql`excluded.price`,
-            metadata: sql`excluded.metadata`,
-          },
-        });
+      await db.execute(sql`
+        ${db.insert(transactions).values(transactionValues)}
+        on conflict (household_id, account_id, instrument_id, trade_date, type,
+          (case when metadata->'realizedSale' is not null then 0::numeric else amount end), currency,
+          (coalesce(metadata->>'realizedSaleIdentity', '')))
+        do update set
+          import_batch_id = excluded.import_batch_id,
+          amount = excluded.amount,
+          quantity = excluded.quantity,
+          price = excluded.price,
+          metadata = excluded.metadata
+      `);
     }
 
     const valuationValues = parsedRows.flatMap(({ payload }) => {

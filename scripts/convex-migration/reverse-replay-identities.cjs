@@ -260,9 +260,25 @@ function transactionUniqueKey(fact, maps, targetTables) {
     findInstrumentId(fact, maps, targetTables),
     date(row.tradeDate),
     text(row.type),
-    scaled(row.amount, 4),
+    row.metadata.realizedSale ? "0" : scaled(row.amount, 4),
     row.currency,
+    realizedSaleSqlIdentity(fact),
   ]);
+}
+
+function realizedSaleSqlIdentity(fact) {
+  if (!fact.row.metadata.realizedSale) return "";
+
+  const [fingerprint, occurrence] = JSON.parse(text(fact.doc.occurrenceKey));
+  const identity = JSON.parse(fingerprint)[6];
+  if (
+    typeof identity !== "string" ||
+    !Number.isSafeInteger(occurrence) ||
+    occurrence < 1
+  )
+    reject("invalid_realized_sale_identity");
+
+  return JSON.stringify([identity, occurrence]);
 }
 
 function findAccountId(fact, maps, tables) {
@@ -317,4 +333,5 @@ module.exports = {
   findInstrumentId,
   replayParents,
   transactionUniqueKey,
+  realizedSaleSqlIdentity,
 };

@@ -18,6 +18,7 @@ const {
   findAccountId,
   findInstrumentId,
   transactionUniqueKey,
+  realizedSaleSqlIdentity,
 } = require("./reverse-replay-identities.cjs");
 
 function replayFacts({
@@ -187,6 +188,7 @@ function replayFacts({
 
     const tradeDate = date(row.tradeDate);
     const amount = scaled(row.amount, 4);
+    const saleIdentity = realizedSaleSqlIdentity(fact);
     const previous = [...rowsByTable.transactions.values()].find(
       (candidate) =>
         candidate.household_id === householdId &&
@@ -194,8 +196,9 @@ function replayFacts({
         candidate.instrument_id === instrumentId &&
         candidate.trade_date === tradeDate &&
         candidate.type === row.type &&
-        candidate.amount === amount &&
-        candidate.currency === row.currency,
+        (saleIdentity || candidate.amount === amount) &&
+        candidate.currency === row.currency &&
+        (candidate.metadata.realizedSaleIdentity ?? "") === saleIdentity,
     );
     const value = {
       id: previous?.id ?? deterministicUuid("transactions", fact.doc._id),
@@ -210,7 +213,9 @@ function replayFacts({
       amount,
       currency: row.currency,
       notes: previous?.notes ?? null,
-      metadata: row.metadata,
+      metadata: saleIdentity
+        ? { ...row.metadata, realizedSaleIdentity: saleIdentity }
+        : row.metadata,
       created_at: previous?.created_at ?? createdAt,
     };
     rowsByTable.transactions.set(value.id, value);

@@ -494,6 +494,89 @@ test("rejects the approved identical-occurrence correction when the old unique k
   });
 });
 
+test("replays realized lots and execution corrections without collapsing same-day proceeds", () => {
+  const fixture = createRollbackFixture();
+  const original = JSON.parse(
+    fixture.targetSnapshot.tables.transactions[0].factJson,
+  ).row;
+  const sale = {
+    ...original,
+    type: "sell",
+    metadata: {
+      realizedSale: {
+        acquisitionDate: "2024-01-01",
+        costBasis: "10",
+        realizedPnl: "10",
+        executionId: "fake-execution",
+        lotId: "fake-lot",
+      },
+    },
+  };
+  const identity = JSON.stringify([
+    "realized-execution-lot-v1",
+    sale.tradeDate,
+    "fake-execution",
+    "fake-lot",
+  ]);
+  const fingerprint = JSON.stringify([
+    "account",
+    "instrument",
+    sale.sourceType,
+    sale.source.group,
+    sale.tradeDate,
+    sale.type,
+    identity,
+    sale.currency,
+  ]);
+  const occurrenceKeys = [
+    JSON.stringify([fingerprint, 1]),
+    JSON.stringify([fingerprint, 2]),
+  ];
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "realized-lots",
+    "household-old",
+    "user-old",
+    3,
+    [sale, sale],
+    Date.parse("2026-01-03T12:00:00Z"),
+    { occurrenceKeys },
+  );
+  const correction = {
+    ...sale,
+    amount: "25",
+    metadata: {
+      realizedSale: { ...sale.metadata.realizedSale, realizedPnl: "15" },
+    },
+  };
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "corrected-sale",
+    "household-old",
+    "user-old",
+    4,
+    [correction],
+    Date.parse("2026-01-04T12:00:00Z"),
+    { occurrenceKeys: occurrenceKeys.slice(0, 1) },
+  );
+
+  const plan = buildReverseReplayPlan(fixture);
+  const realized = plan.tables.transactions.filter(
+    (row) => row.metadata.realizedSale,
+  );
+  assert.equal(realized.length, 2);
+  assert.equal(
+    new Set(realized.map((row) => row.metadata.realizedSaleIdentity)).size,
+    2,
+  );
+  assert.ok(
+    realized.some(
+      (row) =>
+        row.amount === "25" && row.metadata.realizedSale.realizedPnl === "15",
+    ),
+  );
+});
+
 test("does not convert an exact source amount into a rounded JS numeric normalized row", () => {
   const fixture = createRollbackFixture();
   appendCommittedBatch(

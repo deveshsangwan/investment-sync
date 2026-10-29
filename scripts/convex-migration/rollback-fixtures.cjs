@@ -291,6 +291,7 @@ function appendCommittedBatch(
   sequence,
   rows,
   committedAt,
+  { occurrenceKeys = [] } = {},
 ) {
   const tables = snapshot.tables;
   const rowsJson = JSON.stringify(rows);
@@ -372,12 +373,9 @@ function appendCommittedBatch(
           ? "transactions"
           : "portfolioValuations";
     if (row.kind === "transaction")
-      doc.occurrenceKey = JSON.stringify([
-        row.tradeDate,
-        row.type,
-        row.amount,
-        index + 1,
-      ]);
+      doc.occurrenceKey =
+        occurrenceKeys[index] ??
+        JSON.stringify([row.tradeDate, row.type, row.amount, index + 1]);
     tables[table].push(doc);
     const identity =
       row.kind === "valuation"

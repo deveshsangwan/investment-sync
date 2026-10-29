@@ -58,6 +58,7 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
         amount: transactions.amount,
         currency: transactions.currency,
         notes: transactions.notes,
+        metadata: transactions.metadata,
       })
       .from(transactions)
       .where(
@@ -101,15 +102,18 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
     toPerformanceValuation(point, usdInrRate?.rate),
   );
   const resolvedXirr = resolveHoldingXirr({
-    cashFlows: transactionsForHolding.map((transaction) => ({
-      date: parseDate(transaction.tradeDate) ?? new Date(transaction.tradeDate),
-      amount: convertToInr(
-        Number(transaction.amount),
-        transaction.currency,
-        usdInrRate?.rate,
-      ),
-      type: transaction.type,
-    })),
+    cashFlows: transactionsForHolding
+      .filter((transaction) => !transaction.metadata.realizedSale)
+      .map((transaction) => ({
+        date:
+          parseDate(transaction.tradeDate) ?? new Date(transaction.tradeDate),
+        amount: convertToInr(
+          Number(transaction.amount),
+          transaction.currency,
+          usdInrRate?.rate,
+        ),
+        type: transaction.type,
+      })),
     terminalValue: latestCurrentValueInInr,
     asOfDate: parseDate(latest.snapshotDate) ?? new Date(),
     sourceXirr,
