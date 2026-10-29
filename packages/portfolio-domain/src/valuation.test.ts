@@ -78,6 +78,52 @@ const quote = {
   provider: "frankfurter",
 } as const;
 
+describe("account position performance", () => {
+  it("uses each account's own cash flows and history in asset and holding details", () => {
+    const value = projection([
+      holding({ accountName: "Broker A", currentValue: 120 }),
+      holding({
+        accountName: "Broker B",
+        investedAmount: 200,
+        currentValue: 220,
+      }),
+      transaction({
+        accountName: "Broker A",
+        symbol: "ALPHA",
+        instrumentName: "ALPHA",
+        assetClass: "indian_stock",
+        currency: "INR",
+        amount: 100,
+      }),
+      transaction({
+        accountName: "Broker B",
+        symbol: "ALPHA",
+        instrumentName: "ALPHA",
+        assetClass: "indian_stock",
+        currency: "INR",
+        amount: 200,
+      }),
+    ]);
+    const result = valuePortfolioPublication(value);
+    const asset = result.assetClassDetails[0];
+
+    expect(asset?.holdings).toHaveLength(2);
+    for (const detail of result.holdingDetails) {
+      const assetHolding = asset?.holdings.find(
+        (holding) => holding.accountName === detail.holding.accountName,
+      );
+
+      expect(detail.history).toHaveLength(1);
+      expect(detail.transactions).toHaveLength(1);
+      expect(assetHolding?.xirr).toBeCloseTo(
+        detail.holding.accountName === "Broker A" ? 20 : 10,
+        0,
+      );
+      expect(assetHolding?.xirr).toBe(detail.holding.xirr);
+    }
+  });
+});
+
 describe("legacy snapshot chart arithmetic", () => {
   it("preserves SQL snapshot creation order through same-date corrections", () => {
     const rows = [

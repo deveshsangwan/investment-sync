@@ -313,7 +313,7 @@ async function latestCurrentHoldingRows(
       "assetClass"
     from ranked
     where ${modeWhere}
-    order by "snapshotDate" desc, "instrumentName" asc
+    order by "snapshotDate" desc, "instrumentName" asc, "id" desc
   `);
 
   return Array.from(rows, (row) => currentHoldingRowSchema.parse(row));

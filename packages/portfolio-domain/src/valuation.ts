@@ -347,7 +347,7 @@ function assetClassDetail(
     holdings: selected
       .map((position) => {
         const holding = publicHolding(position.holding, rate);
-        const xirr = positionXirr(position, rate, true);
+        const xirr = positionXirr(position, rate);
 
         return {
           ...holding,
@@ -397,7 +397,7 @@ function holdingDetail(
   // excludes that snapshot from the current/exited position list.
   const latest = position.history.at(-1) ?? position.holding;
   const holding = publicHolding(latest, rate);
-  const resolved = positionXirr({ ...position, holding: latest }, rate, false);
+  const resolved = positionXirr({ ...position, holding: latest }, rate);
 
   return {
     positionKey: position.positionKey,
@@ -445,18 +445,13 @@ function holdingDetail(
 function positionXirr(
   position: PositionProjection,
   rate: number | undefined,
-  acrossAccounts: boolean,
 ): ResolvedXirr {
   if (isManualPolicy(position.holding)) {
     return { dataQuality: "insufficient_data" };
   }
 
-  const history = acrossAccounts
-    ? position.instrumentHistory
-    : position.history;
-  const transactions = acrossAccounts
-    ? position.instrumentTransactions
-    : position.transactions;
+  const history = position.history;
+  const transactions = position.transactions;
 
   return resolveHoldingXirr({
     cashFlows: transactions.map((fact) => performanceCashFlow(fact, rate)),
