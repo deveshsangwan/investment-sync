@@ -14,6 +14,7 @@ import {
   roundDisplay,
 } from "./numeric";
 import { compareText } from "./ordering";
+import { nativeTotals } from "./sourceSnapshots";
 import type {
   HoldingFact,
   NativeTimelinePoint,
@@ -328,7 +329,12 @@ function assetClassDetail(
   const selected = current.filter(
     (position) => position.holding.row.assetClass === asset.assetClass,
   );
-  const totals = convertedTotals(asset.totals, rate);
+  // Persisted summaries may predate the missing-P&L fallback. The selected
+  // rows are already loaded and retain whether the source reported a value.
+  const totals = convertedTotals(
+    nativeTotals(selected.map((position) => position.holding.row)),
+    rate,
+  );
   const valuations = asset.timeline.map((point) => ({
     date: new Date(point.snapshotDate),
     ...convertedTimelineAmounts(point, rate),
