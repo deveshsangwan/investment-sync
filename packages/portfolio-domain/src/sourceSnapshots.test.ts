@@ -141,6 +141,80 @@ function referenceTimeline(
   ];
 }
 
+describe("native P&L totals", () => {
+  it.each([
+    ["125", "25"],
+    ["75", "-25"],
+    ["100", "0"],
+  ])("derives absent P&L for current value %s", (currentValue, pnlAmount) => {
+    expect(
+      nativeTotals([{ currency: "INR", investedAmount: "100", currentValue }]),
+    ).toEqual([
+      { currency: "INR", investedAmount: "100", currentValue, pnlAmount },
+    ]);
+  });
+
+  it("subtracts decimals exactly before summing, including beyond Float64 precision", () => {
+    expect(
+      nativeTotals([
+        {
+          currency: "INR",
+          investedAmount: "9007199254740993.1",
+          currentValue: "9007199254740993.3",
+        },
+        { currency: "INR", investedAmount: "0.2", currentValue: "0.1" },
+      ]),
+    ).toEqual([
+      {
+        currency: "INR",
+        investedAmount: "9007199254740993.3",
+        currentValue: "9007199254740993.4",
+        pnlAmount: "0.1",
+      },
+    ]);
+  });
+
+  it("preserves reported values including zero while deriving missing values per currency", () => {
+    expect(
+      nativeTotals([
+        { currency: "INR", investedAmount: "100", currentValue: "125" },
+        {
+          currency: "INR",
+          investedAmount: "100",
+          currentValue: "130",
+          pnlAmount: "0",
+        },
+        {
+          currency: "INR",
+          investedAmount: "100",
+          currentValue: "140",
+          pnlAmount: "7.25",
+        },
+        { currency: "USD", investedAmount: "10.1", currentValue: "9.9" },
+        {
+          currency: "USD",
+          investedAmount: "10",
+          currentValue: "12",
+          pnlAmount: "1.5",
+        },
+      ]),
+    ).toEqual([
+      {
+        currency: "INR",
+        investedAmount: "300",
+        currentValue: "395",
+        pnlAmount: "32.25",
+      },
+      {
+        currency: "USD",
+        investedAmount: "20.1",
+        currentValue: "21.9",
+        pnlAmount: "1.3",
+      },
+    ]);
+  });
+});
+
 describe("manual policy timelines", () => {
   it("retains the original baseline until the first manual date", () => {
     const imported = holding();
