@@ -7,6 +7,7 @@ import type {
 } from "@investment-sync/importers";
 import {
   buildPortfolioPublication,
+  visibleAccountProjection,
   valuePortfolioPublication,
   type PortfolioFact,
   type PublicationInput,
@@ -820,4 +821,49 @@ describe("portfolio publication", () => {
       valuePortfolioPublication(result.projection).overview.summary,
     ).toMatchObject({ investedAmount: 0, currentValue: 0, asOfDate: null });
   });
+});
+
+it("archives selected sources without reviving overlaps, retaining exact facts and restoring the original projection", () => {
+  const original = publish([
+    holding({
+      accountName: "Old source",
+      currentValue: 0.1,
+      investedAmount: 0.1,
+    }),
+    holding({
+      accountName: "New source",
+      sourceDate: "2025-02-01",
+      currentValue: 0.2,
+      investedAmount: 0.2,
+    }),
+    holding({
+      accountName: "Independent",
+      symbol: "BETA",
+      instrumentName: "BETA",
+      currentValue: 0.3,
+      investedAmount: 0.3,
+    }),
+  ]);
+  const selected = original.projection.positions.find(
+    (position) =>
+      position.status === "current" && position.holding.row.symbol === "ALPHA",
+  );
+  if (!selected) throw new Error("Missing selected source");
+  const archived = {
+    facts: original.facts,
+    projection: visibleAccountProjection(
+      original.projection,
+      new Set([selected.holding.accountKey]),
+    ),
+  };
+  expect(
+    archived.projection.positions
+      .filter((position) => position.status === "current")
+      .map((position) => position.holding.row.symbol),
+  ).toEqual(["BETA"]);
+  expect(archived.projection.totals[0]?.currentValue).toBe("0.3");
+  expect(archived.facts).toEqual(original.facts);
+  expect(
+    buildPortfolioPublication({ existingFacts: archived.facts }).projection,
+  ).toEqual(original.projection);
 });

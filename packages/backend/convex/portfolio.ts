@@ -4,6 +4,11 @@ import {
 } from "@investment-sync/portfolio-domain";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import {
+  accountPreferences,
+  archivedProjection,
+  applyAccountNames,
+} from "./model/accountVisibility";
 import { readValuationQuote } from "./model/currencyRates";
 import {
   activePortfolio,
@@ -12,6 +17,7 @@ import {
   logPortfolioRead,
   overviewProjection,
   positionsProjection,
+  resolvePositionKey,
 } from "./model/portfolioReads";
 import {
   assetClassDetailViewValidator,
@@ -30,13 +36,21 @@ export const overview = query({
       return valuePortfolioPublication(emptyProjection(), undefined, {
         view: "overview",
       });
+    const accounts = await accountPreferences(ctx, active);
+    const visible = await archivedProjection(ctx, active, accounts);
     const [readModel, quote] = await Promise.all([
-      overviewProjection(ctx, active),
+      visible
+        ? { projection: visible, counts: { ranges: 0 } }
+        : overviewProjection(ctx, active),
       readValuationQuote(ctx),
     ]);
-    const value = valuePortfolioPublication(readModel.projection, quote, {
-      view: "overview",
-    });
+    const value = valuePortfolioPublication(
+      applyAccountNames(readModel.projection, accounts),
+      quote,
+      {
+        view: "overview",
+      },
+    );
     await logPortfolioRead(ctx, "overview", {
       ...readModel.counts,
       ranges: readModel.counts.ranges + 1,
@@ -55,13 +69,21 @@ export const positions = query({
       return valuePortfolioPublication(emptyProjection(), undefined, {
         view: "positions",
       });
+    const accounts = await accountPreferences(ctx, active);
+    const visible = await archivedProjection(ctx, active, accounts);
     const [readModel, quote] = await Promise.all([
-      positionsProjection(ctx, active),
+      visible
+        ? { projection: visible, counts: { ranges: 0 } }
+        : positionsProjection(ctx, active),
       readValuationQuote(ctx),
     ]);
-    const value = valuePortfolioPublication(readModel.projection, quote, {
-      view: "positions",
-    });
+    const value = valuePortfolioPublication(
+      applyAccountNames(readModel.projection, accounts),
+      quote,
+      {
+        view: "positions",
+      },
+    );
     await logPortfolioRead(ctx, "positions", {
       ...readModel.counts,
       ranges: readModel.counts.ranges + 1,
@@ -77,17 +99,29 @@ export const holdingDetail = query({
   handler: async (ctx, args) => {
     const active = await activePortfolio(ctx);
     if (!active) return null;
-    const readModel = await holdingDetailProjection(
-      ctx,
-      active,
-      args.positionKey,
-    );
+    const accounts = await accountPreferences(ctx, active);
+    const visible = await archivedProjection(ctx, active, accounts);
+    const readModel = visible
+      ? {
+          projection: visible,
+          positionKey: await resolvePositionKey(
+            ctx,
+            active.household._id,
+            args.positionKey,
+          ),
+          counts: { ranges: 0 },
+        }
+      : await holdingDetailProjection(ctx, active, args.positionKey);
     if (!readModel) return null;
     const quote = await readValuationQuote(ctx);
-    const value = valuePortfolioPublication(readModel.projection, quote, {
-      view: "holdingDetail",
-      positionKey: readModel.positionKey,
-    });
+    const value = valuePortfolioPublication(
+      applyAccountNames(readModel.projection, accounts),
+      quote,
+      {
+        view: "holdingDetail",
+        positionKey: readModel.positionKey,
+      },
+    );
     await logPortfolioRead(ctx, "holdingDetail", {
       ...readModel.counts,
       ranges: readModel.counts.ranges + 1,
@@ -107,14 +141,22 @@ export const assetClassDetail = query({
         view: "assetClassDetail",
         assetClass: args.assetClass,
       });
+    const accounts = await accountPreferences(ctx, active);
+    const visible = await archivedProjection(ctx, active, accounts);
     const [readModel, quote] = await Promise.all([
-      assetClassProjection(ctx, active, args.assetClass),
+      visible
+        ? { projection: visible, counts: { ranges: 0 } }
+        : assetClassProjection(ctx, active, args.assetClass),
       readValuationQuote(ctx),
     ]);
-    const value = valuePortfolioPublication(readModel.projection, quote, {
-      view: "assetClassDetail",
-      assetClass: args.assetClass,
-    });
+    const value = valuePortfolioPublication(
+      applyAccountNames(readModel.projection, accounts),
+      quote,
+      {
+        view: "assetClassDetail",
+        assetClass: args.assetClass,
+      },
+    );
     await logPortfolioRead(ctx, "assetClassDetail", {
       ...readModel.counts,
       ranges: readModel.counts.ranges + 1,

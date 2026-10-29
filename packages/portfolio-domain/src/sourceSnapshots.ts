@@ -206,6 +206,7 @@ export function timelineWithManualPolicies(
   holdings: HoldingFact[],
   baseline: NativeTimelinePoint[],
   hasExplicitValuations = false,
+  archivedAccountKeys: ReadonlySet<string> = new Set(),
 ): NativeTimelinePoint[] {
   const manualDates = holdings
     .filter(
@@ -260,7 +261,9 @@ export function timelineWithManualPolicies(
       nextReportedPoint = reportedPoints.next();
     }
 
-    const current = currentTimelineHoldings(groups);
+    const current = currentTimelineHoldings(groups).filter(
+      (fact) => !archivedAccountKeys.has(fact.accountKey),
+    );
     const rows = hasExplicitValuations
       ? [
           ...reportedTotals,

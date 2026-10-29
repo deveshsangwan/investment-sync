@@ -40,7 +40,11 @@ export function projectionRecords(projection: PortfolioProjection) {
         kind: "holding",
         assetClass: fact.row.assetClass,
         positionKey: fact.positionKey,
-        factJson: checkedJson({ row: fact.row, provenance: fact.provenance }),
+        factJson: checkedJson({
+          row: fact.row,
+          provenance: fact.provenance,
+          snapshotCreationOrder: fact.snapshotCreationOrder,
+        }),
       });
   };
   const registerTransactions = (
@@ -105,6 +109,7 @@ export function projectionRecords(projection: PortfolioProjection) {
       holdingJson: checkedJson({
         row: position.holding.row,
         provenance: position.holding.provenance,
+        snapshotCreationOrder: position.holding.snapshotCreationOrder,
       }),
       historyScope,
       transactionScope,

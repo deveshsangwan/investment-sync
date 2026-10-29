@@ -239,6 +239,53 @@ export async function assetClassProjection(
   };
 }
 
+export async function completeProjection(
+  ctx: QueryCtx,
+  active: ActivePortfolio,
+) {
+  const versionId = active.version._id;
+  const [positions, summary, facts, scopes, timeline] = await Promise.all([
+    ctx.db
+      .query("portfolioPositions")
+      .withIndex("by_versionId_and_positionKey", (q) =>
+        q.eq("versionId", versionId),
+      )
+      .take(portfolioLimits.positions + 1),
+    portfolioSummary(ctx, versionId),
+    historyByVersion(ctx, versionId),
+    scopesByVersion(ctx, versionId),
+    timelineByAssetClass(ctx, versionId, null),
+  ]);
+  ensureMaximum(
+    positions,
+    portfolioLimits.positions,
+    "Portfolio position capacity exceeded",
+  );
+  const source = scopeFactSource(facts, scopes);
+  const decoded = positions.map((doc) => ({
+    doc,
+    position: decodePosition(doc, source),
+  }));
+  const assetClasses = [...new Set(positions.map((doc) => doc.assetClass))].map(
+    (assetClass) => ({ assetClass, totals: [], timeline: [] }),
+  );
+
+  return projection({
+    summary,
+    positions: decoded
+      .filter((entry) => entry.doc.status !== "detail")
+      .map((entry) => entry.position),
+    detailPositions: decoded
+      .filter((entry) => entry.doc.status === "detail")
+      .map((entry) => entry.position),
+    assetClasses,
+    timeline,
+    cashFlows: facts
+      .filter((fact) => fact.kind === "transaction")
+      .map(decodePortfolioTransaction),
+  });
+}
+
 export async function logPortfolioRead(
   ctx: QueryCtx,
   view: string,
@@ -369,7 +416,7 @@ async function positionByKey(
   return positions[0] ?? null;
 }
 
-async function resolvePositionKey(
+export async function resolvePositionKey(
   ctx: QueryCtx,
   householdId: Id<"households">,
   requestedKey: string,

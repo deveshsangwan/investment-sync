@@ -88,6 +88,7 @@ export default defineSchema({
   accounts: defineTable({
     ...legacyFields,
     isArchived: v.optional(v.boolean()),
+    displayName: v.optional(v.string()),
     metadataJson: v.optional(v.string()),
     householdId: v.id("households"),
     key: v.string(),
