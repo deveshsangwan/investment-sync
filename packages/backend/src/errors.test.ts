@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConvexError } from "convex/values";
-import { clientErrorMessage } from "./errors";
+import { importFailureMessage, clientErrorMessage } from "./errors";
 
 const secret = "postgres://private-provider/fake-token";
 const fallback = "Please try again.";
@@ -33,4 +33,16 @@ describe("client error contract", () => {
       clientErrorMessage(new ConvexError({ code, message: secret }), fallback),
     ).toBe(message);
   });
+});
+
+it.each([
+  "fake-provider://token",
+  { code: "CAPACITY", message: "fake-provider://token" },
+])("does not persist arbitrary worker error data: %s", (data) => {
+  expect(importFailureMessage(data, "publish")).toBe(
+    "This import could not be published. Try again or choose another file.",
+  );
+  expect(importFailureMessage(data, "parse")).toBe(
+    "This file could not be parsed. Try again or choose another file.",
+  );
 });

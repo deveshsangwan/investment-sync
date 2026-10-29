@@ -468,13 +468,17 @@ describe("import lifecycle", () => {
         errorMessage:
           "This file could not be parsed. Try again or choose another file.",
       });
-      expect(diagnostics).toHaveBeenCalled();
+      expect(diagnostics).toHaveBeenCalledWith("Import parsing failed", {
+        batchId: state.batchId,
+        attempt: 1,
+        error: expect.any(Error),
+      });
     } finally {
       diagnostics.mockRestore();
     }
   });
 
-  it("preserves the parser explanation for a detected malformed statement", async () => {
+  it("sanitizes parser exceptions for a detected malformed statement", async () => {
     const { t, owner } = await setup();
     const content =
       "https://tickertape.in/portfolio?tab=holdings\nWrong,Headers\n";
@@ -497,7 +501,8 @@ describe("import lifecycle", () => {
     ).resolves.toMatchObject({
       status: "failed",
       rowCount: 0,
-      errorMessage: "Could not find Tickertape stock holdings header row",
+      errorMessage:
+        "This file could not be parsed. Try again or choose another file.",
     });
   });
 

@@ -1,5 +1,6 @@
 "use node";
 
+import { importFailureMessage } from "../../src/errors";
 import { createHash } from "node:crypto";
 import {
   parseExactImportFile,
@@ -81,7 +82,7 @@ export const parseImport = internalAction({
         warnings: result.warnings,
       });
     } catch (error) {
-      console.error("Import parsing failed", error);
+      console.error("Import parsing failed", { ...args, error });
 
       await ctx.runMutation(internal.importWorkers.failParse, {
         ...args,
@@ -96,16 +97,13 @@ function parseSourceFile(file: ImportFile) {
   try {
     return parseExactImportFile(file);
   } catch (error) {
-    // Preserve the parser messages exposed by the legacy upload response.
-    throw new ConvexError(
-      error instanceof Error ? error.message : "Import file is invalid",
-    );
+    throw new Error("Import file is invalid", { cause: error });
   }
 }
 
 function parseFailureMessage(error: unknown) {
-  if (error instanceof ConvexError && typeof error.data === "string")
-    return error.data;
-
-  return "This file could not be parsed. Try again or choose another file.";
+  return importFailureMessage(
+    error instanceof ConvexError ? error.data : null,
+    "parse",
+  );
 }
