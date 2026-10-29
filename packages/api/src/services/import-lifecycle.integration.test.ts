@@ -154,13 +154,16 @@ describeDb("import lifecycle integration", () => {
             content: Buffer.from("not,a,known,format\n1,2,3,4"),
           }),
         ),
-      ).rejects.toThrow("No importer could detect this file format yet");
+      ).rejects.toMatchObject({
+        message: "Import file is invalid",
+        cause: expect.any(Error),
+      });
 
       const failed = await onlyFailedBatch(db, fixture.membership.householdId);
       expect(failed).toMatchObject({
         status: "failed",
         storagePath: null,
-        errors: ["No importer could detect this file format yet"],
+        errors: ["Check the file or entry values and try again."],
       });
       expect(failed?.processedAt).not.toBeNull();
       expect(supabase.upload).not.toHaveBeenCalled();
@@ -222,7 +225,9 @@ describeDb("import lifecycle integration", () => {
       ).rejects.toThrow("Import storage is unavailable");
 
       const failed = await onlyFailedBatch(db, fixture.membership.householdId);
-      expect(failed?.errors).toEqual(["Import storage is unavailable"]);
+      expect(failed?.errors).toEqual([
+        "The service is temporarily unavailable. Please try again.",
+      ]);
       expect(supabase.upload).not.toHaveBeenCalled();
     });
 
@@ -264,7 +269,7 @@ describeDb("import lifecycle integration", () => {
       expect(failed).toMatchObject({
         status: "failed",
         storagePath: null,
-        errors: ["Source File could not be stored"],
+        errors: ["The service is temporarily unavailable. Please try again."],
       });
       expect(await countRowsFor(db, failed?.id)).toBe(0);
     });
@@ -298,7 +303,7 @@ describeDb("import lifecycle integration", () => {
       expect(failed).toMatchObject({
         status: "failed",
         storagePath: null,
-        errors: ["Import operation failed"],
+        errors: ["The operation could not be completed. Please try again."],
       });
       expect(await countRowsFor(db, failed?.id)).toBe(0);
     });
@@ -413,7 +418,7 @@ describeDb("import lifecycle integration", () => {
 
       const failed = await onlyFailedBatch(db, fixture.membership.householdId);
       expect(failed?.errors).toEqual([
-        "Import Batch changed while it was being parsed",
+        "The data has changed. Reload and try again.",
       ]);
       expect(await countRowsFor(db, failed?.id)).toBe(0);
     });

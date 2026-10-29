@@ -1,12 +1,14 @@
+import { safePublicErrorMessage } from "@investment-sync/portfolio-domain";
 import { createHash, randomUUID } from "node:crypto";
 import { importBatches, importRows } from "@investment-sync/db";
 import {
   normalizedImportRowSchema,
   parseImportFile,
+  getImportFileValidationError,
 } from "@investment-sync/importers";
 import { and, desc, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { Clock, Effect } from "effect";
-import { getImportBucketName, validateImportFile } from "../config";
+import { getImportBucketName } from "../config";
 import { logger } from "../logger";
 import {
   assertSourceWritesAllowed,
@@ -23,6 +25,7 @@ import {
   ImportStorageError,
   ImportValidationError,
   toImportError,
+  publicImportError,
 } from "./import-errors";
 import type { MembershipContext } from "./membership";
 
@@ -34,6 +37,7 @@ export interface ImportFileInput {
   fileName: string;
   mimeType?: string;
   content: Buffer;
+  requestId?: string;
 }
 
 export function uploadAndProcessImport(
@@ -71,16 +75,22 @@ export function uploadAndProcessImport(
     const failBatch =
       (metadata: FailedImportMetadata = {}) =>
       <A, E extends ImportError>(effect: Effect.Effect<A, E>) =>
-        Effect.tapError(effect, (error) =>
-          markImportFailed(
+        Effect.tapError(effect, (error) => {
+          logger.error("Import Batch processing failed", {
+            importBatchId,
+            requestId: input.requestId,
+            error,
+          });
+
+          return markImportFailed(
             ctx,
             membership,
             importBatchId,
-            error.message,
+            publicImportError(error).message,
             now,
             metadata,
-          ),
-        );
+          );
+        });
 
     const parsed = yield* Effect.try({
       try: () => parseAndValidateImport(input),
@@ -115,6 +125,15 @@ export function uploadAndProcessImport(
       parsed,
       now,
     }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() =>
+          logger.error("Import Batch persistence failed", {
+            importBatchId,
+            requestId: input.requestId,
+            error,
+          }),
+        ),
+      ),
       Effect.catchAll((error) =>
         // The stored file has to go, and how the failure is recorded depends on
         // whether it went: a file that could not be deleted keeps its path and
@@ -123,13 +142,13 @@ export function uploadAndProcessImport(
         // The path is written back explicitly rather than left alone. The step
         // that persists it is inside the effect that just failed, so it may
         // never have run -- and the cron only sees rows with a non-null path.
-        removeStoredFile(ctx, storagePath).pipe(
+        removeStoredFile(ctx, storagePath, importBatchId).pipe(
           Effect.flatMap((removed) =>
             markImportFailed(
               ctx,
               membership,
               importBatchId,
-              error.message,
+              publicImportError(error).message,
               now,
               removed ? { storagePath: null } : { storagePath, expiresAt: now },
             ),
@@ -435,6 +454,7 @@ async function listImportsQuery(
 
   return batches.map(({ storagePath, ...batch }) => ({
     ...batch,
+    errors: batch.errors.map(safePublicErrorMessage),
     sourceFileAvailable: storagePath !== null,
   }));
 }
@@ -466,18 +486,15 @@ async function ensureImportBucketExists(ctx: ImportDependencies) {
 }
 
 function validateImportInput(input: ImportFileInput) {
-  return Effect.try({
-    try: () =>
-      validateImportFile({
-        fileName: input.fileName,
-        mimeType: input.mimeType,
-        sizeBytes: input.content.length,
-      }),
-    catch: (error) =>
-      new ImportValidationError({
-        message: error instanceof Error ? error.message : "Invalid import file",
-      }),
+  const message = getImportFileValidationError({
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.content.length,
   });
+
+  return message
+    ? Effect.fail(new ImportValidationError({ message }))
+    : Effect.void;
 }
 
 function parseAndValidateImport(input: {
@@ -490,8 +507,8 @@ function parseAndValidateImport(input: {
     parsed = parseImportFile(input);
   } catch (error) {
     throw new ImportValidationError({
-      message:
-        error instanceof Error ? error.message : "Import file is invalid",
+      message: "Import file is invalid",
+      cause: error,
     });
   }
 
@@ -581,6 +598,7 @@ function markImportFailed(
 function removeStoredFile(
   ctx: ImportDependencies,
   storagePath: string,
+  importBatchId: string,
 ): Effect.Effect<boolean> {
   return Effect.tryPromise({
     try: () => {
@@ -600,7 +618,7 @@ function removeStoredFile(
       if (error instanceof SourceWritesPausedError) return false;
 
       logger.error("Failed to delete Source File after import failure", {
-        storagePath,
+        importBatchId,
         error,
       });
       return false;

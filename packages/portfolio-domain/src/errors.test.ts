@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { narrowPublicError, publicError } from "./errors";
+import {
+  narrowPublicError,
+  publicError,
+  safePublicErrorMessage,
+} from "./errors";
 
 describe("public error contract", () => {
   it.each([
@@ -24,4 +28,13 @@ describe("public error contract", () => {
       expect(narrowPublicError(data)).toEqual(publicError("INTERNAL_FAILURE"));
     },
   );
+});
+
+it("sanitizes historical messages while retaining catalog explanations", () => {
+  expect(safePublicErrorMessage("fake-provider://secret")).toBe(
+    publicError("INTERNAL_FAILURE").message,
+  );
+  expect(
+    safePublicErrorMessage(publicError("PROVIDER_UNAVAILABLE").message),
+  ).toBe(publicError("PROVIDER_UNAVAILABLE").message);
 });

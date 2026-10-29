@@ -69,3 +69,10 @@ export function narrowPublicError(data: unknown) {
     isPublicErrorCode(data.code) ? data.code : "INTERNAL_FAILURE",
   );
 }
+
+export function safePublicErrorMessage(message: unknown) {
+  return (
+    Object.values(publicErrors).find((error) => error.message === message)
+      ?.message ?? publicErrors.INTERNAL_FAILURE.message
+  );
+}
