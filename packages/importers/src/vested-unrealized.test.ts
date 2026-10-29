@@ -22,6 +22,7 @@ function vestedFile(rows: unknown[][]) {
     type: "buffer",
     bookType: "xlsx",
   });
+
   if (!Buffer.isBuffer(content)) {
     throw new Error("Expected generated workbook buffer");
   }
@@ -33,6 +34,24 @@ describe.each([
   { name: "legacy", parse: parseImportFile },
   { name: "exact", parse: parseExactImportFile },
 ])("Vested unrealized validation through $name parsing", ({ parse }) => {
+  it("finds the header after a Security report preamble", () => {
+    const file = vestedFile([
+      ["Security holdings report"],
+      requiredHeaders,
+      validRow,
+    ]);
+
+    expect(parse(file).rows).toHaveLength(1);
+  });
+
+  it("reports physical sheet row numbers after leading blank rows", () => {
+    const file = vestedFile([[], [], requiredHeaders, ["ALPHA", 2, "", 125]]);
+
+    expect(() => parse(file)).toThrow(
+      "row 4: Cost Basis (USD) must contain a valid number",
+    );
+  });
+
   it.each(requiredHeaders)("rejects missing %s header", (missing) => {
     const index = requiredHeaders.indexOf(missing);
     const file = vestedFile([

@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { parseSourceDecimal } from "./numeric";
 import { withSourceDecimals } from "./source-decimals";
 import type { NormalizedHoldingRow } from "./types";
@@ -17,16 +18,30 @@ const requiredColumns = {
   "Market Value (USD)": ["Market Value (USD)"],
 };
 
-export function parseVestedUnrealizedRows(
-  rows: unknown[][],
+export function parseVestedUnrealizedSheet(
+  sheet: XLSX.WorkSheet | undefined,
 ): NormalizedHoldingRow[] {
-  const headerRow = requireHeaderRow(rows, ["Security"], sectionName);
+  // Reading from row 1 keeps validation locations aligned with the worksheet.
+  const rows = sheet
+    ? XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        raw: true,
+        defval: "",
+        range: 0,
+      })
+    : [];
+  const headerRow = requireHeaderRow(
+    rows,
+    ["Security", "Quantity"],
+    sectionName,
+  );
   const headers = rows[headerRow] ?? [];
   requireColumns(headers, requiredColumns, sectionName);
 
   return rows.slice(headerRow + 1).flatMap((row, index) => {
     const record = objectFromRow(headers, row);
     const symbol = toStringValue(record.security).trim();
+
     if (!symbol || symbol.toLowerCase() === "total") {
       return [];
     }
@@ -80,6 +95,7 @@ function parseRequiredUsdAmount(
   rowNumber: number,
 ) {
   const message = `${sectionName} row ${rowNumber}: ${field} must contain a valid number`;
+
   if (typeof value !== "string" && typeof value !== "number") {
     throw new Error(message);
   }
@@ -92,6 +108,7 @@ function parseRequiredUsdAmount(
     /^(?:[+-]?\$?|\$[+-]?)(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(
       numericText,
     );
+
   if (!hasValidFormat) {
     throw new Error(message);
   }

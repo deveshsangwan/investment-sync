@@ -1,5 +1,5 @@
 import { parseSourceDecimal } from "./numeric";
-import { parseVestedUnrealizedRows } from "./vested-unrealized";
+import { parseVestedUnrealizedSheet } from "./vested-unrealized";
 import { getSourceDecimals, withSourceDecimals } from "./source-decimals";
 import * as XLSX from "xlsx";
 import type {
@@ -84,8 +84,9 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
   },
   parse(file: ImportFile): ParseResult {
     const workbook = createWorkbookContext(file);
-    const rows = workbookRows(workbook, "Unrealized P&L - Summary ");
-    const holdings = parseVestedUnrealizedRows(rows);
+    const holdings = parseVestedUnrealizedSheet(
+      workbook.workbook.Sheets["Unrealized P&L - Summary "],
+    );
 
     return {
       sourceType: "vested_drivewealth_xlsx",
