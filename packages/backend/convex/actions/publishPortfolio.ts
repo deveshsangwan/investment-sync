@@ -115,6 +115,7 @@ export const publishPortfolio = internalAction({
         rows.push(...values);
       }
       if (
+        rows.length < 1 ||
         rows.length !== input.batch.rowCount ||
         rows.length > rowLimit ||
         utf8Bytes(JSON.stringify(rows)) !== input.batch.normalizedBytes ||
