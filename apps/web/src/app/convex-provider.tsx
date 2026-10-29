@@ -12,7 +12,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
+import {
+  ConvexReactClient,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { usePathname } from "next/navigation";
 import { ErrorState, PageShell } from "@/components/portfolio-ui";
@@ -271,14 +276,29 @@ function ProvisionCurrentUser({
 
   return (
     <ConvexSessionContext.Provider value={value}>
-      <QueryCacheProvider enabled={exposedStatus === "ready"}>
-        <HoldingsNavigationProvider
-          key={exposedStatus === "ready" ? "ready" : "unavailable"}
-        >
-          {children}
-        </HoldingsNavigationProvider>
-      </QueryCacheProvider>
+      <HouseholdScope enabled={exposedStatus === "ready"}>
+        {children}
+      </HouseholdScope>
     </ConvexSessionContext.Provider>
+  );
+}
+
+function HouseholdScope({
+  enabled,
+  children,
+}: {
+  enabled: boolean;
+  children: ReactNode;
+}) {
+  const current = useQuery(api.users.current, enabled ? {} : "skip");
+  const scope = enabled
+    ? (current?.householdId ?? "loading-household")
+    : "unavailable";
+
+  return (
+    <QueryCacheProvider key={scope} enabled={enabled}>
+      <HoldingsNavigationProvider>{children}</HoldingsNavigationProvider>
+    </QueryCacheProvider>
   );
 }
 
