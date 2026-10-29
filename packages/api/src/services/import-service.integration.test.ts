@@ -265,7 +265,7 @@ describeDb("import service integration", () => {
     ).toBe(false);
   });
 
-  it("collapses duplicate instrument identities at read time", async () => {
+  it("preserves the same instrument held in two accounts at read time", async () => {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const fixture = await createFixture([
       holdingRow({
@@ -296,11 +296,14 @@ describeDb("import service integration", () => {
       caller.portfolio.assetClassDetail({ assetClass: "indian_stock" }),
     ]);
 
-    expect(holdings).toHaveLength(1);
-    expect(assetClassDetail.holdings).toHaveLength(1);
-    expect(assetClassDetail.summary.currentValue).toBe(
-      Number(holdings[0]?.currentValue ?? 0),
-    );
+    expect(holdings).toHaveLength(2);
+    expect(assetClassDetail.holdings).toHaveLength(2);
+    expect(holdings.map((holding) => holding.accountName).sort()).toEqual([
+      "Broker A",
+      "Broker B",
+    ]);
+    expect(assetClassDetail.summary.currentValue).toBe(335);
+    expect(assetClassDetail.summary.investedAmount).toBe(300);
   });
 
   it("reuses legacy instrument identities with whitespace drift", async () => {
