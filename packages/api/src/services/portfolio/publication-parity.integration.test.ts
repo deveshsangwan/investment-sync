@@ -422,7 +422,7 @@ describeDb("Postgres portfolio publication parity", () => {
     ]);
   });
 
-  it("matches Vested ranking without changing final display order", async () => {
+  it("preserves independent account rows alongside Vested in final display order", async () => {
     const fixture = await createFixture(db, [
       {
         ...usHolding("ALPHA", "2026-03-01", true),
@@ -442,10 +442,14 @@ describeDb("Postgres portfolio publication parity", () => {
     expect(matched.actual.positions.current.map((row) => row.symbol)).toEqual([
       "BETA",
       "ALPHA",
+      "ALPHA",
     ]);
-    expect(matched.actual.positions.current[1]?.provider).toBe(
-      "Vested / DriveWealth",
-    );
+    expect(
+      matched.actual.positions.current
+        .filter((row) => row.symbol === "ALPHA")
+        .map((row) => row.provider)
+        .sort(),
+    ).toEqual(["Manual Workbook", "Vested / DriveWealth"]);
   });
 
   it("keeps aggregate eligibility tied to physical source groups", async () => {
@@ -604,7 +608,64 @@ describeDb("Postgres portfolio publication parity", () => {
     ]);
     await commit(fixture);
 
-    await assertParity(fixture);
+    const result = await assertParity(fixture);
+    expect(result.actual.positions.current).toHaveLength(2);
+    expect(result.actual.overview.summary.currentValue).toBe(335);
+  });
+
+  it("keeps concurrent independent account updates and exits isolated", async () => {
+    const fixture = await createFixture(db, [
+      holdingRow({ accountName: "Broker A", currentValue: 125.1234 }),
+      holdingRow({
+        accountName: "Broker B",
+        investedAmount: 200,
+        currentValue: 210.5678,
+      }),
+    ]);
+    await commit(fixture);
+    const initial = await assertParity(fixture);
+
+    expect(initial.actual.positions.current).toHaveLength(2);
+    expect(initial.publication.projection.totals[0]?.currentValue).toBe(
+      "335.6912",
+    );
+    expect(initial.actual.overview.summary.currentValue).toBe(335.69);
+
+    const batches = await Promise.all([
+      createBatch(db, fixture.membership, [
+        holdingRow({
+          accountName: "Broker A",
+          symbol: "BETA",
+          instrumentName: "BETA",
+          sourceDate: "2026-06-19",
+        }),
+      ]),
+      createBatch(db, fixture.membership, [
+        holdingRow({
+          accountName: "Broker B",
+          sourceDate: "2026-06-19",
+          investedAmount: 200,
+          currentValue: 220,
+        }),
+      ]),
+    ]);
+    await Promise.all(batches.map((batchId) => commit(fixture, batchId)));
+    const next = await assertParity(fixture);
+
+    expect(
+      next.actual.positions.current
+        .map((row) => [row.accountName, row.symbol])
+        .sort(),
+    ).toEqual([
+      ["Broker A", "BETA"],
+      ["Broker B", "ABC"],
+    ]);
+    expect(next.actual.positions.exited).toMatchObject([
+      { accountName: "Broker A", symbol: "ABC" },
+    ]);
+    expect(next.actual.positions.exited).toHaveLength(1);
+    expect(next.actual.overview.summary.currentValue).toBe(345);
+    expect(await db.select().from(holdingSnapshots)).toHaveLength(4);
   });
 
   it("retains explicit pnl, source returns, instrument metadata and transaction history", async () => {

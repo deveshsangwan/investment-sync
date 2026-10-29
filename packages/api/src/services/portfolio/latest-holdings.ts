@@ -165,6 +165,19 @@ async function latestCurrentHoldingRows(
     and i.asset_class = 'us_stock' and hs.currency = 'USD'
     and hs.source_payload->>'sourceSheet' = 'US stocks'`;
 
+  const isIndianStockOverlap = sql`a.name = 'Indian Stocks'
+    and i.asset_class = 'indian_stock' and hs.currency = 'INR'
+    and ((a.provider = 'Manual Workbook' and hs.source_type = 'investment_portfolio_xlsx'
+      and hs.source_payload->>'sourceSheet' = 'Stock Investments')
+      or (a.provider = 'Tickertape' and hs.source_type = 'tickertape_stock_csv'
+        and coalesce(hs.source_payload->>'sourceSheet', '') = ''))`;
+  const isMutualFundOverlap = sql`a.name = 'Mutual Funds'
+    and i.asset_class = 'mutual_fund' and hs.currency = 'INR'
+    and ((a.provider = 'Manual Workbook' and hs.source_type = 'investment_portfolio_xlsx'
+      and hs.source_payload->>'sourceSheet' = 'Mutual Funds')
+      or (a.provider = 'Tickertape' and hs.source_type = 'tickertape_mutual_fund_csv'
+        and coalesce(hs.source_payload->>'sourceSheet', '') = ''))`;
+
   const sourceCte =
     mode === "current"
       ? sql`latest_group_rows`
@@ -180,6 +193,15 @@ async function latestCurrentHoldingRows(
   const rows = await ctx.db.execute(sql`
     with base as (
       select
+        case
+          when (${isVestedSource}) or (${isWorkbookSource})
+            then jsonb_build_array('workbook-vested-us-stocks')
+          when (${isIndianStockOverlap})
+            then jsonb_build_array('workbook-tickertape', 'indian_stock')
+          when (${isMutualFundOverlap})
+            then jsonb_build_array('workbook-tickertape', 'mutual_fund')
+          else jsonb_build_array(hs.account_id)
+        end as "selectionAccount",
         case when (${isVestedSource}) or (${isWorkbookSource})
           then jsonb_build_array('workbook-vested-us-stocks')
           else jsonb_build_array(hs.account_id, a.name, a.provider,
@@ -261,6 +283,7 @@ async function latestCurrentHoldingRows(
         *,
         row_number() over (
           partition by
+            "selectionAccount",
             "assetClass",
             "instrumentKey",
             "currency"
