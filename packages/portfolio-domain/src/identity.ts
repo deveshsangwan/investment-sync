@@ -110,7 +110,11 @@ function selectionAccountKey(row: PositionRow): string {
             row.sourceType === "tickertape_mutual_fund_csv" &&
             sheet === ""))))
   ) {
-    return JSON.stringify(["workbook-tickertape", row.assetClass]);
+    return JSON.stringify([
+      "source-overlap",
+      "workbook-tickertape",
+      row.assetClass,
+    ]);
   }
 
   return accountKey(row);

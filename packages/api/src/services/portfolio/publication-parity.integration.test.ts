@@ -668,47 +668,62 @@ describeDb("Postgres portfolio publication parity", () => {
     expect(await db.select().from(holdingSnapshots)).toHaveLength(4);
   });
 
-  it("keeps each account's performance cash flows and histories separate", async () => {
-    const fixture = await createFixture(db, [
-      holdingRow({
-        accountName: "Broker A",
-        sourceDate: "2026-06-16",
-        currentValue: 120,
-      }),
-      holdingRow({
-        accountName: "Broker B",
-        sourceDate: "2026-06-16",
-        investedAmount: 200,
-        currentValue: 220,
-      }),
-      {
-        ...transactionRow({ tradeDate: "2025-06-16", amount: 100 }),
-        accountName: "Broker A",
-      },
-      {
-        ...transactionRow({ tradeDate: "2025-06-16", amount: 200 }),
-        accountName: "Broker B",
-      },
-    ]);
-    await commit(fixture);
-    const { actual } = await assertParity(fixture);
-    const asset = actual.assetClassDetails[0];
+  it.each([false, true])(
+    "keeps account performance isolated with cash flows=%s",
+    async (hasCashFlows) => {
+      const fixture = await createFixture(db, [
+        holdingRow({
+          accountName: "Broker A",
+          sourceDate: "2025-06-16",
+          currentValue: 100,
+        }),
+        holdingRow({
+          accountName: "Broker B",
+          sourceDate: "2025-06-16",
+          investedAmount: 200,
+          currentValue: 200,
+        }),
+        holdingRow({
+          accountName: "Broker A",
+          sourceDate: "2026-06-16",
+          currentValue: 120,
+        }),
+        holdingRow({
+          accountName: "Broker B",
+          sourceDate: "2026-06-16",
+          investedAmount: 200,
+          currentValue: 220,
+        }),
+        ...(hasCashFlows
+          ? [100, 200].map((amount, index) => ({
+              ...transactionRow({ tradeDate: "2025-06-16", amount }),
+              accountName: index === 0 ? "Broker A" : "Broker B",
+            }))
+          : []),
+      ]);
+      await commit(fixture);
+      const { actual } = await assertParity(fixture);
+      const asset = actual.assetClassDetails[0];
 
-    expect(asset?.holdings).toHaveLength(2);
-    for (const detail of actual.holdingDetails) {
-      const assetHolding = asset?.holdings.find(
-        (holding) => holding.accountName === detail.holding.accountName,
-      );
+      expect(asset?.holdings).toHaveLength(2);
+      for (const detail of actual.holdingDetails) {
+        const assetHolding = asset?.holdings.find(
+          (holding) => holding.accountName === detail.holding.accountName,
+        );
 
-      expect(detail.history).toHaveLength(1);
-      expect(detail.transactions).toHaveLength(1);
-      expect(assetHolding?.xirr).toBeCloseTo(
-        detail.holding.accountName === "Broker A" ? 20 : 10,
-        2,
-      );
-      expect(assetHolding?.xirr).toBe(detail.holding.xirr);
-    }
-  });
+        expect(detail.history).toHaveLength(2);
+        expect(detail.transactions).toHaveLength(hasCashFlows ? 1 : 0);
+        expect(assetHolding?.xirr).toBeCloseTo(
+          detail.holding.accountName === "Broker A" ? 20 : 10,
+          2,
+        );
+        expect(assetHolding?.xirr).toBe(detail.holding.xirr);
+        expect(assetHolding?.xirrDataQuality).toBe(
+          hasCashFlows ? "exact" : "estimated",
+        );
+      }
+    },
+  );
 
   it("retains explicit pnl, source returns, instrument metadata and transaction history", async () => {
     const fixture = await createFixture(db, [

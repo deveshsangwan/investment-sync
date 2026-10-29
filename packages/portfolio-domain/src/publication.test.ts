@@ -482,11 +482,17 @@ describe("portfolio publication", () => {
           metadata: { sourceSheet: "Separate sheet" },
           currentValue: 160,
         }),
+        holding({
+          ...row,
+          accountName: assetClass,
+          provider: "workbook-tickertape",
+          currentValue: 170,
+        }),
       ]);
 
-      expect(publication.reconciliation.currentCount).toBe(4);
-      expect(publication.projection.totals[0]?.currentValue).toBe("580");
-      expect(publication.facts).toHaveLength(5);
+      expect(publication.reconciliation.currentCount).toBe(5);
+      expect(publication.projection.totals[0]?.currentValue).toBe("750");
+      expect(publication.facts).toHaveLength(6);
     },
   );
 
