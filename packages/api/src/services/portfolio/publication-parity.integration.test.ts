@@ -13,6 +13,7 @@ import {
   type Database,
 } from "@investment-sync/db";
 import { eq } from "drizzle-orm";
+import { FinancialDecimal } from "@investment-sync/importers/numeric";
 import {
   buildPortfolioPublication,
   canonicalDecimal,
@@ -39,6 +40,7 @@ import {
 } from "../import-test-support";
 import { getUsdInrRate } from "../currency-rates";
 import { loadPostgresPublicationFacts } from "./publication-parity-adapter";
+import { roundMoney, roundPercent } from "./utils";
 
 vi.mock("../currency-rates", () => ({ getUsdInrRate: vi.fn() }));
 
@@ -179,19 +181,82 @@ describeDb("Postgres portfolio publication parity", () => {
       );
     }
     for (const detail of actual.assetClassDetails) {
+      const legacyDetail = await caller.portfolio.assetClassDetail({
+        assetClass: detail.assetClass,
+      });
+      if (
+        legacyDetail.holdings.every((holding) => holding.pnlAmount !== null)
+      ) {
+        expect(semantic(detail)).toEqual(semantic(legacyDetail, "", true));
+
+        continue;
+      }
+
+      // Issue 60 corrects the legacy zero fallback for absent P&L. Compute the
+      // approved totals from SQL's selected rows and compare every other field.
+      const corrected = legacyDetail.holdings.reduce(
+        (totals, holding) => {
+          const rate =
+            holding.currency === "INR"
+              ? "1"
+              : holding.currency === "USD" && quote.status !== "unavailable"
+                ? quote.rate
+                : "0";
+          const pnl =
+            holding.pnlAmount === null
+              ? new FinancialDecimal(holding.currentValue).minus(
+                  holding.investedAmount,
+                )
+              : new FinancialDecimal(holding.pnlAmount);
+
+          return {
+            invested: totals.invested.plus(
+              new FinancialDecimal(holding.investedAmount).times(rate),
+            ),
+            pnl: totals.pnl.plus(pnl.times(rate)),
+          };
+        },
+        { invested: new FinancialDecimal(0), pnl: new FinancialDecimal(0) },
+      );
+      const expectedSummary = {
+        ...legacyDetail.summary,
+        pnlAmount: roundMoney(corrected.pnl.toNumber()),
+        pnlPercent: corrected.invested.isZero()
+          ? 0
+          : roundPercent(
+              corrected.pnl.div(corrected.invested).times(100).toNumber(),
+            ),
+      };
+
       expect(semantic(detail)).toEqual(
-        semantic(
-          await caller.portfolio.assetClassDetail({
-            assetClass: detail.assetClass,
-          }),
-          "",
-          true,
-        ),
+        semantic({ ...legacyDetail, summary: expectedSummary }, "", true),
       );
     }
 
     return { publication, actual };
   }
+
+  it("derives absent P&L while retaining every other legacy field", async () => {
+    const fixture = await createFixture(db, [
+      holdingRow({ currentValue: 125 }),
+    ]);
+    await commit(fixture);
+    const { actual } = await assertParity(fixture);
+    const legacyDetail = await appRouter
+      .createCaller(contextFor(db, fixture))
+      .portfolio.assetClassDetail({ assetClass: "indian_stock" });
+
+    expect(legacyDetail.summary).toMatchObject({ pnlAmount: 0, pnlPercent: 0 });
+    expect(actual.assetClassDetails[0]?.summary).toMatchObject({
+      pnlAmount: 25,
+      pnlPercent: 25,
+    });
+    expect(actual.overview.summary).toMatchObject({
+      pnlAmount: 25,
+      pnlPercent: 25,
+    });
+    expect(actual.assetClassDetails[0]?.holdings[0]?.pnlAmount).toBeNull();
+  });
 
   it.each(parserGoldenFixtures())(
     "matches committed parser golden: $name",
