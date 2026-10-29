@@ -12,6 +12,15 @@ export function realizedSaleIdentity(row: {
   const sale = row.metadata.realizedSale;
   if (!sale) return undefined;
 
+  if (sale.executionId) {
+    return JSON.stringify([
+      "realized-execution-lot-v1",
+      row.tradeDate,
+      sale.executionId,
+      sale.lotId ?? sale.acquisitionDate ?? null,
+    ]);
+  }
+
   return JSON.stringify([
     "realized-lot-v1",
     row.tradeDate,

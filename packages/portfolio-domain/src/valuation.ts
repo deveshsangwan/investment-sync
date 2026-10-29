@@ -210,9 +210,9 @@ function portfolioOverview(
   const performance = {
     ...summarizePerformance({
       holdings: performanceHoldings,
-      cashFlows: projection.cashFlows.map((fact) =>
-        performanceCashFlow(fact, rate),
-      ),
+      cashFlows: projection.cashFlows
+        .filter((fact) => !fact.row.metadata.realizedSale)
+        .map((fact) => performanceCashFlow(fact, rate)),
       valuations: projection.valuations.map((row) => ({
         date: new Date(row.valuationDate),
         investedAmount: convert(row.investedAmount, row.currency, rate),
@@ -426,6 +426,21 @@ function holdingDetail(
     }),
     npsDetails:
       npsDetailsSchema.safeParse(latest.row.metadata.npsDetails).data ?? null,
+    sales: position.transactions.flatMap((fact) => {
+      const sale = fact.row.metadata.realizedSale;
+      if (!sale) return [];
+
+      return [
+        {
+          id: fact.occurrenceKey,
+          saleDate: fact.row.tradeDate,
+          quantity: fact.row.quantity ?? null,
+          proceeds: fact.row.amount,
+          currency: fact.row.currency,
+          ...sale,
+        },
+      ];
+    }),
     transactions: position.transactions.map((fact) => ({
       id: fact.occurrenceKey,
       tradeDate: fact.row.tradeDate,
@@ -459,7 +474,9 @@ function positionXirr(
     : position.transactions;
 
   return resolveHoldingXirr({
-    cashFlows: transactions.map((fact) => performanceCashFlow(fact, rate)),
+    cashFlows: transactions
+      .filter((fact) => !fact.row.metadata.realizedSale)
+      .map((fact) => performanceCashFlow(fact, rate)),
     terminalValue: convert(
       position.holding.row.currentValue,
       position.holding.row.currency,

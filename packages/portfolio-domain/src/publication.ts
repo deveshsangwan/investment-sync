@@ -1,3 +1,4 @@
+import { realizedSaleIdentity } from "@investment-sync/importers";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
@@ -150,7 +151,7 @@ export function buildPortfolioPublication(
     ),
     hasExplicitValuations: valuations.length > 0,
     valuations,
-    cashFlows: transactions,
+    cashFlows: transactions.filter((fact) => !fact.row.metadata.realizedSale),
   };
   const reconciliation = {
     factCount: facts.length,
@@ -320,7 +321,7 @@ function resolveFacts(facts: PortfolioFact[]) {
       row.source.group,
       row.tradeDate,
       row.type,
-      scaled(row.amount, 4),
+      realizedSaleIdentity(row) ?? scaled(row.amount, 4),
       row.currency,
     ]);
     const batchFingerprint = JSON.stringify([provenance.batchId, fingerprint]);
@@ -340,8 +341,10 @@ function resolveFacts(facts: PortfolioFact[]) {
     transactions.set(occurrenceKey, {
       row: {
         ...row,
-        amount: scaled(row.amount, 4),
-        quantity: optionalScaled(row.quantity, 10),
+        amount: row.metadata.realizedSale ? row.amount : scaled(row.amount, 4),
+        quantity: row.metadata.realizedSale
+          ? row.quantity
+          : optionalScaled(row.quantity, 10),
         price: optionalScaled(row.price, 10),
       },
       provenance,

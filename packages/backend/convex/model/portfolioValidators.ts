@@ -188,6 +188,20 @@ export const holdingDetailViewValidator = v.union(
     }),
     history: v.array(holdingHistoryValidator),
     npsDetails: v.union(npsDetailsValidator, v.null()),
+    sales: v.array(
+      v.object({
+        id: v.string(),
+        saleDate: v.string(),
+        quantity: v.union(v.string(), v.null()),
+        proceeds: v.string(),
+        currency: currencyValidator,
+        acquisitionDate: v.optional(v.string()),
+        costBasis: v.string(),
+        realizedPnl: v.string(),
+        executionId: v.optional(v.string()),
+        lotId: v.optional(v.string()),
+      }),
+    ),
     transactions: v.array(
       v.object({
         id: v.string(),

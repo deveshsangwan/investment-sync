@@ -56,15 +56,6 @@ export interface NormalizedHoldingRow {
   metadata: Record<string, unknown>;
 }
 
-export const realizedSaleSchema = z.object({
-  acquisitionDate: z.string().optional(),
-  costBasis: canonicalDecimalSchema,
-  realizedPnl: canonicalDecimalSchema,
-  executionId: z.string().min(1).optional(),
-  lotId: z.string().min(1).optional(),
-});
-export type RealizedSale = z.infer<typeof realizedSaleSchema>;
-
 export interface NormalizedTransactionRow {
   kind: "transaction";
   sourceType: ImportSourceType;
@@ -159,6 +150,15 @@ export const isoDateSchema = z
       Number(dayText),
     );
   }, "Invalid calendar date");
+
+export const realizedSaleSchema = z.object({
+  acquisitionDate: isoDateSchema.optional(),
+  costBasis: canonicalDecimalSchema,
+  realizedPnl: canonicalDecimalSchema,
+  executionId: z.string().min(1).optional(),
+  lotId: z.string().min(1).optional(),
+});
+export type RealizedSale = z.infer<typeof realizedSaleSchema>;
 
 export const normalizedHoldingRowSchema = z.object({
   kind: z.literal("holding"),
