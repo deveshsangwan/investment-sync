@@ -7,7 +7,7 @@ import {
   useMutation,
 } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
-import { Component, useEffect, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppButton, StatePanel } from "./mobile-ui";
@@ -70,24 +70,27 @@ function SessionConnection({
   convexUrl: string;
   onRetry: () => void;
 }) {
-  const [client, setClient] = useState<ConvexReactClient | null>(null);
+  const [client] = useState(
+    () =>
+      new ConvexReactClient(convexUrl, {
+        unsavedChangesWarning: false,
+      }),
+  );
+  const isMounted = useRef(false);
 
   useEffect(() => {
-    const connection = new ConvexReactClient(convexUrl, {
-      unsavedChangesWarning: false,
-    });
-    setClient(connection);
+    isMounted.current = true;
 
     return () => {
-      void connection.close();
-    };
-  }, [convexUrl]);
+      isMounted.current = false;
 
-  if (!client) {
-    return (
-      <SessionPanel title="Connecting to your portfolio" onRetry={onRetry} />
-    );
-  }
+      // Strict Mode replays effects without replacing the lazy client. Let
+      // that setup finish before disposing a genuinely unmounted session.
+      queueMicrotask(() => {
+        if (!isMounted.current) void client.close();
+      });
+    };
+  }, [client]);
 
   return (
     <ConvexProviderWithClerk client={client} useAuth={useAuth}>

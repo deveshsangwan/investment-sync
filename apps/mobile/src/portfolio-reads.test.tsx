@@ -1,7 +1,11 @@
 import { createElement, type ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getFunctionName, type FunctionReturnType } from "convex/server";
+import {
+  getFunctionName,
+  type FunctionReference,
+  type FunctionReturnType,
+} from "convex/server";
 import type { api } from "@investment-sync/backend/api";
 import {
   buildPortfolioPublication,
@@ -10,7 +14,9 @@ import {
 import DashboardScreen from "../app/index";
 import HoldingsScreen from "../app/holdings";
 
-const query = vi.hoisted(() => vi.fn());
+const query = vi.hoisted(() =>
+  vi.fn<(reference: FunctionReference<"query">) => unknown>(),
+);
 vi.mock("convex/react", () => ({ useQuery: query }));
 vi.mock("expo-router", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@expo/vector-icons/Ionicons", () => ({ default: "Icon" }));
@@ -98,10 +104,18 @@ function views() {
   });
 }
 
+function queriedFunction() {
+  const reference = query.mock.calls[0]?.[0];
+
+  if (!reference) throw new Error("Expected a portfolio query");
+
+  return getFunctionName(reference);
+}
+
 let renderer: ReactTestRenderer | undefined;
 beforeEach(() => vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true));
 afterEach(async () => {
-  await act(async () => renderer?.unmount());
+  await act(() => renderer?.unmount());
   renderer = undefined;
   query.mockReset();
   vi.unstubAllGlobals();
@@ -111,12 +125,10 @@ describe("native portfolio view contracts", () => {
   it("reads the overview summary and displays server-valued INR totals and allocation", async () => {
     const portfolio = views();
     query.mockReturnValue(portfolio.overview);
-    await act(async () => {
+    await act(() => {
       renderer = create(<DashboardScreen />);
     });
-    expect(getFunctionName(query.mock.calls[0]?.[0])).toBe(
-      "portfolio:overview",
-    );
+    expect(queriedFunction()).toBe("portfolio:overview");
     const text = JSON.stringify(renderer?.toJSON());
     expect(text).toContain("2,040");
     expect(text).toContain("1,640");
@@ -129,12 +141,10 @@ describe("native portfolio view contracts", () => {
       current: portfolio.positions.current,
       exited: [portfolio.positions.current[0]],
     });
-    await act(async () => {
+    await act(() => {
       renderer = create(<HoldingsScreen />);
     });
-    expect(getFunctionName(query.mock.calls[0]?.[0])).toBe(
-      "portfolio:positions",
-    );
+    expect(queriedFunction()).toBe("portfolio:positions");
     expect(renderer?.root.findAllByType("li")).toHaveLength(2);
     const text = JSON.stringify(renderer?.toJSON());
     expect(text).toContain("Account A");
@@ -146,12 +156,12 @@ describe("native portfolio view contracts", () => {
 
   it("distinguishes loading from an empty portfolio", async () => {
     query.mockReturnValue(undefined);
-    await act(async () => {
+    await act(() => {
       renderer = create(<HoldingsScreen />);
     });
     expect(JSON.stringify(renderer?.toJSON())).toContain("Loading holdings");
     query.mockReturnValue({ current: [], exited: [] });
-    await act(async () => renderer?.update(<HoldingsScreen />));
+    await act(() => renderer?.update(<HoldingsScreen />));
     expect(
       renderer?.root.findByProps({ title: "No committed holdings" }),
     ).toBeDefined();

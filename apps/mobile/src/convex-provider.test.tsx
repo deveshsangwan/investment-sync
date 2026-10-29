@@ -1,5 +1,5 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { createElement, type ReactNode } from "react";
+import { StrictMode, createElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getFunctionName } from "convex/server";
 import { MobilePortfolioProvider } from "./convex-provider";
@@ -123,33 +123,37 @@ function latestClient() {
   return client;
 }
 async function render() {
-  await act(async () => {
+  await act(() => {
     renderer = create(tree());
   });
 }
 async function update() {
-  await act(async () => {
+  await act(() => {
     renderer?.update(tree());
   });
 }
 function hasPortfolio() {
   return (renderer?.root.findAllByType("article").length ?? 0) > 0;
 }
+function isPressHandler(value: unknown): value is () => void {
+  return typeof value === "function";
+}
+
 async function retry() {
   const button = renderer?.root.findByProps({ label: "Try connecting again" });
   const onPress: unknown = button?.props.onPress;
 
-  if (typeof onPress !== "function") throw new Error("Missing retry action");
+  if (!isPressHandler(onPress)) throw new Error("Missing retry action");
 
-  await act(async () => {
+  await act(() => {
     onPress();
   });
 }
 async function authenticate(client = latestClient()) {
-  await act(async () => client.reportAuth?.(true));
+  await act(() => client.reportAuth?.(true));
 }
 async function provision(client = latestClient()) {
-  await act(async () => client.provisioning.resolve("fake-user-id"));
+  await act(() => client.provisioning.resolve("fake-user-id"));
 }
 
 beforeEach(() => {
@@ -167,7 +171,7 @@ beforeEach(() => {
   state.getToken.mockResolvedValue("fake-convex-jwt");
 });
 afterEach(async () => {
-  await act(async () => renderer?.unmount());
+  await act(() => renderer?.unmount());
   renderer = undefined;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
@@ -195,6 +199,25 @@ describe("native Convex session", () => {
     expect(hasPortfolio()).toBe(true);
   });
 
+  it("keeps the authenticated client usable through Strict Mode effect replay and closes it on unmount", async () => {
+    await act(() => {
+      renderer = create(<StrictMode>{tree()}</StrictMode>);
+    });
+    const client = FakeClient.instances.find(
+      (candidate) => candidate.reportAuth,
+    );
+
+    if (!client) throw new Error("Expected the mounted client");
+
+    expect(client.close).not.toHaveBeenCalled();
+    await authenticate(client);
+    await provision(client);
+    expect(hasPortfolio()).toBe(true);
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    expect(client.close).toHaveBeenCalledOnce();
+  });
+
   it("does not connect or subscribe before Clerk loads or while signed out", async () => {
     state.auth.isLoaded = false;
     await render();
@@ -220,7 +243,7 @@ describe("native Convex session", () => {
       expect(oldClient.close).toHaveBeenCalledOnce();
 
       await provision(oldClient);
-      await act(async () => oldClient.reportAuth?.(true));
+      await act(() => oldClient.reportAuth?.(true));
       expect(hasPortfolio()).toBe(false);
       expect(newClient.mutation).not.toHaveBeenCalled();
       await authenticate(newClient);
@@ -239,7 +262,7 @@ describe("native Convex session", () => {
     await authenticate();
     await provision();
     const client = latestClient();
-    await act(async () => client.reportAuth?.(false));
+    await act(() => client.reportAuth?.(false));
     expect(hasPortfolio()).toBe(false);
     expect(
       renderer?.root.findByProps({ title: "Could not connect your account" }),
@@ -255,7 +278,7 @@ describe("native Convex session", () => {
     await render();
     await authenticate();
     const client = latestClient();
-    await act(async () =>
+    await act(() =>
       client.provisioning.reject(new Error("fake service failure")),
     );
     expect(hasPortfolio()).toBe(false);
@@ -304,8 +327,8 @@ describe("native Convex session", () => {
     await update();
     expect(JSON.stringify(renderer?.toJSON())).toContain("Reconnecting");
     const client = latestClient();
-    await act(async () => client.reportAuth?.(false));
-    await act(async () => {
+    await act(() => client.reportAuth?.(false));
+    await act(() => {
       for (const listener of state.resume) listener("active");
     });
     expect(client.close).toHaveBeenCalledOnce();
