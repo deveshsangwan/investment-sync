@@ -821,3 +821,50 @@ describe("portfolio publication", () => {
     ).toMatchObject({ investedAmount: 0, currentValue: 0, asOfDate: null });
   });
 });
+
+it("reprocesses execution lots with corrected reported proceeds and keeps exact native sale amounts", () => {
+  const sale = transaction({
+    type: "sell",
+    metadata: {
+      realizedSale: {
+        executionId: "fake-execution",
+        lotId: "fake-lot",
+        acquisitionDate: "2023-01-01",
+        costBasis: "5.00001",
+        realizedPnl: "5.12344",
+      },
+    },
+  });
+  if (sale.kind !== "transaction") throw new Error("Expected sale");
+  const first = publish([holding(), { ...sale, amount: "10.12345" }]);
+  const second = publish(
+    [
+      {
+        ...sale,
+        amount: "12.12345",
+        metadata: {
+          realizedSale: {
+            ...sale.metadata.realizedSale,
+            costBasis: "5.00001",
+            realizedPnl: "7.12344",
+          },
+        },
+      },
+    ],
+    first.facts,
+    2,
+  );
+  const detail = valuePortfolioPublication(second.projection, undefined, {
+    view: "holdingDetail",
+    positionKey: second.projection.positions[0]?.positionKey ?? "",
+  });
+
+  expect(detail?.sales).toHaveLength(1);
+  expect(detail?.sales[0]).toMatchObject({
+    proceeds: "12.12345",
+    costBasis: "5.00001",
+    realizedPnl: "7.12344",
+  });
+  expect(second.projection.cashFlows).toEqual([]);
+  expect(second.facts).toHaveLength(3);
+});

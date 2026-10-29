@@ -196,7 +196,10 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
             className="block text-[2.5rem] font-semibold leading-none tracking-[-0.03em]"
           />
           <p className="mt-3 text-sm text-muted-foreground">
-            Current value in {holding.currency}
+            {holding.isCurrent
+              ? "Current value"
+              : "Last observed snapshot value"}{" "}
+            in {holding.currency}
             {holding.currency === "USD" ? ", converted to INR elsewhere" : ""}
           </p>
         </div>
@@ -212,7 +215,11 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
             }
           />
           <RailStat
-            label="Gain or loss"
+            label={
+              holding.isCurrent
+                ? "Unrealized gain or loss"
+                : "Last snapshot gain or loss"
+            }
             value={
               <Money value={pnlAmount} currency={holding.currency} signed />
             }
@@ -283,6 +290,82 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
         </Panel>
       </section>
 
+      <section className="mt-8">
+        <h2 className="text-[0.82rem] font-semibold">Realized sales</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Reported sale proceeds, cost basis and realized gain or loss in the
+          statement currency. Each row is a sold acquisition lot. Sale dates are
+          separate from holding snapshot dates.
+        </p>
+        {data.sales.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            No reported sale details are available.{" "}
+            {holding.isCurrent
+              ? "Holding values come from the latest snapshot."
+              : "The values above are from the last observed holding snapshot and do not establish sale proceeds or realized gains."}
+          </p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sold</TableHead>
+                  <TableHead>Acquired</TableHead>
+                  <TableHead>Execution / lot</TableHead>
+                  <TableHead className="text-right">Quantity</TableHead>
+                  <TableHead className="text-right">Proceeds</TableHead>
+                  <TableHead className="text-right">Cost basis</TableHead>
+                  <TableHead className="text-right">
+                    Realized gain or loss
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.sales.map((sale) => (
+                  <TableRow key={sale.id}>
+                    <TableCell className="number whitespace-nowrap">
+                      {formatDate(sale.saleDate)}
+                    </TableCell>
+                    <TableCell className="number whitespace-nowrap">
+                      {sale.acquisitionDate
+                        ? formatDate(sale.acquisitionDate)
+                        : "Not reported"}
+                    </TableCell>
+                    <TableCell>
+                      {[sale.executionId, sale.lotId]
+                        .filter(Boolean)
+                        .join(" / ") || "Not reported"}
+                    </TableCell>
+                    <TableCell className="number text-right">
+                      {formatQuantity(sale.quantity)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Money
+                        value={Number(sale.proceeds)}
+                        currency={sale.currency}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Money
+                        value={Number(sale.costBasis)}
+                        currency={sale.currency}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Money
+                        value={Number(sale.realizedPnl)}
+                        currency={sale.currency}
+                        signed
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
+
       {data.npsDetails ? (
         <NpsDetailsSections
           details={data.npsDetails}
@@ -296,7 +379,7 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
         <p className="mt-1 text-xs text-muted-foreground">
           {holding.manualPolicyId
             ? "Manual values do not include individual payments."
-            : "Imported cash flows used for return calculations."}
+            : "Imported cash flows. Realized sale reports provide partial activity and are excluded from XIRR calculations."}
         </p>
 
         {data.transactions.length === 0 ? (
@@ -424,6 +507,6 @@ function transactionEmptyState(
   return {
     title: "No transactions yet",
     description:
-      "Importing transactions unlocks an exact cash-flow XIRR and realized gains for this position.",
+      "Complete dated cash flows are needed to calculate XIRR for this position.",
   };
 }

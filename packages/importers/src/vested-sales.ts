@@ -6,6 +6,7 @@ import {
 import { getSourceDecimals, withSourceDecimals } from "./source-decimals";
 import type { NormalizedTransactionRow } from "./types";
 import {
+  findHeaderRow,
   objectFromRow,
   pick,
   requireColumns,
@@ -45,7 +46,7 @@ export function parseVestedSales(breakdown: unknown[][], summary: unknown[][]) {
 
   if (hasContent(breakdown)) {
     const sheetName = "Realized P&L - Breakdown";
-    const header = requireHeaderRow(breakdown, ["Security"], sheetName);
+    const header = securityHeader(breakdown, sheetName);
     const headers = breakdown[header] ?? [];
     requireColumns(headers, { ...columns, "Sale date": saleDates }, sheetName);
 
@@ -150,7 +151,7 @@ function reconcileSummary(
   transactions: NormalizedTransactionRow[],
 ) {
   const sheetName = "Realized P&L - Summary";
-  const header = requireHeaderRow(rows, ["Security"], sheetName);
+  const header = securityHeader(rows, sheetName);
   const headers = rows[header] ?? [];
   requireColumns(headers, columns, sheetName);
   const totals = new Map<string, string[]>();
@@ -260,4 +261,9 @@ function hasContent(rows: unknown[][]) {
 
 function isTotal(symbol: string) {
   return /^(?:grand )?total$/i.test(symbol);
+}
+
+function securityHeader(rows: unknown[][], sheetName: string) {
+  const header = findHeaderRow(rows, ["Security"]);
+  return header >= 0 ? header : requireHeaderRow(rows, ["Symbol"], sheetName);
 }

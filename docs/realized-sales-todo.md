@@ -1,6 +1,8 @@
 # TODO: realized sales and accurate exited-position gains
 
-Status: deferred product work, outside the current Convex migration scope.
+Status: implemented by issue #52 after the Convex cutover. See [the statement contract, coverage and remaining source limitations](realized-sales.md).
+
+The historical design notes below describe the original deferred work.
 
 Recorded at the owner's request on 2026-09-14. This TODO does not authorize implementation or change the migration's legacy-parity requirements.
 
