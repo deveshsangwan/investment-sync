@@ -406,6 +406,25 @@ describe("manual policy timelines", () => {
         pnlAmount: "-0.0001",
         source: complete,
       }),
+      holding({
+        currency: "USD",
+        instrumentName: "TINY",
+        symbol: "TINY",
+        investedAmount: "0.0001",
+        currentValue: "0.0002",
+        pnlAmount: "0.0001",
+        source: { ...partialSource, group: "tiny" },
+      }),
+      holding({
+        currency: "USD",
+        sourceDate: "2025-01-03",
+        instrumentName: "TINY",
+        symbol: "TINY",
+        investedAmount: "0",
+        currentValue: "0",
+        pnlAmount: "0",
+        source: { ...partialSource, group: "tiny" },
+      }),
       manualPolicy("2025-01-01", "0"),
       holding({
         sourceDate: "2025-01-02",
@@ -466,14 +485,14 @@ describe("manual policy timelines", () => {
     expect(
       timeline[0]?.totals.find((total) => total.currency === "USD")
         ?.investedAmount,
-    ).toBe("999999999999999999999999.9999");
+    ).toBe("1000000000000000000000000");
     expect(
       timeline[1]?.totals.find((total) => total.currency === "USD"),
     ).toEqual({
       currency: "USD",
-      investedAmount: "0",
-      currentValue: "0",
-      pnlAmount: "0",
+      investedAmount: "0.0001",
+      currentValue: "0.0002",
+      pnlAmount: "0.0001",
     });
     expect(
       timeline[3]?.totals.find((total) => total.currency === "USD"),
