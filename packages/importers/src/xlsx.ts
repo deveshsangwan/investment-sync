@@ -58,7 +58,7 @@ function workbookRows(
 
 export const vestedDrivewealthImporter: PortfolioImporter = {
   sourceType: "vested_drivewealth_xlsx",
-  parserVersion: "vested-drivewealth-v2",
+  parserVersion: "vested-drivewealth-v3",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {

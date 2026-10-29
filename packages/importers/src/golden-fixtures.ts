@@ -311,7 +311,7 @@ function vestedWorkbookGolden(): ParserGoldenFixture {
     file: { fileName: "fake-vested.xlsx", content: workbookBuffer(workbook) },
     expected: {
       sourceType: "vested_drivewealth_xlsx",
-      parserVersion: "vested-drivewealth-v2",
+      parserVersion: "vested-drivewealth-v3",
       warnings: [],
       rows: [
         {

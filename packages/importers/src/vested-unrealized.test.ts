@@ -177,7 +177,7 @@ describe("Vested unrealized valid values", () => {
       const file = vestedFile([requiredHeaders, ["ALPHA", 0, zero, zero]]);
       const exact = parseExactImportFile(file);
 
-      expect(exact.parserVersion).toBe("vested-drivewealth-v2-decimal-v1");
+      expect(exact.parserVersion).toBe("vested-drivewealth-v3-decimal-v1");
       expect(exact.rows[0]).toMatchObject({
         investedAmount: "0",
         currentValue: "0",
@@ -190,7 +190,7 @@ describe("Vested unrealized valid values", () => {
         },
       });
       expect(parseImportFile(file)).toMatchObject({
-        parserVersion: "vested-drivewealth-v2",
+        parserVersion: "vested-drivewealth-v3",
         rows: [{ investedAmount: 0, currentValue: 0, quantity: 0 }],
         warnings: [],
       });
