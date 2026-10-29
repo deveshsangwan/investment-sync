@@ -5,6 +5,7 @@ const { execFile } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { readFileSync, writeFileSync } = require("node:fs");
 const { parseArgs, promisify } = require("node:util");
+const path = require("node:path");
 
 const { values } = parseArgs({
   options: {
@@ -12,6 +13,10 @@ const { values } = parseArgs({
     workers: { type: "string", default: "1" },
     output: { type: "string" },
     compare: { type: "string" },
+    "domain-source": {
+      type: "string",
+      default: path.resolve(__dirname, "../../packages/portfolio-domain/src"),
+    },
   },
 });
 
@@ -24,13 +29,12 @@ function measurePublication() {
   const {
     projectionRecords,
   } = require("../../packages/backend/convex/model/publicationProjection.ts");
-  const {
-    buildPortfolioPublication,
-  } = require("../../packages/portfolio-domain/src/publication.ts");
-  const {
-    snapshotTimeline,
-    timelineWithManualPolicies,
-  } = require("../../packages/portfolio-domain/src/sourceSnapshots.ts");
+  const { buildPortfolioPublication } = require(
+    path.resolve(values["domain-source"], "publication.ts"),
+  );
+  const { snapshotTimeline, timelineWithManualPolicies } = require(
+    path.resolve(values["domain-source"], "sourceSnapshots.ts"),
+  );
   const {
     adaptLegacyRow,
   } = require("../../packages/importers/src/exact-adapter.ts");
@@ -91,6 +95,7 @@ function measurePublication() {
       rowNumber: (index % 1000) + 1,
     },
   }));
+  const builderCpuStart = process.cpuUsage();
   const started = performance.now();
   const publication = buildPortfolioPublication({
     existingFacts,
@@ -103,6 +108,8 @@ function measurePublication() {
     },
   });
   const builderMs = Math.round(performance.now() - started);
+  const builderCpu = process.cpuUsage(builderCpuStart);
+  const builderCpuMs = (builderCpu.user + builderCpu.system) / 1000;
   const records = projectionRecords(publication.projection);
   const counts = Object.fromEntries(
     Object.entries(records).map(([stage, entries]) => [stage, entries.length]),
@@ -138,15 +145,20 @@ function measurePublication() {
     });
   }
 
+  const isolatedCpuStart = process.cpuUsage();
   const isolatedStarted = performance.now();
   const timeline = timelineWithManualPolicies(holdings, baseline);
   const isolatedMs = Math.round(performance.now() - isolatedStarted);
+  const isolatedCpu = process.cpuUsage(isolatedCpuStart);
+  const isolatedCpuMs = (isolatedCpu.user + isolatedCpu.system) / 1000;
   const isolatedWork = { ...work };
   assert.deepEqual(timeline, publication.projection.timeline);
 
   return {
     builderMs,
+    builderCpuMs,
     isolatedMs,
+    isolatedCpuMs,
     counts,
     work: isolatedWork,
     publicationFingerprint: fingerprint(publication),
@@ -168,13 +180,18 @@ async function main() {
   const run = promisify(execFile);
   const results = await Promise.all(
     Array.from({ length: workers }, async () => {
-      const { stdout } = await run(process.execPath, [__filename, "--worker"], {
-        maxBuffer: 1024 * 1024,
-      });
+      const { stdout } = await run(
+        process.execPath,
+        [__filename, "--worker", "--domain-source", values["domain-source"]],
+        {
+          maxBuffer: 1024 * 1024,
+        },
+      );
       return JSON.parse(stdout);
     }),
   );
   const report = {
+    domainSource: values["domain-source"],
     fixture: "1000-stocks-1499-policy-snapshots-v1",
     workers,
     results,
