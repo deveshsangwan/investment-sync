@@ -35,7 +35,7 @@ describe("Vested realized lots", () => {
   it("imports breakdown once and reconciles summary with exact reported lot values", () => {
     const file = vestedWorkbook({ sales: lots, summary: totals });
     const result = parseExactImportFile(file);
-    expect(result.parserVersion).toBe("vested-drivewealth-v2-decimal-v1");
+    expect(result.parserVersion).toBe("vested-drivewealth-v4-decimal-v1");
     expect(result.warnings).toEqual([]);
     expect(result.rows).toHaveLength(3);
     expect(result.rows[1]).toMatchObject({

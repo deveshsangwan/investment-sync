@@ -5,7 +5,7 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 ## Apps
 
 - `apps/web`: Next.js App Router web app and server API routes.
-- `apps/mobile`: Expo Router app for read-only portfolio views.
+- `apps/mobile`: Expo Router app for read-only portfolio views from the active Convex backend. See [mobile configuration and session behavior](docs/mobile-convex.md).
 
 ## Packages
 
@@ -26,6 +26,14 @@ Private portfolio tracker for Indian and US investments. The repo is a pnpm/Turb
 Original uploaded files are retained for 30 days by default. Normalized portfolio data remains until deleted from the app.
 
 For fake local portfolio data without production records, see `docs/local-development.md`.
+
+## Portfolio positions
+
+Holdings APIs return account-level positions. Accounts are identified by provider and account name within a Household. Two accounts holding the same symbol both contribute to holdings, totals, allocation and performance. A complete snapshot can exit an omitted position only within its source group. Position history and cash flows used for its XIRR stay scoped to that account.
+
+The importer-defined workbook representations of US Stocks, Indian Stocks and Mutual Funds overlap with Vested or Tickertape respectively. Selection deduplicates those exact account/provider/source-type/sheet relationships; other accounts remain independent. US workbook and Vested complete snapshots also share omission semantics. Physical source snapshots, position keys and legacy detail aliases remain separate.
+
+Convex publishes these selections when a portfolio version is built. Existing active versions retain their materialized selections until the next successful publication. This correction does not rewrite source facts or restore records removed by historical SQL cleanup migrations.
 
 ## Typechecking
 

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
+import { clientErrorMessage } from "@investment-sync/backend/errors";
 import { api, type Id } from "@investment-sync/backend/api";
 import { ArrowLeft, Plus, Umbrella } from "lucide-react";
 import { ConvexSessionGate } from "@/app/convex-provider";
@@ -400,16 +401,8 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
 }
 
 function entryError(cause: unknown) {
-  if (
-    typeof cause === "object" &&
-    cause !== null &&
-    "data" in cause &&
-    typeof cause.data === "object" &&
-    cause.data !== null &&
-    "message" in cause.data &&
-    typeof cause.data.message === "string"
-  )
-    return cause.data.message;
-
-  return "The value could not be saved. Please try again.";
+  return clientErrorMessage(
+    cause,
+    "The value could not be saved. Please try again.",
+  );
 }

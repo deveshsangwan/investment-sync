@@ -25,5 +25,5 @@ The atomic application of every Normalized Row in a parsed Import Batch to House
 _Avoid_: Apply, process
 
 **Duplicate Import**:
-A different Import Batch in the same Household with the same Source File content and parser version as an already committed batch.
+A different Import Batch in the same Household with the same original Source File bytes and parser version as an already committed batch. A new parser version or a different Household makes it a separate import identity.
 _Avoid_: Retry

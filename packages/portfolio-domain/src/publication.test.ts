@@ -8,6 +8,7 @@ import type {
 } from "@investment-sync/importers";
 import {
   buildPortfolioPublication,
+  visibleAccountProjection,
   valuePortfolioPublication,
   type PortfolioFact,
   type PublicationInput,
@@ -100,6 +101,80 @@ const quote = {
 };
 
 describe("portfolio publication", () => {
+  it.each([
+    [125, 25],
+    [75, -25],
+    [100, 0],
+  ])(
+    "reconciles overview and asset-class gains when source P&L is absent at %s",
+    (currentValue, pnlAmount) => {
+      const rows = [holding({ currentValue, pnlAmount: undefined })];
+      const publication = publish(rows);
+      const views = valuePortfolioPublication(publication.projection);
+
+      expect(views.overview.summary).toMatchObject({
+        pnlAmount,
+        pnlPercent: pnlAmount,
+      });
+      expect(views.assetClassDetails[0]?.summary).toMatchObject({
+        pnlAmount,
+        pnlPercent: pnlAmount,
+      });
+      expect(publication.reconciliation.nativeTotals[0]?.pnlAmount).toBe(
+        String(pnlAmount),
+      );
+      expect(publication.projection.timeline[0]?.totals[0]?.pnlAmount).toBe(
+        String(pnlAmount),
+      );
+      expect(
+        publication.projection.assetClasses[0]?.timeline[0]?.totals[0]
+          ?.pnlAmount,
+      ).toBe(String(pnlAmount));
+      expect(publication.facts[0]?.row).not.toHaveProperty(
+        "pnlAmount",
+        expect.any(String),
+      );
+      expect(rows[0]?.kind === "holding" && rows[0].pnlAmount).toBeUndefined();
+    },
+  );
+
+  it("reconciles missing and reported P&L after converting supported currencies", () => {
+    const publication = publish([
+      holding({ currentValue: 125, pnlAmount: undefined }),
+      holding({
+        symbol: "BETA",
+        instrumentName: "BETA",
+        currentValue: 75,
+        pnlAmount: -25,
+      }),
+      holding({
+        symbol: "USD",
+        instrumentName: "USD",
+        currency: "USD",
+        investedAmount: 10,
+        currentValue: 12.5,
+        pnlAmount: undefined,
+      }),
+    ]);
+    const views = valuePortfolioPublication(publication.projection, quote);
+
+    expect(views.overview.summary).toMatchObject({
+      investedAmount: 1000,
+      currentValue: 1200,
+      pnlAmount: 200,
+      pnlPercent: 20,
+    });
+    expect(views.assetClassDetails[0]?.summary).toMatchObject({
+      investedAmount: 1000,
+      currentValue: 1200,
+      pnlAmount: 200,
+      pnlPercent: 20,
+    });
+    expect(
+      publication.projection.totals.map((total) => total.pnlAmount),
+    ).toEqual(["0", "2.5"]);
+  });
+
   it("carries unrelated holdings across manual updates without backfilling or inferring payment dates", () => {
     const original = publish([
       holding({ sourceDate: "2024-01-01" }),
@@ -271,10 +346,13 @@ describe("portfolio publication", () => {
     expect(changedProvenance.digest).not.toBe(first.digest);
   });
 
-  it("resolves details for a position suppressed by cross-account ranking", () => {
+  it("resolves details for an older source of the same account", () => {
     const publication = publish([
-      holding({ accountName: "First account" }),
-      holding({ accountName: "Second account", sourceDate: "2025-02-01" }),
+      holding({ metadata: { sourceSheet: "First source" } }),
+      holding({
+        metadata: { sourceSheet: "Second source" },
+        sourceDate: "2025-02-01",
+      }),
     ]);
     expect(publication.projection.positions).toHaveLength(1);
     const suppressed = publication.projection.detailPositions?.[0];
@@ -284,7 +362,8 @@ describe("portfolio publication", () => {
       positionKey: suppressed.positionKey,
     });
     expect(detail?.holding).toMatchObject({
-      accountName: "First account",
+      accountName: "Fake Stocks",
+      sourceSheet: "First source",
       isCurrent: false,
     });
     expect(detail?.history).toHaveLength(1);
@@ -339,7 +418,7 @@ describe("portfolio publication", () => {
     ).toThrow("Conflicting content");
   });
 
-  it("preserves distinct stored identities with legacy symbol-or-name ranking", () => {
+  it("preserves account identities when symbol-or-name text collides", () => {
     const first = publish([
       holding({ accountName: " b|c ", provider: "A", symbol: " xyz " }),
       holding({
@@ -349,7 +428,7 @@ describe("portfolio publication", () => {
         symbol: undefined,
       }),
     ]);
-    expect(first.projection.positions).toHaveLength(1);
+    expect(first.projection.positions).toHaveLength(2);
     expect(
       new Set(
         first.identifiedFacts.map((fact) =>
@@ -376,8 +455,122 @@ describe("portfolio publication", () => {
       next.projection.positions.filter(
         (position) => position.status === "current",
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
+
+  it("keeps account totals, history and complete omissions independent for the same symbol", () => {
+    const first = publish([
+      holding({ accountName: "Broker A", currentValue: 125.1234 }),
+      holding({
+        accountName: "Broker B",
+        investedAmount: 200,
+        currentValue: 210.5678,
+      }),
+    ]);
+    expect(first.reconciliation.currentCount).toBe(2);
+    expect(first.projection.totals[0]?.currentValue).toBe("335.6912");
+    expect(first.projection.assetClasses[0]?.totals).toEqual(
+      first.projection.totals,
+    );
+
+    const next = publish(
+      [
+        holding({
+          accountName: "Broker A",
+          symbol: "BETA",
+          instrumentName: "BETA",
+          sourceDate: "2025-02-01",
+        }),
+        holding({
+          accountName: "Broker B",
+          sourceDate: "2025-02-01",
+          investedAmount: 200,
+          currentValue: 220,
+        }),
+      ],
+      first.facts,
+      2,
+    );
+    const alpha = next.projection.positions.filter(
+      (position) => position.holding.row.symbol === "ALPHA",
+    );
+
+    expect(
+      alpha.map((position) => [
+        position.status,
+        position.holding.row.accountName,
+      ]),
+    ).toEqual([
+      ["current", "Broker B"],
+      ["exited", "Broker A"],
+    ]);
+    expect(alpha.map((position) => position.history.length)).toEqual([2, 1]);
+    expect(next.projection.totals[0]?.currentValue).toBe("340");
+    expect(next.facts).toHaveLength(4);
+  });
+
+  it.each([
+    {
+      accountName: "Indian Stocks",
+      assetClass: "indian_stock" as const,
+      sheet: "Stock Investments",
+      sourceType: "tickertape_stock_csv" as const,
+    },
+    {
+      accountName: "Mutual Funds",
+      assetClass: "mutual_fund" as const,
+      sheet: "Mutual Funds",
+      sourceType: "tickertape_mutual_fund_csv" as const,
+    },
+  ])(
+    "deduplicates only the known workbook/Tickertape relationship for $accountName",
+    ({ accountName, assetClass, sheet, sourceType }) => {
+      const row = {
+        accountName,
+        assetClass,
+        sourceType,
+        currency: "INR" as const,
+      };
+      const publication = publish([
+        holding({
+          ...row,
+          sourceType: "investment_portfolio_xlsx",
+          provider: "Manual Workbook",
+          metadata: { sourceSheet: sheet },
+        }),
+        holding({
+          ...row,
+          provider: "Tickertape",
+          sourceDate: "2025-02-01",
+          currentValue: 130,
+        }),
+        holding({ ...row, provider: "Other Broker", currentValue: 140 }),
+        holding({
+          ...row,
+          accountName: "Separate Account",
+          provider: "Tickertape",
+          currentValue: 150,
+        }),
+        holding({
+          ...row,
+          sourceType: "investment_portfolio_xlsx",
+          provider: "Manual Workbook",
+          metadata: { sourceSheet: "Separate sheet" },
+          currentValue: 160,
+        }),
+        holding({
+          ...row,
+          accountName: assetClass,
+          provider: "workbook-tickertape",
+          currentValue: 170,
+        }),
+      ]);
+
+      expect(publication.reconciliation.currentCount).toBe(5);
+      expect(publication.projection.totals[0]?.currentValue).toBe("750");
+      expect(publication.facts).toHaveLength(6);
+    },
+  );
 
   it.each([
     { currentValue: "1000000000000000000000000" },
@@ -949,4 +1142,77 @@ it("matches idless SQL sale identity after numeric rounding and exact source rep
   expect(second.projection.positions[0]?.transactions[0]?.row.amount).toBe(
     "20.123456",
   );
+});
+
+it("archives a selected overlap source while retaining independent same-symbol accounts and exact history", () => {
+  const original = publish([
+    holding({
+      sourceType: "investment_portfolio_xlsx",
+      provider: "Manual Workbook",
+      accountName: "Indian Stocks",
+      metadata: { sourceSheet: "Stock Investments" },
+      currentValue: 0.1,
+      investedAmount: 0.1,
+    }),
+    holding({
+      provider: "Tickertape",
+      accountName: "Indian Stocks",
+      sourceDate: "2025-02-01",
+      currentValue: 0.2,
+      investedAmount: 0.2,
+    }),
+    holding({
+      accountName: "Independent",
+      symbol: "BETA",
+      instrumentName: "BETA",
+      currentValue: 0.3,
+      investedAmount: 0.3,
+    }),
+    holding({
+      provider: "Other Broker",
+      accountName: "Separate Account",
+      currentValue: 0.4,
+      investedAmount: 0.4,
+    }),
+  ]);
+  const selected = original.projection.positions.find(
+    (position) =>
+      position.status === "current" &&
+      position.holding.row.provider === "Tickertape",
+  );
+  if (!selected) throw new Error("Missing selected source");
+  const archived = visibleAccountProjection(
+    original.projection,
+    new Set([selected.holding.accountKey]),
+  );
+
+  expect(
+    archived.positions
+      .filter((position) => position.status === "current")
+      .map((position) => position.holding.row.accountName)
+      .sort(),
+  ).toEqual(["Independent", "Separate Account"]);
+  expect(archived.totals[0]?.currentValue).toBe("0.7");
+  expect(
+    buildPortfolioPublication({ existingFacts: original.facts }).projection,
+  ).toEqual(original.projection);
+});
+
+it("uses the latest visible date after archival regardless of indexed position ordering", () => {
+  const original = publish([
+    holding({ accountName: "A", symbol: "A", sourceDate: "2025-03-01" }),
+    holding({ accountName: "B", symbol: "B", sourceDate: "2025-04-01" }),
+    holding({ accountName: "C", symbol: "C", sourceDate: "2025-06-01" }),
+  ]);
+  const archivedAccount = original.projection.positions.find(
+    (position) => position.holding.row.symbol === "C",
+  )?.holding.accountKey;
+  if (!archivedAccount) throw new Error("Missing account");
+  const reordered = {
+    ...original.projection,
+    positions: [...original.projection.positions].reverse(),
+  };
+  expect(
+    visibleAccountProjection(reordered, new Set([archivedAccount])).asOfDate,
+  ).toBe("2025-04-01");
 });

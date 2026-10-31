@@ -14,6 +14,7 @@ import {
   roundDisplay,
 } from "./numeric";
 import { compareText } from "./ordering";
+import { nativeTotals } from "./sourceSnapshots";
 import type {
   HoldingFact,
   NativeTimelinePoint,
@@ -328,7 +329,12 @@ function assetClassDetail(
   const selected = current.filter(
     (position) => position.holding.row.assetClass === asset.assetClass,
   );
-  const totals = convertedTotals(asset.totals, rate);
+  // Persisted summaries may predate the missing-P&L fallback. The selected
+  // rows are already loaded and retain whether the source reported a value.
+  const totals = convertedTotals(
+    nativeTotals(selected.map((position) => position.holding.row)),
+    rate,
+  );
   const valuations = asset.timeline.map((point) => ({
     date: new Date(point.snapshotDate),
     ...convertedTimelineAmounts(point, rate),
@@ -347,7 +353,7 @@ function assetClassDetail(
     holdings: selected
       .map((position) => {
         const holding = publicHolding(position.holding, rate);
-        const xirr = positionXirr(position, rate, true);
+        const xirr = positionXirr(position, rate);
 
         return {
           ...holding,
@@ -397,7 +403,7 @@ function holdingDetail(
   // excludes that snapshot from the current/exited position list.
   const latest = position.history.at(-1) ?? position.holding;
   const holding = publicHolding(latest, rate);
-  const resolved = positionXirr({ ...position, holding: latest }, rate, false);
+  const resolved = positionXirr({ ...position, holding: latest }, rate);
 
   return {
     positionKey: position.positionKey,
@@ -460,18 +466,13 @@ function holdingDetail(
 function positionXirr(
   position: PositionProjection,
   rate: number | undefined,
-  acrossAccounts: boolean,
 ): ResolvedXirr {
   if (isManualPolicy(position.holding)) {
     return { dataQuality: "insufficient_data" };
   }
 
-  const history = acrossAccounts
-    ? position.instrumentHistory
-    : position.history;
-  const transactions = acrossAccounts
-    ? position.instrumentTransactions
-    : position.transactions;
+  const history = position.history;
+  const transactions = position.transactions;
 
   return resolveHoldingXirr({
     cashFlows: transactions

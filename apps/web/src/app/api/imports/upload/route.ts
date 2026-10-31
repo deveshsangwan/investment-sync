@@ -1,71 +1,83 @@
+import { randomUUID } from "node:crypto";
 import {
   assertSourceWritesAllowed,
   canManageHousehold,
   createApiContext,
   ensureMembership,
-  importErrorHttpStatus,
-  isImportError,
+  ImportValidationError,
   logger,
+  publicImportError,
   runImportEffect,
-  SourceWritesPausedError,
   uploadAndProcessImport,
-  validateImportFile,
 } from "@investment-sync/api";
+import { getImportFileValidationError } from "@investment-sync/importers/import-validation";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session.userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const requestId = randomUUID();
+  const headers = { "x-request-id": requestId };
 
   try {
-    assertSourceWritesAllowed();
-  } catch (error) {
-    if (error instanceof SourceWritesPausedError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    const session = await auth();
+
+    if (!session.userId) {
+      return NextResponse.json(
+        { error: "Unauthorized", code: "UNAUTHENTICATED", requestId },
+        { status: 401, headers },
+      );
     }
 
-    throw error;
-  }
+    assertSourceWritesAllowed();
 
-  const formData = await request.formData();
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing file" }, { status: 400 });
-  }
+    const formData = await request.formData().catch((cause: unknown) => {
+      throw new ImportValidationError({
+        message: "Invalid multipart form",
+        cause,
+      });
+    });
+    const file = formData.get("file");
 
-  try {
-    validateImportFile({
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { error: "Missing file", code: "VALIDATION", requestId },
+        { status: 400, headers },
+      );
+    }
+
+    const validationError = getImportFileValidationError({
       fileName: file.name,
       mimeType: file.type,
       sizeBytes: file.size,
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Invalid import file" },
-      { status: 400 },
-    );
-  }
 
-  try {
+    if (validationError) {
+      return NextResponse.json(
+        { error: validationError, code: "VALIDATION", requestId },
+        { status: 400, headers },
+      );
+    }
+
     assertSourceWritesAllowed();
 
-    const claims = session.sessionClaims as
-      | { email?: string; email_address?: string }
-      | undefined;
+    const email =
+      session.sessionClaims?.email ?? session.sessionClaims?.email_address;
     const ctx = createApiContext({
       auth: {
         userId: session.userId,
-        email: claims?.email ?? claims?.email_address ?? null,
+        email: typeof email === "string" ? email : null,
       },
     });
     const membership = await ensureMembership(ctx);
+
     if (!canManageHousehold(membership)) {
       return NextResponse.json(
-        { error: "Only household owners can upload imports" },
-        { status: 403 },
+        {
+          error: "Only household owners can upload imports",
+          code: "FORBIDDEN",
+          requestId,
+        },
+        { status: 403, headers },
       );
     }
 
@@ -75,29 +87,22 @@ export async function POST(request: Request) {
         fileName: file.name,
         mimeType: file.type,
         content,
+        requestId,
       }),
     );
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers });
   } catch (error) {
-    if (error instanceof SourceWritesPausedError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
+    const failure = publicImportError(error);
+    logger.error("Import upload failed", {
+      requestId,
+      code: failure.code,
+      error,
+    });
 
-    if (isImportError(error)) {
-      logger.error("Import upload failed", {
-        tag: error._tag,
-        cause: "cause" in error ? error.cause : undefined,
-      });
-      return NextResponse.json(
-        { error: error.message },
-        { status: importErrorHttpStatus(error) },
-      );
-    }
-    logger.error("Unexpected import upload failure", { error });
     return NextResponse.json(
-      { error: "Import operation failed" },
-      { status: 500 },
+      { error: failure.message, code: failure.code, requestId },
+      { status: failure.status, headers },
     );
   }
 }

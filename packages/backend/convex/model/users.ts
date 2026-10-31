@@ -29,10 +29,14 @@ export async function requireUserMembership(ctx: QueryCtx, user: Doc<"users">) {
   const memberships = await ctx.db
     .query("householdMembers")
     .withIndex("by_user", (query) => query.eq("userId", user._id))
-    .take(2);
-  const membership = memberships[0];
+    .take(33);
+  const membership = user.currentHouseholdId
+    ? memberships.find((entry) => entry.householdId === user.currentHouseholdId)
+    : memberships.length === 1
+      ? memberships[0]
+      : undefined;
 
-  if (!membership || memberships.length !== 1) {
+  if (!membership || memberships.length > 32) {
     throw new ConvexError({ code: "INVALID_MEMBERSHIP" });
   }
 

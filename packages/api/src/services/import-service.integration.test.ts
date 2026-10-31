@@ -1,6 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import * as databaseSchema from "@investment-sync/db";
 import {
   accounts,
   holdingSnapshots,
@@ -26,6 +29,7 @@ import {
   createBatch as createBatchIn,
   createFixture as createFixtureIn,
   createHousehold,
+  contextFor,
   fakeSupabase,
   holdingRow,
   npsHoldingRow,
@@ -329,7 +333,7 @@ describeDb("import service integration", () => {
     ).toBe(false);
   });
 
-  it("collapses duplicate instrument identities at read time", async () => {
+  it("preserves the same instrument held in two accounts at read time", async () => {
     if (!db) throw new Error("TEST_DATABASE_URL is required");
     const fixture = await createFixture([
       holdingRow({
@@ -360,11 +364,14 @@ describeDb("import service integration", () => {
       caller.portfolio.assetClassDetail({ assetClass: "indian_stock" }),
     ]);
 
-    expect(holdings).toHaveLength(1);
-    expect(assetClassDetail.holdings).toHaveLength(1);
-    expect(assetClassDetail.summary.currentValue).toBe(
-      Number(holdings[0]?.currentValue ?? 0),
-    );
+    expect(holdings).toHaveLength(2);
+    expect(assetClassDetail.holdings).toHaveLength(2);
+    expect(holdings.map((holding) => holding.accountName).sort()).toEqual([
+      "Broker A",
+      "Broker B",
+    ]);
+    expect(assetClassDetail.summary.currentValue).toBe(335);
+    expect(assetClassDetail.summary.investedAmount).toBe(300);
   });
 
   it("reuses legacy instrument identities with whitespace drift", async () => {
@@ -533,22 +540,133 @@ describeDb("import service integration", () => {
     ]);
   });
 
-  it("rejects an Import Batch that is not parsed", async () => {
-    if (!db) throw new Error("TEST_DATABASE_URL is required");
-    const fixture = await createFixture([]);
+  it.each(["created", "uploaded", "failed", "expired"] as const)(
+    "rejects a %s Import Batch even with valid rows and preserves stored data",
+    async (status) => {
+      const fixture = await createFixture();
+      await db
+        .update(importBatches)
+        .set({ status })
+        .where(eq(importBatches.id, fixture.batchId));
+      const ctx = contextOf(fixture);
+      const before = await storedCommitState(fixture);
+
+      await expect(
+        runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
+      ).rejects.toMatchObject({
+        _tag: "ImportConflictError",
+        message: "Import Batch is not ready to commit",
+      });
+      expect(await storedCommitState(fixture)).toEqual(before);
+    },
+  );
+
+  it("serializes simultaneous same-batch commits on independent connections and preserves replay data", async () => {
+    if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL is required");
+
+    const fixture = await createFixture([
+      holdingRow({ currentValue: 125.1234 }),
+    ]);
+    const firstClient = postgres(testDatabaseUrl, { max: 1 });
+    const secondClient = postgres(testDatabaseUrl, { max: 1 });
+    const lockClient = postgres(testDatabaseUrl, { max: 1 });
+
+    try {
+      const [firstConnection] = await firstClient<
+        { pid: number }[]
+      >`select pg_backend_pid() as pid`;
+      const [secondConnection] = await secondClient<
+        { pid: number }[]
+      >`select pg_backend_pid() as pid`;
+      if (!firstConnection || !secondConnection)
+        throw new Error("Missing test connections");
+
+      expect(firstConnection.pid).not.toBe(secondConnection.pid);
+      const firstCtx = contextFor(
+        drizzle(firstClient, { schema: databaseSchema }),
+        fixture,
+      );
+      const secondCtx = contextFor(
+        drizzle(secondClient, { schema: databaseSchema }),
+        fixture,
+      );
+
+      // Hold the production commit lock until both real transactions are waiting.
+      // A shared max:1 pool would serialize requests before they reached Postgres.
+      await lockClient`select pg_advisory_lock(hashtext('investment-sync-import-commit'))`;
+      const commits = Promise.allSettled([
+        runImportEffect(
+          commitImport(firstCtx, fixture.membership, fixture.batchId),
+        ),
+        runImportEffect(
+          commitImport(secondCtx, fixture.membership, fixture.batchId),
+        ),
+      ]);
+      try {
+        await vi.waitFor(
+          async () => {
+            const waiting = await lockClient`
+            select pid from pg_locks
+            where locktype = 'advisory' and not granted
+              and pid in (${firstConnection.pid}, ${secondConnection.pid})
+          `;
+            expect(waiting).toHaveLength(2);
+          },
+          { timeout: 5000, interval: 20 },
+        );
+      } finally {
+        await lockClient`select pg_advisory_unlock(hashtext('investment-sync-import-commit'))`;
+        await commits;
+      }
+
+      expect(await commits).toEqual([
+        { status: "fulfilled", value: { committed: 1 } },
+        { status: "fulfilled", value: { committed: 1 } },
+      ]);
+      const beforeReplay = await storedCommitState(fixture);
+      expect(beforeReplay.batch[0]?.status).toBe("committed");
+      expect(beforeReplay.batch[0]?.committedAt).toBeInstanceOf(Date);
+      expect(beforeReplay.rows).toHaveLength(1);
+      expect(beforeReplay.rows[0]).toMatchObject({ isCommitted: true });
+      expect(beforeReplay.holdings).toHaveLength(1);
+      expect(beforeReplay.holdings[0]).toMatchObject({
+        currentValue: "125.1234",
+      });
+      expect(beforeReplay.accounts).toHaveLength(1);
+
+      await expect(
+        runImportEffect(
+          commitImport(secondCtx, fixture.membership, fixture.batchId),
+        ),
+      ).resolves.toEqual({ committed: 1 });
+      expect(await storedCommitState(fixture)).toEqual(beforeReplay);
+    } finally {
+      await Promise.all([
+        firstClient.end(),
+        secondClient.end(),
+        lockClient.end(),
+      ]);
+    }
+  }, 15000);
+
+  it("commits retained parsed rows after Source File expiration", async () => {
+    const fixture = await createFixture();
     await db
       .update(importBatches)
-      .set({ status: "created" })
+      .set({ expiresAt: new Date(0), storagePath: "fake/expired.csv" })
       .where(eq(importBatches.id, fixture.batchId));
-    const ctx = createApiContext({
-      auth: { userId: fixture.clerkUserId, email: fixture.email },
-      db,
-      supabase: {} as ApiContext["supabase"],
-    });
+    const supabase = fakeSupabase();
+    const ctx = contextFor(db, fixture, supabase.client);
 
+    await runImportEffect(cleanupExpiredImportFiles(ctx));
+    expect((await storedCommitState(fixture)).batch[0]).toMatchObject({
+      status: "parsed",
+      storagePath: null,
+    });
     await expect(
       runImportEffect(commitImport(ctx, fixture.membership, fixture.batchId)),
-    ).rejects.toThrow("Import Batch is not ready to commit");
+    ).resolves.toEqual({ committed: 1 });
+    expect((await storedCommitState(fixture)).holdings).toHaveLength(1);
   });
 
   it("rejects a duplicate committed Import Batch", async () => {
@@ -676,7 +794,7 @@ describeDb("import service integration", () => {
     expect(failed).toMatchObject({
       status: "failed",
       sourceFileAvailable: false,
-      errors: ["Import Batch contains no usable rows"],
+      errors: ["Check the file or entry values and try again."],
     });
     expect(failed).not.toHaveProperty("storagePath");
     expect(failed).not.toHaveProperty("fileHash");
@@ -1060,6 +1178,41 @@ describeDb("import service integration", () => {
       db,
       supabase: {} as ApiContext["supabase"],
     });
+  }
+
+  async function storedCommitState(fixture: {
+    batchId: string;
+    membership: { householdId: string };
+  }) {
+    const { householdId } = fixture.membership;
+    return {
+      batch: await db
+        .select()
+        .from(importBatches)
+        .where(eq(importBatches.id, fixture.batchId)),
+      rows: await db
+        .select()
+        .from(importRows)
+        .where(eq(importRows.importBatchId, fixture.batchId))
+        .orderBy(importRows.rowNumber),
+      holdings: await db
+        .select()
+        .from(holdingSnapshots)
+        .where(eq(holdingSnapshots.householdId, householdId)),
+      instruments: await db.select().from(instruments),
+      accounts: await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.householdId, householdId)),
+      transactions: await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.householdId, householdId)),
+      valuations: await db
+        .select()
+        .from(portfolioValuations)
+        .where(eq(portfolioValuations.householdId, householdId)),
+    };
   }
 
   async function countIn(

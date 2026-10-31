@@ -1,3 +1,4 @@
+import { publicError } from "@investment-sync/portfolio-domain";
 import type { ApiContext } from "../context";
 import { Data, Effect } from "effect";
 import {
@@ -12,7 +13,7 @@ export type ImportDependencies = Pick<ApiContext, "db" | "supabase">;
 
 export class ImportValidationError extends Data.TaggedError(
   "ImportValidationError",
-)<{ message: string }> {}
+)<{ message: string; cause?: unknown }> {}
 
 export class ImportNotFoundError extends Data.TaggedError(
   "ImportNotFoundError",
@@ -47,17 +48,33 @@ export async function runImportEffect<A>(
 }
 
 export function importErrorHttpStatus(error: ImportError) {
+  return publicImportError(error).status;
+}
+
+export function publicImportError(error: unknown) {
+  if (
+    error instanceof SourceWritesPausedError ||
+    (error instanceof ImportConflictError &&
+      error.message === "Source writes are paused")
+  ) {
+    return publicError("SOURCE_WRITES_PAUSED");
+  }
+
+  if (!isImportError(error)) return publicError("INTERNAL_FAILURE");
+
   switch (error._tag) {
     case "ImportValidationError":
-      return 400;
+      return publicError("VALIDATION");
     case "ImportNotFoundError":
-      return 404;
+      return publicError("NOT_FOUND");
     case "ImportConflictError":
-      return 409;
+      return publicError(
+        error.message === "Duplicate Import" ? "DUPLICATE_IMPORT" : "CONFLICT",
+      );
     case "ImportStorageError":
-      return 502;
+      return publicError("PROVIDER_UNAVAILABLE");
     case "ImportPersistenceError":
-      return 500;
+      return publicError("INTERNAL_FAILURE");
   }
 }
 
