@@ -810,7 +810,7 @@ describe("commit authorization and content dedupe", () => {
     await t.mutation(internal.publicationWorkers.finalize, args);
     await expect(
       owner.mutation(api.imports.commit, { batchId: duplicate.batchId }),
-    ).rejects.toThrow("already been committed");
+    ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
     await t.run(async (ctx) => {
       expect(await ctx.db.query("importDedupeKeys").collect()).toHaveLength(1);
       expect(

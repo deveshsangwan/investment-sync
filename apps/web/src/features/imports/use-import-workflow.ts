@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Id } from "@investment-sync/backend/api";
+import { clientErrorMessage } from "@investment-sync/backend/errors";
 import { publicImportLimits } from "@investment-sync/backend/import-limits";
 import { getImportFileValidationError } from "@investment-sync/importers/import-validation";
 import { exactNormalizedImportRowSchema } from "@investment-sync/importers/exact-types";
@@ -97,11 +98,19 @@ export function useImportWorkflow(isOwner: boolean) {
         body: file,
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error("Upload failed. Please try again.");
+      if (attempt !== generation.current) return null;
+
+      if (!response.ok) {
+        setError("Upload failed. Please try again.");
+        return null;
+      }
 
       const result: unknown = await response.json();
-      if (!isStorageUploadResponse(result))
-        throw new Error("The upload response was invalid.");
+      if (attempt !== generation.current) return null;
+      if (!isStorageUploadResponse(result)) {
+        setError("The upload response was invalid. Please try again.");
+        return null;
+      }
       if (attempt !== generation.current) return null;
 
       await attachUpload({
@@ -292,19 +301,9 @@ function isStorageUploadResponse(
   );
 }
 
-function errorMessage(cause: unknown) {
-  if (
-    typeof cause === "object" &&
-    cause !== null &&
-    "data" in cause &&
-    typeof cause.data === "object" &&
-    cause.data !== null &&
-    "message" in cause.data &&
-    typeof cause.data.message === "string"
-  )
-    return cause.data.message;
-
-  return cause instanceof Error
-    ? cause.message
-    : "The import could not be completed.";
+export function errorMessage(cause: unknown) {
+  return clientErrorMessage(
+    cause,
+    "The import could not be completed. Please try again.",
+  );
 }

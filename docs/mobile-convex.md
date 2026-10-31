@@ -43,13 +43,17 @@ available while preparing the account or recovering from errors.
 
 Focused configuration/session tests run with `pnpm --filter
 @investment-sync/mobile test`. They use Vitest and a fake transport with the
-real Convex Clerk adapter, not a live deployment or device session. Issue #23
-owns the separate native UI/end-to-end harness; its Jest tests should use
-`.native.test.{ts,tsx}` filenames, explicitly excluded by Vitest here. This
-backend correction does not depend on #23. When combining the PRs, update #23’s
-legacy tRPC screen helper to Convex and run both suites; query errors now belong
-to the session boundary, and live subscriptions replace pull-to-refresh. Keep
-both test commands in the mobile test script and regenerate the lockfile if
-resolving dependency changes.
+real Convex Clerk adapter, not a live deployment or device session.
+
+Issue #23's PR #73 owns the separate native UI and browser test suites. It
+already contains the original #71 head, uses Convex transport, and preserves
+both mobile test commands. After #71 merges, merge updated main into #73 to
+retain the account-aware selection, P&L corrections, safe error contracts and
+async provisioning test-helper corrections. Keep `src/**/*.test.{ts,tsx}` in
+Vitest separate from `native-tests/*.spec.tsx` in Jest, retain both commands in
+the mobile test script, and keep the renderer at 19.1.0. Preserve the isolated
+real Convex browser fixtures and mandatory PostgreSQL CI while reconciling
+package, TypeScript, Vitest and lockfile changes. No runtime or configuration
+from the test fixture should enter production.
 
 See [offline validation receipts and device-testing limits](mobile-convex-validation.md).

@@ -520,7 +520,7 @@ describe("guarded migration loading", () => {
     });
     await expect(
       owner.mutation(api.imports.commit, { batchId: expiredBatch._id }),
-    ).rejects.toThrow("writes are disabled");
+    ).rejects.toMatchObject({ data: { code: "SOURCE_WRITES_PAUSED" } });
     vi.stubEnv("MIGRATION_MODE", "");
     const committed = await owner.mutation(api.imports.commit, {
       batchId: expiredBatch._id,

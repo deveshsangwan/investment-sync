@@ -153,7 +153,10 @@ async function authenticate(client = latestClient()) {
   await act(() => client.reportAuth?.(true));
 }
 async function provision(client = latestClient()) {
-  await act(() => client.provisioning.resolve("fake-user-id"));
+  await act(async () => {
+    client.provisioning.resolve("fake-user-id");
+    await client.provisioning.promise;
+  });
 }
 
 beforeEach(() => {
@@ -278,9 +281,12 @@ describe("native Convex session", () => {
     await render();
     await authenticate();
     const client = latestClient();
-    await act(() =>
-      client.provisioning.reject(new Error("fake service failure")),
-    );
+    await act(async () => {
+      client.provisioning.reject(new Error("fake service failure"));
+      await expect(client.provisioning.promise).rejects.toThrow(
+        "fake service failure",
+      );
+    });
     expect(hasPortfolio()).toBe(false);
     expect(
       renderer?.root.findByProps({ title: "Could not prepare your account" }),
