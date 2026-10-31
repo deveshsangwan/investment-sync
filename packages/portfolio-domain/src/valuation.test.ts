@@ -78,6 +78,65 @@ const quote = {
   provider: "frankfurter",
 } as const;
 
+describe("account position performance", () => {
+  it.each([false, true])(
+    "isolates account returns with cash flows=%s",
+    (hasCashFlows) => {
+      const value = projection([
+        holding({
+          accountName: "Broker A",
+          sourceDate: "2024-01-01",
+          currentValue: 100,
+        }),
+        holding({
+          accountName: "Broker B",
+          sourceDate: "2024-01-01",
+          investedAmount: 200,
+          currentValue: 200,
+        }),
+        holding({ accountName: "Broker A", currentValue: 120 }),
+        holding({
+          accountName: "Broker B",
+          investedAmount: 200,
+          currentValue: 220,
+        }),
+        ...(hasCashFlows
+          ? [100, 200].map((amount, index) =>
+              transaction({
+                accountName: index === 0 ? "Broker A" : "Broker B",
+                symbol: "ALPHA",
+                instrumentName: "ALPHA",
+                assetClass: "indian_stock",
+                currency: "INR",
+                amount,
+              }),
+            )
+          : []),
+      ]);
+      const result = valuePortfolioPublication(value);
+      const asset = result.assetClassDetails[0];
+
+      expect(asset?.holdings).toHaveLength(2);
+      for (const detail of result.holdingDetails) {
+        const assetHolding = asset?.holdings.find(
+          (holding) => holding.accountName === detail.holding.accountName,
+        );
+
+        expect(detail.history).toHaveLength(2);
+        expect(detail.transactions).toHaveLength(hasCashFlows ? 1 : 0);
+        expect(assetHolding?.xirr).toBeCloseTo(
+          detail.holding.accountName === "Broker A" ? 20 : 10,
+          0,
+        );
+        expect(assetHolding?.xirr).toBe(detail.holding.xirr);
+        expect(assetHolding?.xirrDataQuality).toBe(
+          hasCashFlows ? "exact" : "estimated",
+        );
+      }
+    },
+  );
+});
+
 describe("legacy snapshot chart arithmetic", () => {
   it("preserves SQL snapshot creation order through same-date corrections", () => {
     const rows = [
