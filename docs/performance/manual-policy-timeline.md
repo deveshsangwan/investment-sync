@@ -100,3 +100,41 @@ git diff --check
 A read-only review found no correctness defect and requested the stronger nonempty-accumulator decimal cancellation test and process CPU measurements, both incorporated above. The final diff includes only the domain implementation, domain regressions, benchmark driver, and this evidence note.
 
 PostgreSQL integration suites were not run locally because this agent cannot access the Docker socket and sudo requires a password. No SQL success is claimed; main CI provides a PostgreSQL service. No browser/native test, deployment, production operation, or real financial fixture was used. The two concurrent benchmark processes certify independent local computations, not database transaction concurrency.
+
+## Merge queue integration, 2026-10-31
+
+Merged current main `e08c63838058144b68b7b653cf9c21cb3f4ac137` with an ordinary merge, preserving #62 through #66 without conflicts. The implementation still indexes the fact's `canonicalPositionKey`, which now includes #66's account-aware identity. A focused regression carries the same symbol in two accounts across manual updates and verifies a complete omission removes only its own account's candidate. The workbook/Vested priority regression now includes a separate US account and verifies it survives overlap deduplication. Runtime timeline logic did not require changes.
+
+Post-integration commands and receipts:
+
+| Command                                                                                                                                                                                                | Exit | Result                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---: | --------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @investment-sync/portfolio-domain exec vitest run --maxWorkers=2 --minWorkers=1`                                                                                                        |    0 | 56 passed, 0 skipped across 3 files, including 9 selector/timeline tests                                  |
+| `pnpm --filter @investment-sync/backend exec vitest run convex/portfolio.test.ts convex/manualPolicies.test.ts convex/importCommit.test.ts convex/importDedupe.test.ts --maxWorkers=2 --minWorkers=1`  |    0 | 47 passed, 0 skipped across 4 files                                                                       |
+| `pnpm --filter @investment-sync/backend exec vitest run convex/publication.test.ts --maxWorkers=1 --minWorkers=1 -t 'publishes atomically, preserves immutable facts and replays the original result'` |    0 | 1 passed, 18 skipped by the name filter; completed in 9.86 seconds within its unchanged 30-second timeout |
+| `pnpm --filter @investment-sync/portfolio-domain typecheck`                                                                                                                                            |    0 | Direct Rust compiler check                                                                                |
+| `pnpm --filter @investment-sync/backend typecheck`                                                                                                                                                     |    0 | Direct Rust compiler check                                                                                |
+| `pnpm exec eslint packages/portfolio-domain/src/sourceSnapshots.ts packages/portfolio-domain/src/sourceSnapshots.test.ts scripts/benchmarks/manual-policy-timeline.cjs`                                |    0 | No findings                                                                                               |
+
+The original loaded-host timeout receipts above remain historical evidence. The previously persistent capacity test now passes without changing tests or their timeouts. PostgreSQL tests remain a CI validation responsibility; no production or local SQL operations were performed during integration.
+
+The account-aware identity intentionally changes the full publication fingerprint relative to the historical base. To verify equivalent inputs and outputs on the new base, the two-process benchmark was repeated against an ignored archive of current main, then compared to the integrated branch:
+
+```sh
+mkdir -p .migration/issue-61-integrated-baseline
+git archive e08c63838058144b68b7b653cf9c21cb3f4ac137 packages/portfolio-domain/src | tar -x -C .migration/issue-61-integrated-baseline
+ln -s "$PWD/packages/portfolio-domain/node_modules" .migration/issue-61-integrated-baseline/packages/portfolio-domain/node_modules
+node scripts/benchmarks/manual-policy-timeline.cjs --workers 2 --domain-source .migration/issue-61-integrated-baseline/packages/portfolio-domain/src --output /tmp/issue-61-integrated-before.json
+node scripts/benchmarks/manual-policy-timeline.cjs --workers 2 --compare /tmp/issue-61-integrated-before.json --output /tmp/issue-61-integrated-after.json
+```
+
+Both commands exited 0. The full publication fingerprint matched before/after in both processes: `3d9a1550f88d812f03ea23925eb9404b7aab590e8ab9d17829773bc9f1bba753`. The timeline fingerprint remained `1e9703fd992317798b99d45eed12e350f2d1f99e832333116454fef531c13c7f`. All four processes passed the same admission counts above, including 2,499 facts, 1,001 positions and 3,000 combined timeline records.
+
+| Measurement per process           | Current main worker 1 | Current main worker 2 | Integrated worker 1 | Integrated worker 2 |
+| --------------------------------- | --------------------: | --------------------: | ------------------: | ------------------: |
+| Builder process CPU, ms           |              3479.531 |              3374.089 |             476.335 |             492.107 |
+| Builder elapsed, ms               |                  3326 |                  3215 |                 305 |                 262 |
+| Isolated timeline process CPU, ms |              3662.217 |              3579.636 |              77.213 |              72.851 |
+| Isolated timeline elapsed, ms     |                  3652 |                  3579 |                  37 |                  35 |
+
+Unchanged position-key reads remain 1,501,000 before versus 2,000 after; invested-amount reads remain 1,499,000 before versus 1,000 after in each process. These remain local computation measurements, not production latency or cloud transaction guarantees. The independent standards/spec review in `/tmp/investment-pr-review/report.md` marked the original PR Ready with no blocker; final integrated CI must pass before merge.
