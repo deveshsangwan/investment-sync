@@ -22,6 +22,8 @@ Vercel production builds run `convex deploy` with a production-only deploy key s
 
 For production operations, select `production-cutover` or `useful-spaniel-964` explicitly. The project's default production deployment is separate from this target.
 
+The retained legacy `/api/cron/cleanup-imports` endpoint requires a nonempty server-only `CRON_SECRET` in the web deployment configuration. Its header must match `Authorization: Bearer <CRON_SECRET>` exactly, including scheme casing and the single separating space. Missing or empty configuration returns 503; missing, malformed, or incorrect credentials return 401. Keep `SOURCE_WRITES_PAUSED=true` in production so an exact credential still returns 409 before creating clients or starting legacy cleanup. Active Convex scheduled cleanup does not use this endpoint or `CRON_SECRET`.
+
 ## Recovery evidence
 
 The final Postgres backup uses run `production-final-20261004`. It was captured from the frozen source in a read-only repeatable-read transaction, with the same exported snapshot used for `pg_dump` and the comparison tables. Restoration into `investment_sync_recovery_oct04` passed exact comparison of all 2,292 rows, indexes, and constraints.

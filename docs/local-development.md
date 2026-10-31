@@ -71,7 +71,9 @@ SUPABASE_IMPORT_BUCKET=portfolio-imports
 CRON_SECRET=replace-with-a-random-secret
 ```
 
-Legacy upload routes need Supabase-compatible storage. Their cleanup endpoint fails closed when `CRON_SECRET` is absent. The converted web upload flow and scheduled cleanup use Convex.
+Legacy upload routes need Supabase-compatible storage. Their cleanup endpoint requires a nonempty server-only `CRON_SECRET` and an exact `Authorization: Bearer <CRON_SECRET>` header. Raw secrets, different scheme casing, extra spaces between the scheme and secret, and incorrect secrets return 401 before cleanup starts. An unset or empty `CRON_SECRET` returns 503. The converted web upload flow and scheduled cleanup use Convex.
+
+Production configuration for the retained endpoint is documented in the [cutover record](convex-phase-8-cutover.md#deployment-configuration). Keep `SOURCE_WRITES_PAUSED=true` in production; even an exact credential must return 409 without starting legacy cleanup.
 
 ## Configure Convex
 

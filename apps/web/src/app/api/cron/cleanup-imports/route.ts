@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const expectedSecret = getAppEnv().CRON_SECRET;
+
   if (!expectedSecret) {
     logger.error("Import cleanup is disabled because CRON_SECRET is missing");
     return NextResponse.json(
@@ -23,10 +24,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const providedSecret = request.headers
-    .get("authorization")
-    ?.replace(/^Bearer\s+/i, "");
-  if (providedSecret !== expectedSecret) {
+  const authorization = request.headers.get("authorization");
+
+  if (authorization !== `Bearer ${expectedSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
