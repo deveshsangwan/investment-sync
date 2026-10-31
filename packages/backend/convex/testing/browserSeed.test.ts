@@ -44,3 +44,35 @@ test("test fixtures seed a viewer with the same household and reject viewer writ
     }),
   ).rejects.toThrow();
 });
+
+test("the fake quote replaces an initialized rate slot without creating an ambiguous quote", async () => {
+  vi.stubEnv("APP_ENV", "test");
+  const backend = convexTest(schema, {
+    ...modules,
+    "./testing/browserSeed.ts": () => import("../../src/testing/browserSeed"),
+  });
+  const id = await backend.run((ctx) =>
+    ctx.db.insert("currencyRates", {
+      base: "USD",
+      quote: "INR",
+      provider: "frankfurter",
+      status: "unavailable",
+      refreshRevision: 1,
+    }),
+  );
+  await backend.mutation(seed, {});
+  const quotes = await backend.run((ctx) =>
+    ctx.db
+      .query("currencyRates")
+      .withIndex("by_base_and_quote_and_provider", (query) =>
+        query
+          .eq("base", "USD")
+          .eq("quote", "INR")
+          .eq("provider", "frankfurter"),
+      )
+      .collect(),
+  );
+
+  expect(quotes).toHaveLength(1);
+  expect(quotes[0]).toMatchObject({ _id: id, rate: "80", status: "fresh" });
+});

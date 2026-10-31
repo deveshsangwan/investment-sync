@@ -181,7 +181,9 @@ try {
     } else if (request.url === "/.well-known/jwks.json") {
       response.setHeader("Content-Type", "application/json");
       response.end(JSON.stringify({ keys: [jwk] }));
-    } else if (["e2e_owner", "e2e_viewer", "e2e_other"].includes(subject)) {
+    } else if (
+      ["e2e_owner", "e2e_viewer", "e2e_other", "e2e_sales"].includes(subject)
+    ) {
       void new SignJWT({
         email: `${subject}@example.invalid`,
         email_verified: true,

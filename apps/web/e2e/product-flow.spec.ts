@@ -1,3 +1,4 @@
+import { vestedWorkbook } from "../../../packages/importers/src/vested-fixtures";
 import { expect, test, type Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@investment-sync/backend/api";
@@ -477,4 +478,89 @@ test("owner manages archived accounts and email-bound invitations while shared v
   } finally {
     await context.close();
   }
+});
+
+test("reported partial sale lots render acquisition dates and native amounts on the production holding detail", async ({
+  page,
+}) => {
+  const workbook = vestedWorkbook({
+    holdings: [["FAKE", "8", "80", "96", "16"]],
+    sales: [
+      [
+        "FAKE",
+        "2025-02-15",
+        "2024-01-01",
+        "1.5",
+        "30",
+        "15",
+        "15",
+        "fake-execution",
+        "fake-lot-1",
+      ],
+      [
+        "FAKE",
+        "2025-02-15",
+        "2024-02-01",
+        "0.5",
+        "10",
+        "7",
+        "3",
+        "fake-execution",
+        "fake-lot-2",
+      ],
+    ],
+    summary: [["FAKE", "2", "40", "22", "18"]],
+  });
+  await signIn(page, "e2e_sales");
+  await review(page, {
+    name: workbook.fileName,
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from(workbook.content),
+  });
+  await apply(page);
+  await page.getByRole("link", { name: "View portfolio", exact: true }).click();
+  await page
+    .locator('a[href^="/dashboard/holdings/"]')
+    .filter({ hasText: "FAKE" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Realized sales", exact: true }),
+  ).toBeVisible();
+  const firstLot = page.getByRole("row").filter({ hasText: "fake-lot-1" });
+  await expect(firstLot).toContainText("15 Feb 2025");
+  await expect(firstLot).toContainText("01 Jan 2024");
+  await expect(firstLot).toContainText("$30");
+  await expect(firstLot).toContainText("+$15");
+  await expect(
+    page.getByRole("row").filter({ hasText: "fake-lot-2" }),
+  ).toContainText("01 Feb 2024");
+  await expect(
+    page.getByText("Not in latest snapshot", { exact: true }),
+  ).toHaveCount(0);
+
+  const client = await clientFor("e2e_sales");
+  const positions = await client.query(api.portfolio.positions, {});
+  expect(positions.current).toHaveLength(1);
+  expect(positions.exited).toEqual([]);
+  const [position] = positions.current;
+  if (!position) throw new Error("Missing partial-sale position");
+  const detail = await client.query(api.portfolio.holdingDetail, {
+    positionKey: position.id,
+  });
+  expect(detail?.holding).toMatchObject({
+    isCurrent: true,
+    quantity: "8",
+    currentValue: "96",
+  });
+  expect(
+    detail?.sales.map((sale) => ({
+      proceeds: sale.proceeds,
+      costBasis: sale.costBasis,
+      realizedPnl: sale.realizedPnl,
+    })),
+  ).toEqual([
+    { proceeds: "30", costBasis: "15", realizedPnl: "15" },
+    { proceeds: "10", costBasis: "7", realizedPnl: "3" },
+  ]);
 });

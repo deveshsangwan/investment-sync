@@ -18,11 +18,13 @@ export function TestIdentityProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{ subject, signIn }}>
       <nav aria-label="Test identities">
-        {["e2e_owner", "e2e_viewer", "e2e_other"].map((identity) => (
-          <button key={identity} onClick={() => signIn(identity)}>
-            {identity}
-          </button>
-        ))}
+        {["e2e_owner", "e2e_viewer", "e2e_other", "e2e_sales"].map(
+          (identity) => (
+            <button key={identity} onClick={() => signIn(identity)}>
+              {identity}
+            </button>
+          ),
+        )}
         <button onClick={() => signIn(null)}>Sign out</button>
       </nav>
       {subject ? children : <p>Sign in with a local test identity</p>}
