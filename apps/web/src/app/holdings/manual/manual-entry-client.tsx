@@ -36,7 +36,7 @@ export function ManualEntryClient({
     <PageShell>
       <PageHeader
         title="Manual entry"
-        description="Add a ULIP using the figures in your insurer's app. Update its value whenever you check it."
+        description="Add a ULIP or update its value using figures from your insurer's app."
         before={
           <Link
             href="/holdings"
@@ -258,10 +258,7 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
           </div>
         ) : null}
         {isOwner ? (
-          <Panel
-            title="Policy entry"
-            description="Use the amounts shown by your insurer. All amounts are in rupees."
-          >
+          <Panel title="Policy entry" description="All amounts are in rupees.">
             <ManualEntrySelector
               selection={selection}
               policies={policies}
@@ -272,9 +269,7 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
               <>
                 {selected?.values ? (
                   <p className="mb-5 text-xs leading-5 text-muted-foreground">
-                    Last saved value as of{" "}
-                    {formatDate(selected.values.sourceDate)}. Enter the latest
-                    figures below.
+                    Saved value as of {formatDate(selected.values.sourceDate)}.
                   </p>
                 ) : null}
                 <ManualPolicyForm
@@ -310,13 +305,12 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
           </Panel>
         )}
         <p className="px-1 text-xs leading-5 text-muted-foreground">
-          Enter the market-linked value shown today. A guaranteed maturity
-          amount belongs to a future date. XIRR needs payment dates; these
-          entries record values only.
+          Enter the market-linked value shown today, not the guaranteed maturity
+          amount. Entries record values only, so XIRR is not calculated.
         </p>
       </div>
       <Panel
-        title="Your manual policies"
+        title="Policies"
         action={
           isOwner ? (
             <Button
@@ -332,11 +326,7 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
         }
       >
         {policies.length === 0 ? (
-          <EmptyState
-            icon={Umbrella}
-            title="No manual policies yet"
-            description="Add your first policy using its amount paid and current value."
-          />
+          <EmptyState icon={Umbrella} title="No policies yet" />
         ) : (
           <ul className="divide-y divide-border/70">
             {policies.map((policy) => (

@@ -100,9 +100,9 @@ function UploadsLoading() {
     <>
       <PageHeader
         title="Imports"
-        description="Select a statement, check what was detected, then apply it. Nothing changes in your portfolio until you apply."
+        description="Nothing is added to your portfolio until you apply it."
       />
-      <Panel title="Select a portfolio export">
+      <Panel>
         <Skeleton
           className="h-56 rounded-2xl"
           aria-label="Preparing import access"
@@ -221,19 +221,13 @@ export function UploadsClient() {
     <>
       <PageHeader
         title="Imports"
-        description="Select a statement, check what was detected, then apply it. Nothing changes in your portfolio until you apply."
+        description="Nothing is added to your portfolio until you apply it."
         action={
           hasUploadPermission ? (
             <Button asChild variant="outline">
               <Link href="/holdings/manual">Add manually</Link>
             </Button>
           ) : undefined
-        }
-        meta={
-          <p className="text-xs text-muted-foreground">
-            Source files are kept for 30 days. Import history stays available
-            after a file expires.
-          </p>
         }
       />
 
@@ -251,7 +245,7 @@ export function UploadsClient() {
         />
 
         {!current ? (
-          <Panel title="Select a portfolio export">
+          <Panel>
             <Skeleton
               className="h-56 rounded-2xl"
               aria-label="Loading import permissions"
@@ -271,7 +265,7 @@ export function UploadsClient() {
         ) : null}
 
         {hasUploadPermission && visibleStep === "select" ? (
-          <Panel title="Select a portfolio export" bodyClassName="space-y-4">
+          <Panel bodyClassName="space-y-4">
             <div
               className={cn(
                 "rounded-2xl border border-dashed border-border/80 px-5 py-10 text-center transition-colors duration-150 motion-reduce:transition-none",
@@ -294,11 +288,9 @@ export function UploadsClient() {
                 Drop a CSV or XLSX file here
               </p>
               <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-                Supported exports are detected automatically. Files up to{" "}
-                {publicImportLimits.fileBytes / 1024} KiB, with at most{" "}
-                {publicImportLimits.rows.toLocaleString("en-IN")} normalized
-                rows and {publicImportLimits.normalizedBytes / 1024} KiB of
-                normalized data.
+                Up to {publicImportLimits.fileBytes / 1024} KiB per file,{" "}
+                {publicImportLimits.rows.toLocaleString("en-IN")} rows, and{" "}
+                {publicImportLimits.normalizedBytes / 1024} KiB after parsing.
               </p>
               <Button
                 type="button"
@@ -390,10 +382,7 @@ export function UploadsClient() {
           ["awaiting_upload", "uploaded", "parsing"].includes(
             workflow.batch.status,
           )) ? (
-          <Panel
-            title="Preparing review"
-            description="The source file is being parsed and checked against the import limits."
-          >
+          <Panel title="Preparing review">
             <div role="status" className="flex items-center gap-3">
               <LoaderCircle
                 className="size-5 animate-spin text-muted-foreground motion-reduce:animate-none"
@@ -437,7 +426,7 @@ export function UploadsClient() {
             description={
               workflow.error
                 ? "Your existing portfolio data has not changed."
-                : "The reviewed rows are being added to your portfolio."
+                : undefined
             }
           >
             {workflow.error ? (
@@ -475,7 +464,7 @@ export function UploadsClient() {
         ) : null}
 
         {hasUploadPermission && visibleStep === "done" && displayedPreview ? (
-          <Panel title="Import applied">
+          <Panel>
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <Check
@@ -484,15 +473,13 @@ export function UploadsClient() {
                 />
                 <div>
                   <p className="text-sm font-medium">
-                    {sourceLabel(displayedPreview.sourceType)} data is now in
-                    your portfolio
+                    {sourceLabel(displayedPreview.sourceType)} import applied
                   </p>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     {(
                       appliedRowCount ?? displayedPreview.rowCount
                     ).toLocaleString("en-IN")}{" "}
-                    normalized rows were applied from{" "}
-                    {displayedPreview.originalFileName}.
+                    rows from {displayedPreview.originalFileName}.
                   </p>
                 </div>
               </div>
@@ -534,10 +521,6 @@ export function UploadsClient() {
 
         <section className="mt-8">
           <h2 className="text-[0.82rem] font-semibold">Recent imports</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Import records stay visible after the original file reaches its
-            30-day retention date.
-          </p>
 
           <div className="mt-3">
             {list.status === "LoadingFirstPage" ? (
@@ -581,8 +564,7 @@ export function UploadsClient() {
                               ? "entered"
                               : "uploaded"}{" "}
                             {formatDate(batch.createdAt)} ·{" "}
-                            {batch.rowCount.toLocaleString("en-IN")} normalized
-                            rows
+                            {batch.rowCount.toLocaleString("en-IN")} rows
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {retention.label}
@@ -724,11 +706,7 @@ function ReviewImport({
   const { isHidden } = useAmountsVisibility();
 
   return (
-    <Panel
-      title="Review detected data"
-      description="Check the source, row count, warnings, and sample rows before applying."
-      bodyClassName="space-y-5"
-    >
+    <Panel title="Review import" bodyClassName="space-y-5">
       <dl className="grid gap-4 sm:grid-cols-3">
         <div>
           <dt className="text-xs text-muted-foreground">File</dt>
@@ -743,7 +721,7 @@ function ReviewImport({
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Normalized rows</dt>
+          <dt className="text-xs text-muted-foreground">Rows</dt>
           <dd className="number mt-1 text-sm font-medium">
             {preview.rowCount.toLocaleString("en-IN")}
           </dd>
@@ -765,9 +743,7 @@ function ReviewImport({
           </AlertDescription>
         </Alert>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          The parser found nothing that needs your attention.
-        </p>
+        <p className="text-sm text-muted-foreground">No warnings.</p>
       )}
 
       <div>
@@ -811,7 +787,7 @@ function ReviewImport({
           </ul>
         ) : (
           <p className="mt-2 text-sm text-muted-foreground">
-            No normalized rows were returned for preview.
+            No sample rows available.
           </p>
         )}
       </div>
@@ -973,7 +949,7 @@ function summarizePreviewRow(row: PreviewRow) {
 
   return {
     kind: kind ? labelize(kind) : "Row",
-    title: readString(row.instrumentName) ?? "Normalized import row",
+    title: readString(row.instrumentName) ?? "Import row",
     detail: readString(row.accountName),
     value: undefined,
   };

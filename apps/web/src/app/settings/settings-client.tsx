@@ -35,7 +35,6 @@ export function SettingsClient() {
     <PageShell>
       <PageHeader
         title="Accounts"
-        description="Your household, portfolio accounts, and what happens to your files."
         action={
           <Button asChild>
             <Link href="/uploads">
@@ -81,10 +80,6 @@ function SettingsData() {
                   value={current.email ?? "Not recorded"}
                 />
               </dl>
-              <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                Every account and holding in Investment Sync belongs to this
-                household.
-              </p>
             </Panel>
 
             <Panel title="What you can do">
@@ -106,9 +101,6 @@ function SettingsData() {
 
       <section className="mt-8">
         <h2 className="text-[0.82rem] font-semibold">Portfolio accounts</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Accounts available to organize your imported holdings.
-        </p>
 
         <div className="mt-3">
           {!accounts ? (
@@ -117,7 +109,7 @@ function SettingsData() {
             <EmptyState
               icon={Database}
               title="No portfolio accounts yet"
-              description="Accounts appear here after you review and apply a supported portfolio import."
+              description="Accounts appear here after you apply an import."
               action={
                 <Button asChild size="sm">
                   <Link href="/uploads">Import statement</Link>

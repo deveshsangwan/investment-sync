@@ -62,7 +62,6 @@ export function HoldingsClient() {
     <PageShell>
       <PageHeader
         title="Holdings"
-        description="The positions behind your portfolio."
         action={
           <Button asChild>
             <Link href="/uploads">
@@ -206,7 +205,7 @@ function HoldingsData() {
                 <input
                   className={`${controlClass} w-full pl-9`}
                   type="search"
-                  placeholder="Search holdings"
+                  placeholder="Name, symbol, or account"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
@@ -239,7 +238,6 @@ function HoldingsData() {
               <ChevronDown className="ml-auto size-4" />
             </summary>
             <div className="grid gap-3 border-t py-4 sm:grid-cols-2 lg:grid-cols-4">
-              {" "}
               <FilterSelect
                 label="Position status"
                 value={status}
@@ -295,7 +293,7 @@ function HoldingsData() {
         <EmptyState
           icon={BriefcaseBusiness}
           title="No positions match these filters"
-          description="Clear the filters to return to the complete household view."
+          description="Try a different search or clear the filters."
           action={
             <Button variant="secondary" onClick={resetFilters}>
               Clear filters

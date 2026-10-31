@@ -74,13 +74,7 @@ export function ManualEntrySelector({
           onChange={(policyId) => onChange({ mode: "update", policyId })}
           disabled={isBusy}
         />
-      ) : (
-        <p className="text-xs leading-5 text-muted-foreground">
-          {policies.length === 0
-            ? "Add your first policy. You can update its value here later."
-            : "Create a separate policy using the figures in your insurer's app."}
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
