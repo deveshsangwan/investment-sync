@@ -10,6 +10,8 @@ import { cachedPortfolioData } from "./cache";
 import {
   aggregateSnapshotTotalsByDate,
   getUsdInrRateIfNeeded,
+  holdingPositionKey,
+  holdingCashFlowKey,
   roundMoney,
 } from "./utils";
 import type {
@@ -183,10 +185,8 @@ export async function historyByHoldingPositions(
 
   const grouped = new Map<string, SnapshotValuationRow[]>();
   for (const row of rows) {
-    grouped.set(row.instrumentId, [
-      ...(grouped.get(row.instrumentId) ?? []),
-      row,
-    ]);
+    const key = holdingPositionKey(row);
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
   }
   return grouped;
 }
@@ -221,10 +221,8 @@ export async function transactionsByHoldingPositions(
   const grouped = new Map<string, InstrumentTransactionRow[]>();
   for (const row of rows) {
     if (!row.instrumentId) continue;
-    grouped.set(row.instrumentId, [
-      ...(grouped.get(row.instrumentId) ?? []),
-      row,
-    ]);
+    const key = holdingCashFlowKey(row);
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
   }
   return grouped;
 }

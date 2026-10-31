@@ -4,7 +4,7 @@ import type {
   NativeTotal,
   ValuationRow,
 } from "./types";
-import { subtractDecimals, sumDecimals } from "./numeric";
+import { FinancialDecimal, subtractDecimals, sumDecimals } from "./numeric";
 import { compareText } from "./ordering";
 import { groupBy } from "./grouping";
 
@@ -241,7 +241,13 @@ export function timelineWithManualPolicies(
     )
     .values();
   const reportedPoints = baseline.values();
-  const groups = new Map<string, TimelineSelectionGroup>();
+  const selection: TimelineSelection = {
+    groups: new Map(),
+    candidatesByPosition: new Map(),
+    changedPositionKeys: new Set(),
+    current: new Map(),
+    totals: new Map(),
+  };
   const timeline = baseline.filter(
     (point) => point.snapshotDate < firstManualDate,
   );
@@ -254,7 +260,7 @@ export function timelineWithManualPolicies(
       !nextCandidate.done &&
       nextCandidate.value.fact.snapshotDate <= snapshotDate
     ) {
-      retainTimelineCandidate(groups, nextCandidate.value);
+      retainTimelineCandidate(selection, nextCandidate.value);
       nextCandidate = candidates.next();
     }
 
@@ -266,17 +272,22 @@ export function timelineWithManualPolicies(
       nextReportedPoint = reportedPoints.next();
     }
 
-    const current = currentTimelineHoldings(groups);
-    const rows = hasExplicitValuations
-      ? [
-          ...reportedTotals,
-          ...current
-            .filter((fact) => fact.row.policyId)
-            .map((fact) => fact.row),
-        ]
-      : current.map((fact) => fact.row);
+    updateTimelineSelection(selection, hasExplicitValuations);
+    const selectedTotals = [...selection.totals]
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([currency, total]) => ({
+        currency,
+        investedAmount: total.investedAmount.toFixed(),
+        currentValue: total.currentValue.toFixed(),
+        pnlAmount: total.pnlAmount.toFixed(),
+      }));
 
-    timeline.push({ snapshotDate, totals: nativeTotals(rows) });
+    timeline.push({
+      snapshotDate,
+      totals: hasExplicitValuations
+        ? nativeTotals([...reportedTotals, ...selectedTotals])
+        : selectedTotals,
+    });
   }
 
   return timeline;
@@ -292,17 +303,34 @@ interface TimelineSelectionGroup {
   candidates: Map<string, TimelineCandidate>;
 }
 
+interface TimelineSelection {
+  groups: Map<string, TimelineSelectionGroup>;
+  candidatesByPosition: Map<string, Map<string, TimelineCandidate>>;
+  changedPositionKeys: Set<string>;
+  current: Map<string, TimelineCandidate>;
+  totals: Map<NativeTotal["currency"], TimelineCurrencyTotal>;
+}
+
+type TimelineAmount = InstanceType<typeof FinancialDecimal>;
+
+interface TimelineCurrencyTotal {
+  count: number;
+  investedAmount: TimelineAmount;
+  currentValue: TimelineAmount;
+  pnlAmount: TimelineAmount;
+}
+
 function retainTimelineCandidate(
-  groups: Map<string, TimelineSelectionGroup>,
+  selection: TimelineSelection,
   candidate: TimelineCandidate,
 ) {
   const { fact } = candidate;
   const groupKey = selectionGroupKey(fact);
-  let group = groups.get(groupKey);
+  let group = selection.groups.get(groupKey);
 
   if (!group) {
     group = { candidates: new Map() };
-    groups.set(groupKey, group);
+    selection.groups.set(groupKey, group);
   }
 
   const priority = selectionPriority(fact);
@@ -323,6 +351,12 @@ function retainTimelineCandidate(
           selectionPriority(previous.fact) < priority)
       ) {
         group.candidates.delete(key);
+        const alternatives = selection.candidatesByPosition.get(key);
+        alternatives?.delete(groupKey);
+        if (alternatives?.size === 0)
+          selection.candidatesByPosition.delete(key);
+
+        selection.changedPositionKeys.add(key);
       }
     }
   }
@@ -340,27 +374,87 @@ function retainTimelineCandidate(
   const previous = group.candidates.get(fact.canonicalPositionKey);
 
   if (!previous || compareTimelineCandidates(candidate, previous) < 0) {
-    group.candidates.set(fact.canonicalPositionKey, candidate);
+    const key = fact.canonicalPositionKey;
+    group.candidates.set(key, candidate);
+    const alternatives =
+      selection.candidatesByPosition.get(key) ??
+      new Map<string, TimelineCandidate>();
+    alternatives.set(groupKey, candidate);
+    selection.candidatesByPosition.set(key, alternatives);
+    selection.changedPositionKeys.add(key);
   }
 }
 
-function currentTimelineHoldings(groups: Map<string, TimelineSelectionGroup>) {
-  const current = new Map<string, TimelineCandidate>();
-
-  for (const group of groups.values()) {
-    for (const candidate of group.candidates.values()) {
-      const key = candidate.fact.canonicalPositionKey;
-      const previous = current.get(key);
-
-      if (!previous || compareTimelineCandidates(candidate, previous) < 0) {
-        current.set(key, candidate);
+function updateTimelineSelection(
+  selection: TimelineSelection,
+  hasExplicitValuations: boolean,
+) {
+  // Only a changed group candidate can alter a position's winner. Other source
+  // groups stay indexed so a complete omission can reveal an older candidate.
+  for (const key of selection.changedPositionKeys) {
+    let winner: TimelineCandidate | undefined;
+    for (const candidate of selection.candidatesByPosition.get(key)?.values() ??
+      []) {
+      if (!winner || compareTimelineCandidates(candidate, winner) < 0) {
+        winner = candidate;
       }
+    }
+
+    const previous = selection.current.get(key);
+    if (winner === previous) continue;
+
+    if (previous && (!hasExplicitValuations || previous.fact.row.policyId)) {
+      updateTimelineCurrencyTotal(selection.totals, previous.fact, -1);
+    }
+
+    if (winner) {
+      selection.current.set(key, winner);
+      if (!hasExplicitValuations || winner.fact.row.policyId) {
+        updateTimelineCurrencyTotal(selection.totals, winner.fact, 1);
+      }
+    } else {
+      selection.current.delete(key);
     }
   }
 
-  return [...current.values()]
-    .map((candidate) => candidate.fact)
-    .sort(compareHoldings);
+  selection.changedPositionKeys.clear();
+}
+
+function updateTimelineCurrencyTotal(
+  totals: TimelineSelection["totals"],
+  fact: HoldingFact,
+  direction: 1 | -1,
+) {
+  const currency = fact.row.currency;
+  const previous = totals.get(currency) ?? {
+    count: 0,
+    investedAmount: new FinancialDecimal(0),
+    currentValue: new FinancialDecimal(0),
+    pnlAmount: new FinancialDecimal(0),
+  };
+  const count = previous.count + direction;
+
+  if (count === 0) {
+    totals.delete(currency);
+    return;
+  }
+
+  // Reuse the native contribution rules, including missing P&L handling.
+  // Counts distinguish an absent currency from selected rows whose sum is zero.
+  for (const contribution of nativeTotals([fact.row])) {
+    const adjust = (amount: TimelineAmount, change: string) =>
+      direction === 1 ? amount.plus(change) : amount.minus(change);
+
+    totals.set(currency, {
+      count,
+      investedAmount: adjust(
+        previous.investedAmount,
+        contribution.investedAmount,
+      ),
+      currentValue: adjust(previous.currentValue, contribution.currentValue),
+      pnlAmount: adjust(previous.pnlAmount, contribution.pnlAmount),
+    });
+  }
 }
 
 function compareTimelineCandidates(

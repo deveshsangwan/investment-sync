@@ -1,4 +1,5 @@
 import { parseSourceDecimal } from "./numeric";
+import { parseVestedUnrealizedSheet } from "./vested-unrealized";
 import { getSourceDecimals, withSourceDecimals } from "./source-decimals";
 import * as XLSX from "xlsx";
 import type {
@@ -57,7 +58,7 @@ function workbookRows(
 
 export const vestedDrivewealthImporter: PortfolioImporter = {
   sourceType: "vested_drivewealth_xlsx",
-  parserVersion: "vested-drivewealth-v1",
+  parserVersion: "vested-drivewealth-v3",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -83,52 +84,9 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
   },
   parse(file: ImportFile): ParseResult {
     const workbook = createWorkbookContext(file);
-    const rows = workbookRows(workbook, "Unrealized P&L - Summary ");
-    const headerRow = findHeaderRow(rows, [
-      "Security",
-      "Quantity",
-      "Market Value",
-    ]);
-    if (headerRow < 0)
-      throw new Error(
-        "Could not find Vested unrealized P&L summary header row",
-      );
-
-    const headers = rows[headerRow] ?? [];
-    const holdings = rows.slice(headerRow + 1).flatMap((row) => {
-      const record = objectFromRow(headers, row);
-      const symbol = toStringValue(record.security).trim();
-      if (!symbol || symbol.toLowerCase() === "total") return [];
-
-      return [
-        withSourceDecimals(
-          {
-            kind: "holding" as const,
-            sourceType: "vested_drivewealth_xlsx" as const,
-            accountName: "US Stocks",
-            provider: "Vested / DriveWealth",
-            instrumentName: symbol,
-            symbol,
-            assetClass: "us_stock" as const,
-            currency: "USD" as const,
-            quantity: parseNumber(record.quantity),
-            investedAmount: parseRequiredNumber(record["cost basis (usd)"]),
-            currentValue: parseRequiredNumber(record["market value (usd)"]),
-            pnlAmount: parseNumber(record["profit/loss (usd)"]),
-            pnlPercent: parseNumber(record["profit/loss (%)"]),
-            metadata: {
-              profitLossInr: parseNumber(record["profit/loss (inr)"]),
-            },
-          },
-          {
-            quantity: record.quantity,
-            investedAmount: record["cost basis (usd)"],
-            currentValue: record["market value (usd)"],
-            pnlAmount: record["profit/loss (usd)"],
-          },
-        ),
-      ];
-    });
+    const holdings = parseVestedUnrealizedSheet(
+      workbook.workbook.Sheets["Unrealized P&L - Summary "],
+    );
 
     return {
       sourceType: "vested_drivewealth_xlsx",
