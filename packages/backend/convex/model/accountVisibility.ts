@@ -30,15 +30,18 @@ export async function archivedProjection(
 ) {
   if (!accounts.some((account) => account.isArchived)) return null;
 
-  const projection = await completeProjection(ctx, active);
-  return visibleAccountProjection(
-    projection,
-    new Set(
-      accounts
-        .filter((account) => account.isArchived)
-        .map((account) => account.key),
+  const readModel = await completeProjection(ctx, active);
+  return {
+    ...readModel,
+    projection: visibleAccountProjection(
+      readModel.projection,
+      new Set(
+        accounts
+          .filter((account) => account.isArchived)
+          .map((account) => account.key),
+      ),
     ),
-  );
+  };
 }
 
 export function applyAccountNames(

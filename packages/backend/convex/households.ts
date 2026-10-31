@@ -121,7 +121,7 @@ export const members = query({
 });
 
 export const pendingInvites = query({
-  args: {},
+  args: { now: v.number() },
   returns: v.array(
     v.object({
       id: v.id("householdInvites"),
@@ -129,7 +129,7 @@ export const pendingInvites = query({
       expiresAt: v.number(),
     }),
   ),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const { household } = await requireOwner(ctx);
     const invites = await ctx.db
       .query("householdInvites")
@@ -137,10 +137,14 @@ export const pendingInvites = query({
         q.eq("householdId", household._id).eq("status", "pending"),
       )
       .take(65);
-    if (invites.length > 64)
+    // This clock controls display only; redemption enforces server-time expiry.
+    const activeInvites = invites.filter(
+      (invite) => invite.expiresAt > args.now,
+    );
+    if (activeInvites.length > 64)
       throw new ConvexError("Invitation capacity exceeded");
 
-    return invites.map((invite) => ({
+    return activeInvites.map((invite) => ({
       id: invite._id,
       email: invite.email,
       expiresAt: invite.expiresAt,

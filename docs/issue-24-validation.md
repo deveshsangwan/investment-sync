@@ -1,8 +1,8 @@
 # Issue 24 validation
 
-Validated in the issue worktree against base `73930483798f2cfd7fe68b8069810ffcf99ee3f8`. All data used by tests is synthetic. No deployment, production operation, browser session, native session, external email, or credential copy was performed.
+The initial pre-queue run below was validated in the issue worktree against base `73930483798f2cfd7fe68b8069810ffcf99ee3f8`. All data used by tests is synthetic. No deployment, production operation, browser session, native session, external email, or credential copy was performed.
 
-## Final receipts
+## Initial pre-queue receipts
 
 | Command                                                                                                                                         | Exit | Result                                                                                        |
 | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------------- |
@@ -36,15 +36,15 @@ The ordinary `convex codegen --typecheck disable` attempt exited 1 because no de
 - Independent concurrent redemption calls, acceptance versus revocation, and two competing ownership transfers. These run actual Convex functions through separate authenticated clients in `convex-test`; they do not establish live cloud concurrency behavior.
 - Rename preserves import identity and later imports; archive immediately changes account lists, holdings, dashboard, class views, and holding details; immutable source/history rows remain unchanged; unarchive restores totals and display names.
 - Archival preserves selected source overlap rules, decimal native totals, duplicate transaction occurrences across reimports, and the latest visible valuation date. Publication capacity/read-budget regressions are covered by the full backend suite.
-- DOM interaction tests cover link creation/revocation, explicit acceptance and retry, viewer controls, typed transfer confirmation, confirmed removal, rename/archive/unarchive. No browser or Clerk sign-in flow was exercised.
+- DOM interaction tests cover link creation/revocation, explicit acceptance and retry, viewer controls, typed transfer confirmation, confirmed removal, rename/archive/unarchive. No browser or Clerk sign-in flow was exercised in this initial pre-queue run.
 
-Initial runs on the shared host encountered five-second test timeouts and worker RPC timeouts while load exceeded 90 and swap usage reached about 14 GB. Full reruns above passed with one worker. The broader suite also caught and drove fixes for redundant snapshot-order bytes exceeding the publication budget and stale mock/React rendering assumptions. Only the final receipts above are counted as passing.
+Initial runs on the shared host encountered five-second test timeouts and worker RPC timeouts while load exceeded 90 and swap usage reached about 14 GB. Full reruns above passed with one worker. The broader suite also caught and drove fixes for redundant snapshot-order bytes exceeding the publication budget and stale mock/React rendering assumptions. Only the pre-queue receipts above are counted as passing for that initial run.
 
 ## Release constraints
 
 See [household-sharing.md](./household-sharing.md) for the signed `email` / `email_verified` Clerk claim prerequisite, capacities, existing-member behavior, and account visibility rules. Live Clerk configuration has not been inspected or changed. A fake development identity must confirm those claims before invitation redemption is enabled in a deployment. Archived reads decode the bounded active projection and cost more than ordinary indexed reads. Unscoped reported portfolio valuations are replaced with visible holding history while any account is archived.
 
-## Sequential queue integration, 2026-10-31
+## Final integrated queue receipts, 2026-10-31
 
 The original receipts above describe the pre-queue branch. The queue integration merges main `0e571121efbe2c38480218000459faecc91decba` with an ordinary merge, `5466b71`, retaining #62–#68, #70, #71, and #73. No #69 branch changes are included.
 
@@ -69,3 +69,9 @@ All resources for these receipts are fake-data disposable loopback services. Pos
 Configured, missing, and unverified signed identities are tested with fake development identities. Missing or unverified email claims fail closed and leave the invitation pending; a configured verified identity can subsequently consume the token once. No live Clerk claim, credential, or configuration operation was performed. Signed Clerk `email` and boolean `email_verified` remain an unverified rollout prerequisite, not a claimed production verification.
 
 The existing #66 next-successful-publication caveat remains for materialized selections created before account-aware publication. This merge does not manually republish production data. Archived views still preserve decimal amounts and immutable facts, apply visibility after source selection, and replace unscoped reported valuations with visible holding history. No hosted Clerk, Next middleware/SSR, or physical-device coverage is claimed by the browser/native component suites.
+
+## Review follow-up validation
+
+The completed CodeRabbit review on `3b83c96` identified three minor findings and one read-metrics nit. The opening receipts now explicitly describe the pre-queue run. Pending invitations use a client-supplied display clock refreshed at the next expiry; expired links are hidden without reading wall time inside a query, and redemption remains atomic and server-time enforced. Complete archived projections sort asset classes like the publication builder and return their actual range/document counts, including account and FX reads in the public read metrics.
+
+Follow-up commands all exited 0: `pnpm --filter @investment-sync/backend test` passed 211 tests, `pnpm --filter @investment-sync/web test` passed 116 tests, `pnpm exec turbo run lint typecheck --concurrency=1` passed all 16 tasks, and the same pinned local-backend `test:e2e` command above passed all six journeys. New regressions cover exact expiry boundaries, live expiry while Settings remains open, publication-order asset classes, and real archived-read metrics. Final-head CI must pass again after this follow-up push; the earlier green run is not substituted for it.

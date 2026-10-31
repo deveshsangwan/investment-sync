@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -18,15 +19,17 @@ import { AcceptInvitation } from "./accept-invitation";
 const mocks = vi.hoisted(() => ({
   mutation: vi.fn<(...args: unknown[]) => Promise<null>>(),
   action: vi.fn<(...args: unknown[]) => Promise<{ token: string }>>(),
-  query: vi.fn<(name: string) => unknown>(),
+  query: vi.fn<(name: string, args?: unknown) => unknown>(),
 }));
 vi.mock("convex/react", () => ({
   useMutation: () => mocks.mutation,
   useAction: () => mocks.action,
 }));
 vi.mock("../../app/query-cache-provider", () => ({
-  useCachedQuery: (query: Parameters<typeof getFunctionName>[0]) =>
-    mocks.query(getFunctionName(query)),
+  useCachedQuery: (
+    query: Parameters<typeof getFunctionName>[0],
+    args?: unknown,
+  ) => mocks.query(getFunctionName(query), args),
 }));
 vi.mock("../../app/convex-provider", () => ({
   ConvexSessionGate: ({ children }: { children: React.ReactNode }) => children,
@@ -92,7 +95,10 @@ beforeEach(() => {
     return data[name];
   });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 it("lets an owner create a usable link and revoke a pending invitation", async () => {
   render(<HouseholdManagement current={current} />);
@@ -157,7 +163,9 @@ it("shows viewers members and accounts without owner management controls or invi
   ).toBeNull();
   expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
-  expect(mocks.query).not.toHaveBeenCalledWith("households:pendingInvites");
+  expect(mocks.query.mock.calls.map(([name]) => name)).not.toContain(
+    "households:pendingInvites",
+  );
 });
 
 it("renames and archives an account and offers unarchive for saved accounts", async () => {
@@ -226,4 +234,34 @@ it("removes the selected viewer only after explicit confirmation", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
   await screen.findByText("Member removed.");
   expect(mocks.mutation).toHaveBeenCalledWith({ memberId });
+});
+
+it("refreshes the pending list at expiry while an owner leaves Settings open", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-31T00:00:00.000Z"));
+  const expiresAt = Date.now() + 1000;
+  const originalQuery = mocks.query.getMockImplementation();
+  if (!originalQuery) throw new Error("Missing query fixture");
+  mocks.query.mockImplementation((name, args) => {
+    if (name !== "households:pendingInvites") return originalQuery(name, args);
+    if (
+      args &&
+      typeof args === "object" &&
+      "now" in args &&
+      typeof args.now === "number" &&
+      args.now < expiresAt
+    )
+      return [
+        { id: "expiring-invite", email: "expiring@example.invalid", expiresAt },
+      ];
+    return [];
+  });
+  render(<HouseholdManagement current={current} />);
+  expect(screen.getByText("expiring@example.invalid")).toBeTruthy();
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+  expect(screen.queryByText("expiring@example.invalid")).toBeNull();
+  expect(screen.getByText("No pending invitations.")).toBeTruthy();
 });

@@ -264,24 +264,33 @@ export async function completeProjection(
     doc,
     position: decodePosition(doc, source),
   }));
-  const assetClasses = [...new Set(positions.map((doc) => doc.assetClass))].map(
-    (assetClass) => ({ assetClass, totals: [], timeline: [] }),
-  );
+  const assetClasses = [...new Set(positions.map((doc) => doc.assetClass))]
+    .sort()
+    .map((assetClass) => ({ assetClass, totals: [], timeline: [] }));
 
-  return projection({
-    summary,
-    positions: decoded
-      .filter((entry) => entry.doc.status !== "detail")
-      .map((entry) => entry.position),
-    detailPositions: decoded
-      .filter((entry) => entry.doc.status === "detail")
-      .map((entry) => entry.position),
-    assetClasses,
-    timeline,
-    cashFlows: facts
-      .filter((fact) => fact.kind === "transaction")
-      .map(decodePortfolioTransaction),
-  });
+  return {
+    projection: projection({
+      summary,
+      positions: decoded
+        .filter((entry) => entry.doc.status !== "detail")
+        .map((entry) => entry.position),
+      detailPositions: decoded
+        .filter((entry) => entry.doc.status === "detail")
+        .map((entry) => entry.position),
+      assetClasses,
+      timeline,
+      cashFlows: facts
+        .filter((fact) => fact.kind === "transaction")
+        .map(decodePortfolioTransaction),
+    }),
+    counts: {
+      ranges: 5,
+      positions: positions.length,
+      historyFacts: facts.length,
+      historyScopeChunks: scopes.length,
+      timelinePoints: timeline.length,
+    },
+  };
 }
 
 export async function logPortfolioRead(

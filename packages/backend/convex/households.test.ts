@@ -67,7 +67,9 @@ it("joins as viewer while preserving a provisioned invitee's household and data"
       email: "x@example.invalid",
     }),
   ).rejects.toThrow();
-  await expect(invitee.query(api.households.pendingInvites)).rejects.toThrow();
+  await expect(
+    invitee.query(api.households.pendingInvites, { now: Date.now() }),
+  ).rejects.toThrow();
   await expect(
     invitee.mutation(api.households.acceptInvite, { token }),
   ).rejects.toThrow();
@@ -103,7 +105,9 @@ it("rejects wrong email, unverified email, unauthenticated, expired, revoked and
   await expect(
     invitee.mutation(api.households.acceptInvite, first),
   ).rejects.toThrow("INVALID_INVITE");
-  const [pending] = await owner.query(api.households.pendingInvites);
+  const [pending] = await owner.query(api.households.pendingInvites, {
+    now: Date.now(),
+  });
   if (!pending) throw new Error("Missing invite");
   await owner.mutation(api.households.revokeInvite, { inviteId: pending.id });
   await expect(
@@ -157,7 +161,9 @@ it("enforces scoped removal and deliberate ownership transfer, revokes pending l
   });
   expect((await owner.query(api.users.current)).role).toBe("viewer");
   expect((await invitee.query(api.users.current)).role).toBe("owner");
-  expect(await invitee.query(api.households.pendingInvites)).toEqual([]);
+  expect(
+    await invitee.query(api.households.pendingInvites, { now: Date.now() }),
+  ).toEqual([]);
   await expect(
     owner.mutation(api.households.removeMember, { memberId: member.id }),
   ).rejects.toThrow();
@@ -240,7 +246,9 @@ it("revokes outstanding links for a removed member and serializes acceptance aga
   const racing = await owner.action(api.actions.householdInvites.create, {
     email: "invitee@example.invalid",
   });
-  const [invite] = await owner.query(api.households.pendingInvites);
+  const [invite] = await owner.query(api.households.pendingInvites, {
+    now: Date.now(),
+  });
   if (!invite) throw new Error("Missing invite");
   const outcomes = await Promise.allSettled([
     owner.mutation(api.households.revokeInvite, { inviteId: invite.id }),
@@ -344,10 +352,41 @@ it("fails closed without signed email verification and consumes the same token o
       .withIdentity({ ...identity("invitee"), emailVerified: false })
       .mutation(api.households.acceptInvite, invite),
   ).rejects.toMatchObject({ data: { code: "INVALID_INVITE" } });
-  expect(await owner.query(api.households.pendingInvites)).toHaveLength(1);
+  expect(
+    await owner.query(api.households.pendingInvites, { now: Date.now() }),
+  ).toHaveLength(1);
   await invitee.mutation(api.households.acceptInvite, invite);
   expect((await invitee.query(api.users.current)).role).toBe("viewer");
   await expect(
     invitee.mutation(api.households.acceptInvite, invite),
   ).rejects.toThrow();
+});
+
+it("excludes expired invitations at the requested display time without consuming or revoking active links", async () => {
+  const { owner, invitee } = await setup();
+  const invitation = await owner.action(api.actions.householdInvites.create, {
+    email: "invitee@example.invalid",
+  });
+  const [pending] = await owner.query(api.households.pendingInvites, {
+    now: Date.now(),
+  });
+  if (!pending) throw new Error("Missing active invitation");
+
+  expect(
+    await owner.query(api.households.pendingInvites, {
+      now: pending.expiresAt - 1,
+    }),
+  ).toHaveLength(1);
+  expect(
+    await owner.query(api.households.pendingInvites, {
+      now: pending.expiresAt,
+    }),
+  ).toEqual([]);
+  expect(
+    await owner.query(api.households.pendingInvites, {
+      now: pending.expiresAt + 1,
+    }),
+  ).toEqual([]);
+  await invitee.mutation(api.households.acceptInvite, invitation);
+  expect((await invitee.query(api.users.current)).role).toBe("viewer");
 });

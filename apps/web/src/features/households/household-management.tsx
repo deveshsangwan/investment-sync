@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAction, useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@investment-sync/backend/api";
@@ -185,7 +185,25 @@ function MemberRow({ member, current }: { member: Member; current: Current }) {
 }
 
 function InvitationManagement() {
-  const pending = useCachedQuery(api.households.pendingInvites);
+  const [now, setNow] = useState(() => Date.now());
+  const pending = useCachedQuery(api.households.pendingInvites, { now });
+  const nextExpiry = pending?.reduce<number | undefined>(
+    (earliest, invite) =>
+      earliest === undefined
+        ? invite.expiresAt
+        : Math.min(earliest, invite.expiresAt),
+    undefined,
+  );
+
+  useEffect(() => {
+    if (nextExpiry === undefined) return;
+
+    const timer = window.setTimeout(
+      () => setNow(Date.now()),
+      Math.min(Math.max(nextExpiry - Date.now(), 1), 2_147_483_647),
+    );
+    return () => window.clearTimeout(timer);
+  }, [nextExpiry]);
   const create = useAction(api.actions.householdInvites.create);
   const revoke = useMutation(api.households.revokeInvite);
   const [email, setEmail] = useState("");

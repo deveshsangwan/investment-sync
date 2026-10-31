@@ -8,7 +8,7 @@ Acceptance retains the invitee's existing household memberships and financial da
 
 Owners can remove viewers. Removal preserves financial history, revokes pending invitations for their recorded email, and moves the removed user's selected household to another membership or a new empty personal household. An owner cannot remove themselves. Ownership transfers to an active viewer in one transaction, demotes the previous owner, and revokes outstanding invitations. The UI requires the word `TRANSFER`. Transfers are rejected while an import publication is running. Membership events record household, actor, target, action, and timestamp without raw tokens. Owners can read the latest 50 events through `households.auditEvents`.
 
-Households support at most 32 active members, users at most 32 household memberships, and households at most 64 pending invitation records. Creation cleans up expired pending records. Expiry is always enforced at redemption, even if an open Settings page still lists the old record with its expiry date.
+Households support at most 32 active members, users at most 32 household memberships, and households at most 64 pending invitation records. Creation cleans up expired pending records. Redemption always enforces server-time expiry. The pending-list query uses an explicit display time, and Settings refreshes that time at the next expiry so expired invitations disappear without a wall-clock read inside the query.
 
 ## Clerk signed email prerequisite
 

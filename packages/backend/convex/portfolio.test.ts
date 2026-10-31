@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { chunkRows, digest, parseRows, utf8Bytes } from "./model/importLimits";
 import schema from "./schema";
+import { activePortfolio, completeProjection } from "./model/portfolioReads";
 import { modules } from "./test.setup";
 
 const ownerIdentity = {
@@ -1435,4 +1436,40 @@ it("archives one account without mixing another account's same-symbol history, a
   expect(
     (await state.owner.query(api.portfolio.positions)).current,
   ).toHaveLength(2);
+});
+
+it("keeps the full archived read model in publication asset-class order and reports its real reads", async () => {
+  const { owner, publication } = await setupPortfolio([
+    holding({
+      accountName: "US",
+      assetClass: "us_stock",
+      currency: "USD",
+      sourceDate: "2025-03-03",
+    }),
+    holding({
+      accountName: "Funds",
+      assetClass: "mutual_fund",
+      sourceDate: "2025-03-02",
+    }),
+    holding({ accountName: "Stocks", sourceDate: "2025-03-01" }),
+  ]);
+  const readModel = await owner.run(async (ctx) => {
+    const active = await activePortfolio(ctx);
+    if (!active) throw new Error("Missing published portfolio");
+    return completeProjection(ctx, active);
+  });
+
+  expect(
+    readModel.projection.assetClasses.map((asset) => asset.assetClass),
+  ).toEqual(
+    publication.projection.assetClasses.map((asset) => asset.assetClass),
+  );
+  expect(readModel.counts).toMatchObject({
+    ranges: 5,
+    positions: 3,
+    historyFacts: 3,
+  });
+  expect(readModel.counts.timelinePoints).toBe(
+    publication.projection.timeline.length,
+  );
 });

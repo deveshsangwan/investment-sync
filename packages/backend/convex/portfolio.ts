@@ -39,9 +39,7 @@ export const overview = query({
     const accounts = await accountPreferences(ctx, active);
     const visible = await archivedProjection(ctx, active, accounts);
     const [readModel, quote] = await Promise.all([
-      visible
-        ? { projection: visible, counts: { ranges: 0 } }
-        : overviewProjection(ctx, active),
+      visible ?? overviewProjection(ctx, active),
       readValuationQuote(ctx),
     ]);
     const value = valuePortfolioPublication(
@@ -53,7 +51,7 @@ export const overview = query({
     );
     await logPortfolioRead(ctx, "overview", {
       ...readModel.counts,
-      ranges: readModel.counts.ranges + 1,
+      ranges: readModel.counts.ranges + 2,
     });
 
     return value;
@@ -72,9 +70,7 @@ export const positions = query({
     const accounts = await accountPreferences(ctx, active);
     const visible = await archivedProjection(ctx, active, accounts);
     const [readModel, quote] = await Promise.all([
-      visible
-        ? { projection: visible, counts: { ranges: 0 } }
-        : positionsProjection(ctx, active),
+      visible ?? positionsProjection(ctx, active),
       readValuationQuote(ctx),
     ]);
     const value = valuePortfolioPublication(
@@ -86,7 +82,7 @@ export const positions = query({
     );
     await logPortfolioRead(ctx, "positions", {
       ...readModel.counts,
-      ranges: readModel.counts.ranges + 1,
+      ranges: readModel.counts.ranges + 2,
     });
 
     return value;
@@ -103,13 +99,13 @@ export const holdingDetail = query({
     const visible = await archivedProjection(ctx, active, accounts);
     const readModel = visible
       ? {
-          projection: visible,
+          ...visible,
           positionKey: await resolvePositionKey(
             ctx,
             active.household._id,
             args.positionKey,
           ),
-          counts: { ranges: 0 },
+          counts: { ...visible.counts, ranges: visible.counts.ranges + 1 },
         }
       : await holdingDetailProjection(ctx, active, args.positionKey);
     if (!readModel) return null;
@@ -124,7 +120,7 @@ export const holdingDetail = query({
     );
     await logPortfolioRead(ctx, "holdingDetail", {
       ...readModel.counts,
-      ranges: readModel.counts.ranges + 1,
+      ranges: readModel.counts.ranges + 2,
     });
 
     return value;
@@ -144,9 +140,7 @@ export const assetClassDetail = query({
     const accounts = await accountPreferences(ctx, active);
     const visible = await archivedProjection(ctx, active, accounts);
     const [readModel, quote] = await Promise.all([
-      visible
-        ? { projection: visible, counts: { ranges: 0 } }
-        : assetClassProjection(ctx, active, args.assetClass),
+      visible ?? assetClassProjection(ctx, active, args.assetClass),
       readValuationQuote(ctx),
     ]);
     const value = valuePortfolioPublication(
@@ -159,7 +153,7 @@ export const assetClassDetail = query({
     );
     await logPortfolioRead(ctx, "assetClassDetail", {
       ...readModel.counts,
-      ranges: readModel.counts.ranges + 1,
+      ranges: readModel.counts.ranges + 2,
     });
 
     return value;
