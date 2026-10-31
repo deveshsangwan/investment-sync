@@ -89,3 +89,35 @@ own hardcoded 30-second limit, so the larger CLI timeout did not override it.
 Assertions, capacity, and source timeouts were left unchanged. Host load exceeded
 100 and substantial swapping occurred during the audit; these timed-out runs
 are not reported as passes.
+
+## Sequential merge integration, 2026-10-31
+
+Merged `origin/main` at `f650d38536f78d0b7e665a22e82a2b13c2cd18a4` using an
+ordinary merge, commit `6e1196d`. The only textual conflict was in
+`packages/backend/convex/portfolio.test.ts`. The resolution keeps the complete
+upstream suite byte-for-byte, adds the native-session regression and its env
+teardown, and retains every upstream import/helper. This preserves #66's
+account-aware tests and #68's new and persisted missing-P&L tests. All reviewed
+mobile runtime files are unchanged from `ccfb17c`.
+
+The session test helper now settles provisioning promises inside async `act`,
+including checking the exact fake rejection message. This removes the observed
+unwrapped-update warnings without changing any session behavior or assertion.
+The renderer deprecation notice remains. No warnings were suppressed.
+
+| Command                                                                                                                                                                                           | Exit | Result                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`                                                                                                                                                                  | 0    | Supply-chain policy verification passed for 1406 entries; lockfile unchanged      |
+| `pnpm --filter @investment-sync/mobile test`                                                                                                                                                      | 0    | 25 passed in 3 files, no skips; no unwrapped-update warnings after the helper fix |
+| `pnpm --filter @investment-sync/backend test convex/portfolio.test.ts convex/users.test.ts convex/manualPolicies.test.ts convex/errors.test.ts --testTimeout=30000 --maxWorkers=1 --minWorkers=1` | 0    | 62 passed in 4 files, no skips                                                    |
+| `pnpm --filter @investment-sync/mobile --filter @investment-sync/backend typecheck`                                                                                                               | 0    | Both workspaces pass                                                              |
+| `pnpm --filter @investment-sync/mobile lint && pnpm exec eslint packages/backend/convex/portfolio.test.ts`                                                                                        | 0    | Affected workspaces/files pass                                                    |
+
+These checks include the retained account/P&L suites and current safe-error
+contracts. Final-head CI is required before the merge and is recorded on PR #71.
+No local SQL resources, production configuration, deployment or live/device
+session was used for this integration. The original testing limits still apply.
+
+PR #73 contains the old #71 head. Its owner must merge updated main before
+verification, preserve both mobile test commands and native Convex transport,
+and retain the async `act` corrections when reconciling the session test file.
