@@ -1,6 +1,6 @@
 # TODO: realized sales and accurate exited-position gains
 
-Status: implemented by issue #52 after the Convex cutover. See [the statement contract, coverage and remaining source limitations](realized-sales.md).
+Status: NOT_READY. The #52 branch implements realized lots and repairs SQL detail parity, but the zero-remaining-holdings full-liquidation criterion remains unresolved. See [the statement contract, coverage and remaining source limitations](realized-sales.md).
 
 The historical design notes below describe the original deferred work.
 
