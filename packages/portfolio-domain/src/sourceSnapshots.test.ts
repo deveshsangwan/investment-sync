@@ -221,6 +221,11 @@ describe("manual policy timelines", () => {
         currentValue: "11",
       }),
       manualPolicy("2025-01-01"),
+      holding({
+        ...vested,
+        accountName: "Separate US account",
+        currentValue: "3.0001",
+      }),
       holding({ ...vested, currentValue: "20" }),
       holding({
         ...workbook,
@@ -251,7 +256,7 @@ describe("manual policy timelines", () => {
         (point) =>
           point.totals.find((total) => total.currency === "USD")?.currentValue,
       ),
-    ).toEqual(["20", "90"]);
+    ).toEqual(["23.0001", "93.0001"]);
     expect(timeline).toEqual(referenceTimeline(holdings, baseline));
     expect(
       timelineWithManualPolicies([...holdings].reverse(), baseline),
@@ -357,6 +362,219 @@ describe("manual policy timelines", () => {
     expect(timeline).toEqual(referenceTimeline(holdings, baseline, true));
   });
 
+  it("carries the same instrument in separate accounts and applies complete omissions only to their account", () => {
+    const holdings = [
+      holding({ accountName: "Broker A", currentValue: "125.1234" }),
+      holding({
+        accountName: "Broker B",
+        investedAmount: "200",
+        currentValue: "250.5678",
+      }),
+      manualPolicy("2025-01-02", "0.0001"),
+      holding({
+        accountName: "Broker A",
+        sourceDate: "2025-01-03",
+        instrumentName: "OTHER",
+        symbol: "OTHER",
+        currentValue: "80.9999",
+        source: { ...partialSource, completeness: "complete" },
+      }),
+      manualPolicy("2025-01-04", "0.0002"),
+    ];
+    const baseline = snapshotTimeline(holdings);
+    const timeline = timelineWithManualPolicies(holdings, baseline);
+
+    expect(timeline.map((point) => point.totals[0]?.currentValue)).toEqual([
+      "375.6912",
+      "375.6913",
+      "331.5678",
+      "331.5679",
+    ]);
+    expect(timeline).toEqual(referenceTimeline(holdings, baseline));
+    expect(
+      timelineWithManualPolicies([...holdings].reverse(), baseline),
+    ).toEqual(referenceTimeline([...holdings].reverse(), baseline));
+  });
+
+  it("does not revisit unchanged positions for each manual update", () => {
+    const stocks = Array.from({ length: 32 }, (_, index) =>
+      holding({ instrumentName: `STOCK-${index}`, symbol: `STOCK-${index}` }),
+    );
+    const policies = Array.from({ length: 24 }, (_, index) =>
+      manualPolicy(
+        `2025-01-${String(index + 2).padStart(2, "0")}`,
+        `${index}.1234`,
+      ),
+    );
+    const holdings = [...stocks, ...policies];
+    const baseline = snapshotTimeline(holdings);
+    const expected = referenceTimeline(holdings, baseline);
+    let positionKeyReads = 0;
+    let investedAmountReads = 0;
+
+    for (const fact of stocks) {
+      const key = fact.canonicalPositionKey;
+      const amount = fact.row.investedAmount;
+      Object.defineProperty(fact, "canonicalPositionKey", {
+        get() {
+          positionKeyReads++;
+          return key;
+        },
+      });
+      Object.defineProperty(fact.row, "investedAmount", {
+        get() {
+          investedAmountReads++;
+          return amount;
+        },
+      });
+    }
+
+    expect(timelineWithManualPolicies(holdings, baseline)).toEqual(expected);
+    // Bound repeated work rather than elapsed time on a shared test host.
+    expect(positionKeyReads).toBeLessThanOrEqual(stocks.length * 4);
+    expect(investedAmountReads).toBeLessThanOrEqual(stocks.length * 2);
+  });
+
+  it("retains zero totals and exact cancellation through source fallback and reported currency removal", () => {
+    const complete = { ...partialSource, completeness: "complete" as const };
+    const holdings = [
+      holding({
+        currency: "USD",
+        investedAmount: "999999999999999999999999.9999",
+        currentValue: "0.0001",
+        pnlAmount: "-0.0001",
+        source: complete,
+      }),
+      holding({
+        currency: "USD",
+        instrumentName: "TINY",
+        symbol: "TINY",
+        investedAmount: "0.0001",
+        currentValue: "0.0002",
+        pnlAmount: "0.0001",
+        source: { ...partialSource, group: "tiny" },
+      }),
+      holding({
+        currency: "USD",
+        sourceDate: "2025-01-03",
+        instrumentName: "TINY",
+        symbol: "TINY",
+        investedAmount: "0",
+        currentValue: "0",
+        pnlAmount: "0",
+        source: { ...partialSource, group: "tiny" },
+      }),
+      manualPolicy("2025-01-01", "0"),
+      holding({
+        sourceDate: "2025-01-02",
+        currency: "USD",
+        investedAmount: "0",
+        currentValue: "0",
+        pnlAmount: "0",
+        source: { ...partialSource, group: "fallback" },
+      }),
+      holding({
+        sourceDate: "2025-01-03",
+        currency: "USD",
+        instrumentName: "OTHER",
+        symbol: "OTHER",
+        investedAmount: "0",
+        currentValue: "0",
+        pnlAmount: "0",
+        source: complete,
+      }),
+      holding({
+        sourceDate: "2025-01-04",
+        currency: "USD",
+        instrumentName: "OTHER",
+        symbol: "OTHER",
+        investedAmount: "0",
+        currentValue: "0",
+        pnlAmount: "0",
+        source: {
+          ...partialSource,
+          group: "fallback",
+          completeness: "complete",
+        },
+      }),
+      holding({
+        sourceDate: "2025-01-05",
+        currency: "INR",
+        instrumentName: "INR",
+        symbol: "INR",
+        source: complete,
+      }),
+      holding({
+        sourceDate: "2025-01-05",
+        currency: "INR",
+        instrumentName: "INR",
+        symbol: "INR",
+        source: {
+          ...partialSource,
+          group: "fallback",
+          completeness: "complete",
+        },
+      }),
+      manualPolicy("2025-01-06", "0.0001"),
+    ];
+    const baseline = snapshotTimeline(holdings);
+    const timeline = timelineWithManualPolicies(holdings, baseline);
+
+    expect(timeline).toEqual(referenceTimeline(holdings, baseline));
+    expect(
+      timeline[0]?.totals.find((total) => total.currency === "USD")
+        ?.investedAmount,
+    ).toBe("1000000000000000000000000");
+    expect(
+      timeline[1]?.totals.find((total) => total.currency === "USD"),
+    ).toEqual({
+      currency: "USD",
+      investedAmount: "0.0001",
+      currentValue: "0.0002",
+      pnlAmount: "0.0001",
+    });
+    expect(
+      timeline[3]?.totals.find((total) => total.currency === "USD"),
+    ).toEqual({
+      currency: "USD",
+      investedAmount: "0",
+      currentValue: "0",
+      pnlAmount: "0",
+    });
+    expect(timeline[4]?.totals.map((total) => total.currency)).toEqual([
+      "INR",
+      "USD",
+    ]);
+    expect(timeline[5]?.totals[0]?.currentValue).toBe("120.0001");
+
+    const reported: NativeTimelinePoint[] = [
+      {
+        snapshotDate: "2024-12-31",
+        totals: nativeTotals([
+          {
+            currency: "ETH",
+            investedAmount: "0.00000001",
+            currentValue: "0.00000002",
+            pnlAmount: "0.00000001",
+          },
+        ]),
+      },
+      { snapshotDate: "2025-01-04", totals: [] },
+    ];
+    const explicitTimeline = timelineWithManualPolicies(
+      holdings,
+      reported,
+      true,
+    );
+
+    expect(explicitTimeline).toEqual(
+      referenceTimeline(holdings, reported, true),
+    );
+    expect(
+      explicitTimeline.at(-1)?.totals.map((total) => total.currency),
+    ).toEqual(["INR"]);
+  });
+
   it("matches full-history selection for mixed complete and partial histories in different input orders", () => {
     const histories = Array.from({ length: 180 }, (_, index) => {
       const sourceDate = new Date(Date.UTC(2025, 0, 1 + Math.floor(index / 6)))
@@ -397,6 +615,9 @@ describe("manual policy timelines", () => {
 
       expect(timelineWithManualPolicies(holdings, baseline)).toEqual(
         referenceTimeline(holdings, baseline),
+      );
+      expect(timelineWithManualPolicies(holdings, baseline, true)).toEqual(
+        referenceTimeline(holdings, baseline, true),
       );
     }
   });
