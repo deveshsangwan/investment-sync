@@ -221,6 +221,11 @@ describe("manual policy timelines", () => {
         currentValue: "11",
       }),
       manualPolicy("2025-01-01"),
+      holding({
+        ...vested,
+        accountName: "Separate US account",
+        currentValue: "3.0001",
+      }),
       holding({ ...vested, currentValue: "20" }),
       holding({
         ...workbook,
@@ -251,7 +256,7 @@ describe("manual policy timelines", () => {
         (point) =>
           point.totals.find((total) => total.currency === "USD")?.currentValue,
       ),
-    ).toEqual(["20", "90"]);
+    ).toEqual(["23.0001", "93.0001"]);
     expect(timeline).toEqual(referenceTimeline(holdings, baseline));
     expect(
       timelineWithManualPolicies([...holdings].reverse(), baseline),
@@ -355,6 +360,40 @@ describe("manual policy timelines", () => {
       "1300.5678",
     ]);
     expect(timeline).toEqual(referenceTimeline(holdings, baseline, true));
+  });
+
+  it("carries the same instrument in separate accounts and applies complete omissions only to their account", () => {
+    const holdings = [
+      holding({ accountName: "Broker A", currentValue: "125.1234" }),
+      holding({
+        accountName: "Broker B",
+        investedAmount: "200",
+        currentValue: "250.5678",
+      }),
+      manualPolicy("2025-01-02", "0.0001"),
+      holding({
+        accountName: "Broker A",
+        sourceDate: "2025-01-03",
+        instrumentName: "OTHER",
+        symbol: "OTHER",
+        currentValue: "80.9999",
+        source: { ...partialSource, completeness: "complete" },
+      }),
+      manualPolicy("2025-01-04", "0.0002"),
+    ];
+    const baseline = snapshotTimeline(holdings);
+    const timeline = timelineWithManualPolicies(holdings, baseline);
+
+    expect(timeline.map((point) => point.totals[0]?.currentValue)).toEqual([
+      "375.6912",
+      "375.6913",
+      "331.5678",
+      "331.5679",
+    ]);
+    expect(timeline).toEqual(referenceTimeline(holdings, baseline));
+    expect(
+      timelineWithManualPolicies([...holdings].reverse(), baseline),
+    ).toEqual(referenceTimeline([...holdings].reverse(), baseline));
   });
 
   it("does not revisit unchanged positions for each manual update", () => {
