@@ -1,7 +1,7 @@
 import {
   realizedSaleIdentity,
   parseStoredRealizedSaleIdentity,
-} from "@investment-sync/importers";
+} from "@investment-sync/importers/realized-sales";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
