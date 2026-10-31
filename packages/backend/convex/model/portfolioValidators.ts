@@ -244,6 +244,7 @@ export const assetClassDetailViewValidator = v.object({
 });
 
 export const accountViewValidator = v.object({
+  isArchived: v.boolean(),
   id: v.string(),
   name: v.string(),
   provider: v.string(),

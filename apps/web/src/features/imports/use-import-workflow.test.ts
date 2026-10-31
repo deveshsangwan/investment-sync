@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getPublicationOutcome } from "./use-import-workflow";
+import { ConvexError } from "convex/values";
+import { errorMessage, getPublicationOutcome } from "./use-import-workflow";
 
 const expectation = { batchId: "selected", previousAttempt: 2 };
 
@@ -43,5 +44,27 @@ describe("import publication tracking", () => {
         errorMessage: "Publication failed",
       }),
     ).toBe("failed");
+  });
+});
+
+describe("import operation failures", () => {
+  it("does not display network or provider messages", () => {
+    expect(errorMessage(new Error("fake private storage URL"))).toBe(
+      "The import could not be completed. Please try again.",
+    );
+    expect(
+      errorMessage({ data: { message: "fake provider detail" } }),
+    ).not.toContain("fake");
+  });
+
+  it("keeps recognized expected codes actionable without echoing server text", () => {
+    expect(
+      errorMessage(
+        new ConvexError({
+          code: "PUBLISHING_CONFLICT",
+          message: "fake provider detail",
+        }),
+      ),
+    ).toBe("Another import is publishing. Retry after it completes.");
   });
 });

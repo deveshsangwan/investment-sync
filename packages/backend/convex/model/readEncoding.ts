@@ -3,6 +3,12 @@ import {
   exactNormalizedTransactionRowSchema,
   exactNormalizedValuationRowSchema,
 } from "@investment-sync/importers/exact-types";
+import {
+  accountKey,
+  instrumentKey,
+  canonicalPositionKey,
+  sourceGroupKey,
+} from "@investment-sync/portfolio-domain";
 import type {
   HoldingFact,
   PositionProjection,
@@ -21,6 +27,9 @@ const provenanceSchema = z.object({
   legacyId: z.string().optional(),
 });
 const holdingPayloadSchema = z.object({
+  snapshotCreationOrder: provenanceSchema
+    .pick({ sequence: true, rowNumber: true })
+    .optional(),
   row: exactNormalizedHoldingRowSchema,
   provenance: provenanceSchema,
 });
@@ -144,8 +153,8 @@ function decodeHoldingScope(
     const payload = holdingPayload(doc, source);
 
     return holdingFact(payload, {
-      accountKey: header.holding.accountKey,
-      instrumentKey: header.holding.instrumentKey,
+      accountKey: accountKey(payload.row),
+      instrumentKey: instrumentKey(payload.row),
       positionKey: doc.positionKey ?? header.positionKey,
       factKey: stripFactKind(doc.key, "holding"),
     });
@@ -167,8 +176,8 @@ function decodeTransactionScopeFacts(
     return {
       row: payload.row,
       provenance: payload.provenance,
-      accountKey: header.holding.accountKey,
-      instrumentKey: header.holding.instrumentKey,
+      accountKey: accountKey(payload.row),
+      instrumentKey: instrumentKey(payload.row),
       positionKey: doc.positionKey ?? header.positionKey,
       occurrenceKey: payload.occurrenceKey,
     } satisfies TransactionFact;
@@ -231,8 +240,9 @@ function holdingFact(
     accountKey: identity.accountKey,
     instrumentKey: identity.instrumentKey,
     positionKey: identity.positionKey,
-    canonicalPositionKey: identity.positionKey,
-    sourceGroupKey: identity.positionKey,
+    canonicalPositionKey: canonicalPositionKey(payload.row),
+    sourceGroupKey: sourceGroupKey(payload.row),
+    snapshotCreationOrder: payload.snapshotCreationOrder,
     snapshotDate: payload.row.sourceDate ?? payload.provenance.fallbackDate,
     factKey: identity.factKey,
   } satisfies HoldingFact;

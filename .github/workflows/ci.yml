@@ -44,11 +44,49 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @investment-sync/db migrate
       - run: pnpm lint
-      - run: pnpm typecheck
+      - name: Typecheck workspaces with tsc-rs
+        run: |
+          pnpm exec tsc-rs --version
+          pnpm typecheck
       - run: pnpm lint:migration-tools
-      - run: pnpm typecheck:migration-tools
+      - name: Typecheck migration tools with tsc-rs
+        run: pnpm typecheck:migration-tools
       - run: pnpm test
       - run: pnpm test:migration-tools
         env:
           ROLLBACK_TEST_DATABASE_URL: postgres://investment_sync:investment_sync@localhost:5432/investment_sync_rollback_ci
       - run: pnpm format:check
+
+  browser-product-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @investment-sync/web exec playwright install --with-deps chromium
+      - name: Download pinned standalone test backend
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/convex.zip" https://github.com/get-convex/convex-backend/releases/download/precompiled-2026-09-11-157eb19/convex-local-backend-x86_64-unknown-linux-gnu.zip
+          unzip "$RUNNER_TEMP/convex.zip" -d "$RUNNER_TEMP/convex-e2e"
+          echo "36c41a7fc2deb8aff06ee6701493767f441c9fe4ec0fc27be59229c6af29027f  $RUNNER_TEMP/convex-e2e/convex-local-backend" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/convex-e2e/convex-local-backend"
+      - name: Browser components through real local Convex
+        run: pnpm --filter @investment-sync/web test:e2e
+        env:
+          E2E_CONVEX_BINARY: ${{ runner.temp }}/convex-e2e/convex-local-backend
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: browser-test-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7

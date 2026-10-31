@@ -88,6 +88,7 @@ export default defineSchema({
   accounts: defineTable({
     ...legacyFields,
     isArchived: v.optional(v.boolean()),
+    displayName: v.optional(v.string()),
     metadataJson: v.optional(v.string()),
     householdId: v.id("households"),
     key: v.string(),
@@ -389,6 +390,7 @@ export default defineSchema({
   }).index("by_householdId_and_key", ["householdId", "key"]),
   users: defineTable({
     ...legacyFields,
+    currentHouseholdId: v.optional(v.id("households")),
     clerkSubject: v.string(),
     email: v.optional(v.string()),
   }).index("by_clerk_subject", ["clerkSubject"]),
@@ -400,6 +402,27 @@ export default defineSchema({
     publishingVersionId: v.optional(v.id("portfolioVersions")),
     publicationSequence: v.optional(v.number()),
   }).index("by_owner", ["ownerUserId"]),
+  householdInvites: defineTable({
+    householdId: v.id("households"),
+    email: v.string(),
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("accepted"),
+      v.literal("revoked"),
+    ),
+    createdBy: v.id("users"),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_householdId_and_status", ["householdId", "status"]),
+  householdAuditEvents: defineTable({
+    householdId: v.id("households"),
+    actorUserId: v.id("users"),
+    action: v.string(),
+    target: v.string(),
+    createdAt: v.number(),
+  }).index("by_householdId", ["householdId"]),
   householdMembers: defineTable({
     ...legacyFields,
     householdId: v.id("households"),

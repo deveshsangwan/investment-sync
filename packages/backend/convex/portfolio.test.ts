@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { chunkRows, digest, parseRows, utf8Bytes } from "./model/importLimits";
 import schema from "./schema";
+import { activePortfolio, completeProjection } from "./model/portfolioReads";
 import { modules } from "./test.setup";
 
 const ownerIdentity = {
@@ -225,9 +226,415 @@ async function commitAdditionalPortfolio(
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 describe("public portfolio reads", () => {
+  it("serves post-cutover imports and policy updates to existing and new native sessions in isolated households", async () => {
+    vi.stubEnv("SOURCE_WRITES_PAUSED", "true");
+    const importedRow = holding();
+
+    if (importedRow.kind !== "holding")
+      throw new Error("Expected an imported holding");
+
+    const state = await setupPortfolio([
+      {
+        ...importedRow,
+        investedAmount: "100.25",
+        currentValue: "120.75",
+        pnlAmount: "20.5",
+      },
+      holding({
+        accountName: "Second fake account",
+        symbol: "BETA",
+        instrumentName: "BETA",
+        currentValue: 30,
+        investedAmount: 20,
+        pnlAmount: 10,
+      }),
+    ]);
+    const { t, owner } = state;
+    const existing = t.withIdentity({
+      ...ownerIdentity,
+      tokenIdentifier: "fake|new_native_session",
+    });
+    const newcomer = t.withIdentity({
+      ...ownerIdentity,
+      subject: "native_new_owner",
+      tokenIdentifier: "fake|native_new_owner",
+    });
+
+    // The imported identity keeps its original Household; a new identity does
+    // not need the retained SQL provisioning path or source write permission.
+
+    const [existingId, newcomerId] = await Promise.all([
+      existing.mutation(api.users.ensureCurrent),
+      newcomer.mutation(api.users.ensureCurrent),
+    ]);
+    expect(existingId).not.toBe(newcomerId);
+    const [oldProfile, nativeProfile, newProfile] = await Promise.all([
+      owner.query(api.users.current),
+      existing.query(api.users.current),
+      newcomer.query(api.users.current),
+    ]);
+    expect(nativeProfile.householdId).toBe(oldProfile.householdId);
+    expect(newProfile.householdId).not.toBe(oldProfile.householdId);
+
+    const policy = await owner.mutation(api.manualPolicies.create, {
+      provider: "Fake Life",
+      name: "Fake policy",
+      investedAmount: "10.25",
+      currentValue: "12.50",
+      sourceDate: "2025-03-01",
+      requestId: crypto.randomUUID(),
+    });
+    async function publishPolicy(batchId: typeof policy.batchId) {
+      const batch = await t.run((ctx) => ctx.db.get("importBatches", batchId));
+
+      if (!batch?.publishingVersionId)
+        throw new Error("Expected policy publication");
+
+      await t.action(internal.actions.publishPortfolio.publishPortfolio, {
+        versionId: batch.publishingVersionId,
+        attempt: batch.publicationAttempt ?? 1,
+      });
+    }
+    await publishPolicy(policy.batchId);
+    const before = await existing.query(api.portfolio.positions);
+    expect(before.current).toHaveLength(3);
+    const imported = before.current.find(
+      (item) => item.accountName === "Fake Stocks",
+    );
+    expect(imported).toMatchObject({
+      currentValue: "120.75",
+      currentValueInInr: 120.75,
+    });
+    expect(new Set(before.current.map((item) => item.id)).size).toBe(3);
+
+    const update = await owner.mutation(api.manualPolicies.updateValue, {
+      provider: "Fake Life",
+      name: "Fake policy",
+      investedAmount: "10.25",
+      currentValue: "14.75",
+      sourceDate: "2025-03-02",
+      requestId: crypto.randomUUID(),
+      policyId: policy.policyId,
+      expectedBatchId: policy.batchId,
+    });
+    await publishPolicy(update.batchId);
+    const [overview, positions, emptyOverview, emptyPositions] =
+      await Promise.all([
+        existing.query(api.portfolio.overview),
+        existing.query(api.portfolio.positions),
+        newcomer.query(api.portfolio.overview),
+        newcomer.query(api.portfolio.positions),
+      ]);
+    expect(overview.summary.currentValue).toBe(165.5);
+    expect(
+      positions.current.find((item) => item.manualPolicyId === policy.policyId),
+    ).toMatchObject({
+      currentValue: "14.75",
+      currentValueInInr: 14.75,
+      snapshotDate: "2025-03-02",
+    });
+    expect(positions.current.find((item) => item.id === imported?.id)).toEqual(
+      imported,
+    );
+    expect(emptyOverview.summary.currentValue).toBe(0);
+    expect(emptyPositions).toEqual({ current: [], exited: [] });
+    await expect(t.query(api.portfolio.overview)).rejects.toMatchObject({
+      data: { code: "UNAUTHENTICATED" },
+    });
+    await expect(t.query(api.portfolio.positions)).rejects.toMatchObject({
+      data: { code: "UNAUTHENTICATED" },
+    });
+  });
+
+  it.each([
+    {
+      name: "gain",
+      rows: [holding({ currentValue: 125, pnlAmount: undefined })],
+      pnlAmount: 25,
+      pnlPercent: 25,
+      overviewPnl: 25,
+      oldInrPnl: "0",
+    },
+    {
+      name: "loss",
+      rows: [holding({ currentValue: 75, pnlAmount: undefined })],
+      pnlAmount: -25,
+      pnlPercent: -25,
+      overviewPnl: -25,
+      oldInrPnl: "0",
+    },
+    {
+      name: "zero",
+      rows: [holding({ currentValue: 100, pnlAmount: undefined })],
+      pnlAmount: 0,
+      pnlPercent: 0,
+      overviewPnl: 0,
+      oldInrPnl: "0",
+    },
+    {
+      name: "reported zero",
+      rows: [holding({ currentValue: 125, pnlAmount: 0 })],
+      pnlAmount: 0,
+      pnlPercent: 0,
+      overviewPnl: 25,
+      oldInrPnl: "0",
+    },
+    {
+      name: "independent accounts with the same instrument, mixed currencies and reported zero",
+      rows: [
+        holding({
+          accountName: "Broker A",
+          currentValue: 125,
+          pnlAmount: undefined,
+        }),
+        holding({
+          accountName: "Broker B",
+          currentValue: 75,
+          pnlAmount: undefined,
+        }),
+        holding({ accountName: "Broker C", currentValue: 125, pnlAmount: 0 }),
+        holding({
+          accountName: "US broker",
+          currency: "USD",
+          investedAmount: 10,
+          currentValue: 12.5,
+          pnlAmount: undefined,
+        }),
+      ],
+      pnlAmount: 200,
+      pnlPercent: 18.18,
+      overviewPnl: 225,
+      oldInrPnl: "0",
+    },
+    {
+      name: "mixed reported and absent P&L in INR and USD",
+      rows: [
+        holding({ currentValue: 125, pnlAmount: undefined }),
+        holding({
+          symbol: "BETA",
+          instrumentName: "BETA",
+          currentValue: 75,
+          pnlAmount: -25,
+        }),
+        holding({
+          symbol: "ZERO",
+          instrumentName: "ZERO",
+          currentValue: 100,
+          pnlAmount: 0,
+        }),
+        holding({
+          symbol: "USD",
+          instrumentName: "USD",
+          currency: "USD",
+          investedAmount: 10,
+          currentValue: 12.5,
+          pnlAmount: undefined,
+        }),
+      ],
+      pnlAmount: 200,
+      pnlPercent: 18.18,
+      overviewPnl: 200,
+      oldInrPnl: "-25",
+    },
+  ])(
+    "serves corrected $name for new and already-persisted projections",
+    async ({ rows, pnlAmount, pnlPercent, overviewPnl, oldInrPnl }) => {
+      const state = await setupPortfolio(rows);
+      const readViews = () =>
+        Promise.all([
+          state.owner.query(api.portfolio.overview, {}),
+          state.owner.query(api.portfolio.assetClassDetail, {
+            assetClass: "indian_stock",
+          }),
+          state.owner.query(api.portfolio.positions, {}),
+        ]);
+      const [overview, asset, positions] = await readViews();
+
+      expect(overview.summary.pnlAmount).toBe(overviewPnl);
+      expect(asset.summary).toMatchObject({ pnlAmount, pnlPercent });
+      expect(asset.summary.investedAmount).toBe(
+        overview.summary.investedAmount,
+      );
+      expect(asset.summary.currentValue).toBe(overview.summary.currentValue);
+      expect(asset.holdings.map((row) => row.pnlAmount).sort()).toEqual(
+        positions.current.map((row) => row.pnlAmount).sort(),
+      );
+
+      // Recreate the old aggregation without changing retained holding rows or
+      // facts. A new reader must work before the next Import Batch is committed.
+      const persisted = await state.t.run(async (ctx) => {
+        const household = await ctx.db.query("households").unique();
+        const versionId = household?.activePortfolioVersionId;
+        if (!versionId) throw new Error("Missing active test version");
+
+        const version = await ctx.db.get("portfolioVersions", versionId);
+        if (!version) throw new Error("Missing test version");
+
+        const summary = await ctx.db
+          .query("portfolioSummaries")
+          .withIndex("by_versionId", (q) => q.eq("versionId", versionId))
+          .unique();
+        const assetSummary = await ctx.db
+          .query("assetClassSummaries")
+          .withIndex("by_versionId_and_assetClass", (q) =>
+            q.eq("versionId", versionId).eq("assetClass", "indian_stock"),
+          )
+          .unique();
+        if (!summary || !assetSummary) throw new Error("Missing test summary");
+
+        const oldTotals = summary.totals.map((total) => ({
+          ...total,
+          pnlAmount: total.currency === "INR" ? oldInrPnl : "0",
+        }));
+        await ctx.db.patch("portfolioSummaries", summary._id, {
+          totals: oldTotals,
+        });
+        await ctx.db.patch("assetClassSummaries", assetSummary._id, {
+          totals: oldTotals,
+        });
+
+        return {
+          household,
+          version,
+          positions: await ctx.db.query("portfolioPositions").collect(),
+          facts: await ctx.db.query("holdingSnapshots").collect(),
+          summaryId: summary._id,
+          assetSummaryId: assetSummary._id,
+          oldTotals,
+        };
+      });
+      const corrected = await readViews();
+
+      expect(corrected).toEqual([overview, asset, positions]);
+      await state.t.run(async (ctx) => {
+        expect(await ctx.db.get("households", persisted.household._id)).toEqual(
+          persisted.household,
+        );
+        expect(
+          await ctx.db.get("portfolioVersions", persisted.version._id),
+        ).toEqual(persisted.version);
+        expect(await ctx.db.query("portfolioPositions").collect()).toEqual(
+          persisted.positions,
+        );
+        expect(await ctx.db.query("holdingSnapshots").collect()).toEqual(
+          persisted.facts,
+        );
+        expect(
+          (await ctx.db.get("portfolioSummaries", persisted.summaryId))?.totals,
+        ).toEqual(persisted.oldTotals);
+        expect(
+          (await ctx.db.get("assetClassSummaries", persisted.assetSummaryId))
+            ?.totals,
+        ).toEqual(persisted.oldTotals);
+      });
+    },
+  );
+
+  it("publishes separate account positions, histories, aliases and independent exits", async () => {
+    const state = await setupPortfolio([
+      holding({ accountName: "Broker A", currentValue: 125.1234 }),
+      holding({
+        accountName: "Broker B",
+        investedAmount: 200,
+        currentValue: 210.5678,
+      }),
+      transaction({ accountName: "Broker A", amount: 100 }),
+      transaction({ accountName: "Broker B", amount: 200 }),
+    ]);
+    const [positions, overview, asset] = await Promise.all([
+      state.owner.query(api.portfolio.positions, {}),
+      state.owner.query(api.portfolio.overview, {}),
+      state.owner.query(api.portfolio.assetClassDetail, {
+        assetClass: "indian_stock",
+      }),
+    ]);
+
+    expect(positions.current).toHaveLength(2);
+    expect(overview.summary.currentValue).toBe(335.69);
+    expect(overview.summary.investedAmount).toBe(300);
+    expect(overview.summary.allocationByAssetClass[0]?.currentValue).toBe(
+      335.69,
+    );
+    expect(asset.summary.holdingCount).toBe(2);
+    expect(asset.timeline[0]?.currentValue).toBe(335.69);
+
+    const current = await state.owner.query(api.users.current, {});
+    for (const [
+      index,
+      position,
+    ] of state.publication.projection.positions.entries()) {
+      const legacyId = `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`;
+      await state.t.run((ctx) =>
+        ctx.db.insert("legacyHoldingAliases", {
+          householdId: current.householdId,
+          legacyId,
+          positionKey: position.positionKey,
+        }),
+      );
+      const detail = await state.owner.query(api.portfolio.holdingDetail, {
+        positionKey: legacyId,
+      });
+      const assetHolding = asset.holdings.find(
+        (holding) => holding.accountName === detail?.holding.accountName,
+      );
+
+      expect(detail?.holding.isCurrent).toBe(true);
+      expect(detail?.history).toHaveLength(1);
+      expect(detail?.history[0]?.accountName).toBe(
+        position.holding.row.accountName,
+      );
+      expect(detail?.transactions).toHaveLength(1);
+      expect(detail?.transactions[0]?.amount).toBe(
+        position.holding.row.investedAmount,
+      );
+      expect(assetHolding?.xirr).toBe(detail?.holding.xirr);
+    }
+
+    await commitAdditionalPortfolio(
+      state,
+      [
+        holding({
+          accountName: "Broker A",
+          symbol: "BETA",
+          instrumentName: "BETA",
+          sourceDate: "2025-03-02",
+        }),
+        holding({
+          accountName: "Broker B",
+          investedAmount: 200,
+          currentValue: 220,
+          sourceDate: "2025-03-02",
+        }),
+      ],
+      state.publication.facts,
+      2,
+    );
+    const next = await state.owner.query(api.portfolio.positions, {});
+
+    expect(
+      next.current.map((row) => [row.accountName, row.symbol]).sort(),
+    ).toEqual([
+      ["Broker A", "BETA"],
+      ["Broker B", "ALPHA"],
+    ]);
+    expect(next.exited).toMatchObject([
+      { accountName: "Broker A", symbol: "ALPHA" },
+    ]);
+    expect(next.exited).toHaveLength(1);
+    const brokerB = next.current.find((row) => row.accountName === "Broker B");
+    if (!brokerB) throw new Error("Missing Broker B position");
+
+    const detail = await state.owner.query(api.portfolio.holdingDetail, {
+      positionKey: brokerB.id,
+    });
+    expect(detail?.history).toHaveLength(2);
+    expect(detail?.holding.isCurrent).toBe(true);
+  });
+
   it("preserves portfolio summation order when hydrating detail views", async () => {
     const state = await setupPortfolio([
       holding({
@@ -327,7 +734,7 @@ describe("public portfolio reads", () => {
       holding({ sourceDate: "2025-01-01", quantity: 10 }),
       holding({ sourceDate: "2025-03-01", quantity: 6, currentValue: 72 }),
       holding({
-        accountName: "Suppressed Account",
+        metadata: { sourceSheet: "Older Source" },
         sourceDate: "2025-02-01",
         currentValue: 110,
       }),
@@ -615,6 +1022,7 @@ describe("public portfolio reads", () => {
     await expect(foreign.query(api.accounts.list, {})).resolves.toEqual([
       {
         id: "foreign-account",
+        isArchived: false,
         provider: "Foreign",
         name: "Foreign account",
         accountType: "indian_stock",
@@ -782,4 +1190,286 @@ describe("public portfolio reads", () => {
       state.t.run((ctx) => ctx.db.query("portfolioVersions").collect()),
     ).resolves.toHaveLength(1);
   });
+});
+
+it("renames without changing import identity; archive immediately changes every portfolio view and restores history", async () => {
+  const { t, owner, publication } = await setupPortfolio([
+    holding(),
+    transaction(),
+  ]);
+  const before = await owner.query(api.portfolio.overview);
+  const beforePositions = await owner.query(api.portfolio.positions);
+  const [account] = await owner.query(api.accounts.list);
+  if (!account) throw new Error("Missing account");
+  const rawBefore = await t.run(async (ctx) => ({
+    facts: await ctx.db.query("holdingSnapshots").collect(),
+    history: await ctx.db.query("portfolioHistoryFacts").collect(),
+  }));
+  await owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    name: "Renamed portfolio",
+  });
+  expect(
+    (await owner.query(api.portfolio.positions)).current[0]?.accountName,
+  ).toBe("Renamed portfolio");
+  const renamedKey = beforePositions.current[0]?.id;
+  if (!renamedKey) throw new Error("Missing position");
+  expect(
+    (
+      await owner.query(api.portfolio.holdingDetail, {
+        positionKey: renamedKey,
+      })
+    )?.holding.accountName,
+  ).toBe("Renamed portfolio");
+  await owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    isArchived: true,
+  });
+  expect(await owner.query(api.accounts.list)).toEqual([]);
+  expect(await owner.query(api.accounts.listAll)).toMatchObject([
+    { name: "Renamed portfolio", isArchived: true },
+  ]);
+  const archived = await owner.query(api.portfolio.positions);
+  expect(archived.current).toEqual([]);
+  expect((await owner.query(api.portfolio.overview)).summary.currentValue).toBe(
+    0,
+  );
+  expect(
+    (
+      await owner.query(api.portfolio.assetClassDetail, {
+        assetClass: "indian_stock",
+      })
+    ).holdings,
+  ).toEqual([]);
+  const key = beforePositions.current[0]?.id;
+  if (!key) throw new Error("Missing position");
+  expect(
+    await owner.query(api.portfolio.holdingDetail, { positionKey: key }),
+  ).toBeNull();
+  expect(
+    await t.run(async (ctx) => ({
+      facts: await ctx.db.query("holdingSnapshots").collect(),
+      history: await ctx.db.query("portfolioHistoryFacts").collect(),
+    })),
+  ).toEqual(rawBefore);
+  await owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    isArchived: false,
+  });
+  expect((await owner.query(api.portfolio.overview)).summary).toEqual(
+    before.summary,
+  );
+  expect(
+    (await owner.query(api.portfolio.positions)).current[0]?.accountName,
+  ).toBe("Renamed portfolio");
+  await commitAdditionalPortfolio(
+    { t, owner },
+    [holding({ currentValue: 140, sourceDate: "2025-04-01" })],
+    publication.facts,
+    2,
+  );
+  expect(await owner.query(api.accounts.list)).toHaveLength(1);
+});
+
+it("authorizes account changes on the server for owner, viewer and foreign household", async () => {
+  const { t, owner } = await setupPortfolio([holding()]);
+  const [account] = await owner.query(api.accounts.list);
+  if (!account) throw new Error("Missing account");
+  const viewerIdentity = {
+    subject: "fake_viewer",
+    issuer: "https://fake.example",
+    tokenIdentifier: "fake|viewer",
+    email: "viewer@example.invalid",
+    emailVerified: true,
+  };
+  const viewer = t.withIdentity(viewerIdentity);
+  await viewer.mutation(api.users.ensureCurrent);
+  await viewer.mutation(
+    api.households.acceptInvite,
+    await owner.action(api.actions.householdInvites.create, {
+      email: viewerIdentity.email,
+    }),
+  );
+  await expect(
+    viewer.mutation(api.accounts.update, {
+      accountKey: account.id,
+      isArchived: true,
+    }),
+  ).rejects.toThrow();
+  const foreign = t.withIdentity({ ...viewerIdentity, subject: "foreign" });
+  await foreign.mutation(api.users.ensureCurrent);
+  await expect(
+    foreign.mutation(api.accounts.update, {
+      accountKey: account.id,
+      name: "Foreign",
+    }),
+  ).rejects.toThrow();
+  await expect(
+    owner.mutation(api.accounts.update, { accountKey: account.id, name: " " }),
+  ).rejects.toThrow();
+  await expect(
+    owner.mutation(api.accounts.update, {
+      accountKey: account.id,
+      name: "x".repeat(121),
+    }),
+  ).rejects.toThrow();
+});
+
+it("archiving an unrelated account preserves duplicate transaction occurrences across reimports", async () => {
+  const state = await setupPortfolio([
+    holding(),
+    transaction(),
+    transaction(),
+    holding({ accountName: "Other", symbol: "BETA", instrumentName: "BETA" }),
+  ]);
+  await commitAdditionalPortfolio(
+    state,
+    [transaction()],
+    state.publication.facts,
+    2,
+  );
+  const positions = await state.owner.query(api.portfolio.positions);
+  const alpha = positions.current.find(
+    (position) => position.symbol === "ALPHA",
+  );
+  const account = (await state.owner.query(api.accounts.list)).find(
+    (account) => account.name === "Other",
+  );
+  if (!alpha || !account) throw new Error("Missing fake portfolio");
+  const before = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alpha.id,
+  });
+  expect(before?.transactions).toHaveLength(2);
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    isArchived: true,
+  });
+  const after = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alpha.id,
+  });
+  expect(after?.transactions).toEqual(before?.transactions);
+});
+
+it("archives one account without mixing another account's same-symbol history, aliases or decimal cash flows", async () => {
+  const state = await setupPortfolio([
+    holding({
+      accountName: "Broker A",
+      provider: "Broker A",
+      currentValue: 125.3,
+      investedAmount: 100.1,
+      pnlAmount: undefined,
+    }),
+    holding({
+      accountName: "Broker B",
+      provider: "Broker B",
+      currentValue: 150.7,
+      investedAmount: 120.2,
+      pnlAmount: undefined,
+    }),
+    transaction({
+      accountName: "Broker A",
+      provider: "Broker A",
+      amount: 100.1,
+    }),
+    transaction({
+      accountName: "Broker B",
+      provider: "Broker B",
+      amount: 120.2,
+    }),
+  ]);
+  const accounts = await state.owner.query(api.accounts.list);
+  const accountA = accounts.find((account) => account.name === "Broker A");
+  const positions = await state.owner.query(api.portfolio.positions);
+  const positionA = positions.current.find(
+    (position) => position.accountName === "Broker A",
+  );
+  const positionB = positions.current.find(
+    (position) => position.accountName === "Broker B",
+  );
+  if (!accountA || !positionA || !positionB)
+    throw new Error("Missing independent account fixtures");
+  const alias = "fake-account-b-alias";
+  const current = await state.owner.query(api.users.current);
+  await state.t.run((ctx) =>
+    ctx.db.insert("legacyHoldingAliases", {
+      householdId: current.householdId,
+      legacyId: alias,
+      positionKey: positionB.id,
+    }),
+  );
+  const beforeB = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alias,
+  });
+  expect(beforeB?.transactions).toHaveLength(1);
+  expect(beforeB?.holding.pnlAmount).toBeNull();
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: accountA.id,
+    isArchived: true,
+  });
+
+  expect(
+    (await state.owner.query(api.portfolio.positions)).current.map(
+      (position) => position.id,
+    ),
+  ).toEqual([positionB.id]);
+  expect(
+    (await state.owner.query(api.portfolio.overview)).summary,
+  ).toMatchObject({
+    currentValue: 150.7,
+    investedAmount: 120.2,
+    pnlAmount: 30.5,
+  });
+  const afterB = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alias,
+  });
+  expect(afterB?.history).toEqual(beforeB?.history);
+  expect(afterB?.transactions).toEqual(beforeB?.transactions);
+  expect(
+    await state.owner.query(api.portfolio.holdingDetail, {
+      positionKey: positionA.id,
+    }),
+  ).toBeNull();
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: accountA.id,
+    isArchived: false,
+  });
+  expect(
+    (await state.owner.query(api.portfolio.positions)).current,
+  ).toHaveLength(2);
+});
+
+it("keeps the full archived read model in publication asset-class order and reports its real reads", async () => {
+  const { owner, publication } = await setupPortfolio([
+    holding({
+      accountName: "US",
+      assetClass: "us_stock",
+      currency: "USD",
+      sourceDate: "2025-03-03",
+    }),
+    holding({
+      accountName: "Funds",
+      assetClass: "mutual_fund",
+      sourceDate: "2025-03-02",
+    }),
+    holding({ accountName: "Stocks", sourceDate: "2025-03-01" }),
+  ]);
+  const readModel = await owner.run(async (ctx) => {
+    const active = await activePortfolio(ctx);
+    if (!active) throw new Error("Missing published portfolio");
+    return completeProjection(ctx, active);
+  });
+
+  expect(
+    readModel.projection.assetClasses.map((asset) => asset.assetClass),
+  ).toEqual(
+    publication.projection.assetClasses.map((asset) => asset.assetClass),
+  );
+  expect(readModel.counts).toMatchObject({
+    ranges: 5,
+    positions: 3,
+    historyFacts: 3,
+  });
+  expect(readModel.counts.timelinePoints).toBe(
+    publication.projection.timeline.length,
+  );
 });

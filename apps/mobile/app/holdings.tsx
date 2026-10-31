@@ -2,9 +2,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppButton, PageHeader, StatePanel } from "../src/mobile-ui";
+import { PageHeader, StatePanel } from "../src/mobile-ui";
 import { type Theme, useTheme } from "../src/theme";
-import { trpc } from "../src/trpc";
+import { api } from "@investment-sync/backend/api";
+import { useQuery } from "convex/react";
 
 const inrCurrency = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -17,45 +18,28 @@ const percentage = new Intl.NumberFormat("en-IN", {
 });
 
 export default function HoldingsScreen() {
-  const holdings = trpc.portfolio.holdings.useQuery();
+  const positions = useQuery(api.portfolio.positions);
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const data = holdings.data ?? [];
+  const data = positions?.current ?? [];
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
+    <SafeAreaView edges={["left", "right"]} style={styles.screen}>
       <FlatList
         contentContainerStyle={styles.content}
         data={data}
         keyExtractor={(item) => item.id}
-        onRefresh={() => void holdings.refetch()}
-        refreshing={holdings.isFetching && !holdings.isLoading}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <PageHeader
-            description="Latest committed position in each account."
+            description="Latest committed positions. Updates automatically."
             eyebrow="Current positions"
             title="Holdings"
           />
         }
         ListEmptyComponent={
-          holdings.isLoading ? (
+          positions === undefined ? (
             <LoadingList styles={styles} />
-          ) : holdings.isError ? (
-            <StatePanel
-              action={
-                <AppButton
-                  label="Try loading holdings again"
-                  onPress={() => void holdings.refetch()}
-                  variant="secondary"
-                >
-                  Try again
-                </AppButton>
-              }
-              description="Your saved portfolio has not changed."
-              title="Holdings unavailable"
-              tone="error"
-            />
           ) : (
             <StatePanel
               description="Import portfolio data from the web app first."
@@ -64,23 +48,24 @@ export default function HoldingsScreen() {
           )
         }
         renderItem={({ index, item }) => {
-          const pnl = item.pnlAmountInInr ?? 0;
+          const pnl = item.pnlAmountInInr;
           const returnTone =
-            pnl > 0
+            pnl !== null && pnl > 0
               ? styles.positive
-              : pnl < 0
+              : pnl !== null && pnl < 0
                 ? styles.negative
                 : styles.mutedReturn;
           const returnColor =
-            pnl > 0
+            pnl !== null && pnl > 0
               ? theme.positive
-              : pnl < 0
+              : pnl !== null && pnl < 0
                 ? theme.negative
                 : theme.mutedForeground;
           const name = item.symbol ?? item.instrumentName;
-          const formattedReturn = `${percentage.format(
-            Number(item.pnlPercent ?? 0),
-          )}%`;
+          const formattedReturn =
+            item.pnlPercent === null
+              ? "Unavailable"
+              : `${percentage.format(Number(item.pnlPercent))}%`;
 
           return (
             <View
@@ -117,7 +102,11 @@ export default function HoldingsScreen() {
                   <Ionicons
                     color={returnColor}
                     name={
-                      pnl > 0 ? "arrow-up" : pnl < 0 ? "arrow-down" : "remove"
+                      pnl !== null && pnl > 0
+                        ? "arrow-up"
+                        : pnl !== null && pnl < 0
+                          ? "arrow-down"
+                          : "remove"
                     }
                     size={13}
                   />

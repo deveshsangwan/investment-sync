@@ -1,7 +1,6 @@
 "use client";
 
 import { api } from "@investment-sync/backend/api";
-import type { FunctionReturnType } from "convex/server";
 import { useCachedQuery } from "@/app/query-cache-provider";
 import { Check, Database, FileUp, Lock } from "lucide-react";
 import Link from "next/link";
@@ -11,22 +10,14 @@ import {
   PageShell,
   Panel,
 } from "@/components/portfolio-ui";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ProfileSkeleton,
   AccountsSkeleton,
   AccountsFileInformation,
 } from "@/components/accounts-skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { labelize } from "@/lib/format";
+import { HouseholdManagement } from "@/features/households/household-management";
+import { AccountManagement } from "@/features/households/account-management";
 import { ConvexSessionGate } from "../convex-provider";
 import { ConvexQueryBoundary } from "@/components/convex-query-boundary";
 
@@ -59,7 +50,7 @@ export function SettingsClient() {
 
 function SettingsData() {
   const current = useCachedQuery(api.users.current);
-  const accounts = useCachedQuery(api.accounts.list);
+  const accounts = useCachedQuery(api.accounts.listAll);
   const isOwner = current?.role === "owner";
 
   return (
@@ -99,8 +90,17 @@ function SettingsData() {
         )}
       </section>
 
+      {current && (
+        <HouseholdManagement key={current.householdId} current={current} />
+      )}
+
       <section className="mt-8">
         <h2 className="text-[0.82rem] font-semibold">Portfolio accounts</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Archive accounts to hide them from holdings and dashboards. History
+          stays saved and returns when you unarchive. Portfolio-wide reported
+          totals are replaced by visible holdings while an account is archived.
+        </p>
 
         <div className="mt-3">
           {!accounts ? (
@@ -117,7 +117,7 @@ function SettingsData() {
               }
             />
           ) : (
-            <AccountInventory accounts={accounts} />
+            <AccountManagement accounts={accounts} isOwner={isOwner} />
           )}
         </div>
       </section>
@@ -174,58 +174,5 @@ function Permission({
         {isGranted ? "Allowed" : "Not allowed"}
       </span>
     </li>
-  );
-}
-
-type Account = FunctionReturnType<typeof api.accounts.list>[number];
-
-function AccountInventory({ accounts }: { accounts: Account[] }) {
-  return (
-    <>
-      <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Provider</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Currency</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {accounts.map((account) => (
-              <TableRow key={account.id}>
-                <TableCell className="font-medium">{account.name}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {labelize(account.provider)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {labelize(account.accountType)}
-                </TableCell>
-                <TableCell className="number text-right">
-                  {account.currency}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <ul className="divide-y divide-border/70 border-y border-border/70 md:hidden">
-        {accounts.map((account) => (
-          <li key={account.id} className="py-3.5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{account.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {labelize(account.provider)} · {labelize(account.accountType)}
-                </p>
-              </div>
-              <Badge variant="outline">{account.currency}</Badge>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </>
   );
 }

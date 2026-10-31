@@ -40,7 +40,11 @@ export function projectionRecords(projection: PortfolioProjection) {
         kind: "holding",
         assetClass: fact.row.assetClass,
         positionKey: fact.positionKey,
-        factJson: checkedJson({ row: fact.row, provenance: fact.provenance }),
+        factJson: checkedJson({
+          row: fact.row,
+          provenance: fact.provenance,
+          snapshotCreationOrder: retainedCreationOrder(fact),
+        }),
       });
   };
   const registerTransactions = (
@@ -105,6 +109,7 @@ export function projectionRecords(projection: PortfolioProjection) {
       holdingJson: checkedJson({
         row: position.holding.row,
         provenance: position.holding.provenance,
+        snapshotCreationOrder: retainedCreationOrder(position.holding),
       }),
       historyScope,
       transactionScope,
@@ -184,4 +189,18 @@ export function projectionRecords(projection: PortfolioProjection) {
     assets,
     timeline,
   };
+}
+
+function retainedCreationOrder(fact: HoldingFact) {
+  const order = fact.snapshotCreationOrder;
+  // Most rows already carry their original creation order in provenance.
+  // Store an override only for corrections, keeping publication read budgets.
+  if (
+    !order ||
+    (order.sequence === fact.provenance.sequence &&
+      order.rowNumber === fact.provenance.rowNumber)
+  )
+    return undefined;
+
+  return order;
 }

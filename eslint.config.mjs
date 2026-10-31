@@ -27,6 +27,8 @@ export default [
       "**/generated/**",
       "**/_generated/**",
       "**/next-env.d.ts",
+      "**/playwright-report/**",
+      "**/test-results/**",
     ],
   },
   {

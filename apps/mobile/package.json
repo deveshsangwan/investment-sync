@@ -5,22 +5,19 @@
   "main": "expo-router/entry",
   "scripts": {
     "android": "expo start --android",
-    "build": "tsc --noEmit",
+    "build": "tsc-rs --noEmit",
     "dev": "expo start",
     "ios": "expo start --ios",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run && pnpm run test:native",
+    "typecheck": "tsc-rs --noEmit",
+    "test:native": "jest --runInBand"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.6.9",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.1.1",
-    "@investment-sync/api": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@tanstack/react-query": "^4.36.1",
-    "@trpc/client": "^10.45.2",
-    "@trpc/react-query": "^10.45.2",
     "expo": "~54.0.35",
     "expo-application": "~7.0.8",
     "expo-auth-session": "~7.0.11",
@@ -34,11 +31,19 @@
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "^5.8.0",
-    "superjson": "^2.2.2"
+    "@investment-sync/backend": "workspace:*",
+    "convex": "^1.45.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.17",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "react-test-renderer": "19.1.0",
+    "@types/react-test-renderer": "^19.1.0",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "jest-expo": "~54.0.18",
+    "@babel/runtime": "^7.28.0"
   }
 }

@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { SourceWritesPausedError } from "../source-writes";
 import {
   duplicateImportError,
+  publicImportError,
   importEffect,
   importErrorHttpStatus,
   ImportConflictError,
@@ -158,5 +159,41 @@ describe("runImportEffect", () => {
     expect(rejection).toBe(original);
     expect(isImportError(rejection)).toBe(true);
     expect(importErrorHttpStatus(rejection as ImportConflictError)).toBe(409);
+  });
+});
+
+describe("publicImportError", () => {
+  it.each([
+    [
+      new ImportValidationError({ message: "fake-provider-detail" }),
+      400,
+      "VALIDATION",
+    ],
+    [
+      new ImportNotFoundError({ message: "fake-provider-detail" }),
+      404,
+      "NOT_FOUND",
+    ],
+    [
+      new ImportConflictError({ message: "fake-provider-detail" }),
+      409,
+      "CONFLICT",
+    ],
+    [
+      new ImportStorageError({ message: "fake-provider-detail" }),
+      502,
+      "PROVIDER_UNAVAILABLE",
+    ],
+    [
+      new ImportPersistenceError({ message: "fake-provider-detail" }),
+      500,
+      "INTERNAL_FAILURE",
+    ],
+    [new Error("fake-provider-detail"), 500, "INTERNAL_FAILURE"],
+  ])("maps %s to a safe %s response", (error, status, code) => {
+    const result = publicImportError(error);
+
+    expect(result).toMatchObject({ status, code });
+    expect(result.message).not.toContain("fake-provider-detail");
   });
 });
