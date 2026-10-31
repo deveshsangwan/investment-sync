@@ -1,3 +1,4 @@
+import { importFailureMessage } from "../../src/errors";
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -102,7 +103,12 @@ export async function batchToView(ctx: QueryCtx, batch: Doc<"importBatches">) {
     rowCount: batch.rowCount,
     previewRowsJson: batch.previewRowsJson,
     warnings: batch.warnings,
-    errorMessage: batch.errorMessage ?? null,
+    errorMessage: batch.errorMessage
+      ? importFailureMessage(
+          batch.errorMessage,
+          batch.status === "failed" ? "parse" : "publish",
+        )
+      : null,
     parserVersion: batch.parserVersion ?? null,
     sourceType: batch.sourceType ?? null,
     fileAvailable: Boolean(file?.storageId && file.status === "stored"),

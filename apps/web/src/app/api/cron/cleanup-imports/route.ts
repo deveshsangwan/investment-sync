@@ -1,10 +1,10 @@
+import { randomUUID } from "node:crypto";
 import {
   assertSourceWritesAllowed,
   cleanupExpiredImportFiles,
   createApiContext,
   getAppEnv,
-  importErrorHttpStatus,
-  isImportError,
+  publicImportError,
   logger,
   runImportEffect,
   SourceWritesPausedError,
@@ -14,7 +14,9 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const requestId = randomUUID();
   const expectedSecret = getAppEnv().CRON_SECRET;
+
   if (!expectedSecret) {
     logger.error("Import cleanup is disabled because CRON_SECRET is missing");
     return NextResponse.json(
@@ -23,10 +25,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const providedSecret = request.headers
-    .get("authorization")
-    ?.replace(/^Bearer\s+/i, "");
-  if (providedSecret !== expectedSecret) {
+  const authorization = request.headers.get("authorization");
+
+  if (authorization !== `Bearer ${expectedSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -46,20 +47,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
-    if (isImportError(error)) {
-      logger.error("Import cleanup failed", {
-        tag: error._tag,
-        cause: "cause" in error ? error.cause : undefined,
-      });
-      return NextResponse.json(
-        { error: error.message },
-        { status: importErrorHttpStatus(error) },
-      );
-    }
-    logger.error("Unexpected import cleanup failure", { error });
+    const failure = publicImportError(error);
+    logger.error("Import cleanup failed", {
+      requestId,
+      code: failure.code,
+      error,
+    });
+
     return NextResponse.json(
-      { error: "Import cleanup failed" },
-      { status: 500 },
+      { error: failure.message, code: failure.code, requestId },
+      { status: failure.status, headers: { "x-request-id": requestId } },
     );
   }
 }

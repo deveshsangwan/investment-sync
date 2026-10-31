@@ -1,5 +1,6 @@
 "use node";
 
+import { importFailureMessage } from "../../src/errors";
 import { performance } from "node:perf_hooks";
 import {
   buildPortfolioPublication,
@@ -115,6 +116,7 @@ export const publishPortfolio = internalAction({
         rows.push(...values);
       }
       if (
+        rows.length < 1 ||
         rows.length !== input.batch.rowCount ||
         rows.length > rowLimit ||
         utf8Bytes(JSON.stringify(rows)) !== input.batch.normalizedBytes ||
@@ -224,7 +226,7 @@ export const publishPortfolio = internalAction({
         });
       await ctx.runMutation(internal.publicationWorkers.finalize, args);
     } catch (error) {
-      console.error("Portfolio publication failed", error);
+      console.error("Portfolio publication failed", { ...args, error });
 
       await ctx.runMutation(internal.publicationWorkers.fail, {
         ...args,
@@ -236,20 +238,8 @@ export const publishPortfolio = internalAction({
 });
 
 function publicationFailureMessage(error: unknown) {
-  if (error instanceof ConvexError) {
-    const data: unknown = error.data;
-    if (typeof data === "string") return data;
-
-    if (
-      data !== null &&
-      typeof data === "object" &&
-      "code" in data &&
-      data.code === "CAPACITY" &&
-      "message" in data &&
-      typeof data.message === "string"
-    )
-      return data.message;
-  }
-
-  return "This import could not be published. Try again or choose another file.";
+  return importFailureMessage(
+    error instanceof ConvexError ? error.data : null,
+    "publish",
+  );
 }

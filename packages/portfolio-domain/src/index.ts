@@ -15,3 +15,10 @@ export type {
   PublicHolding,
 } from "./valuation";
 export { visibleAccountProjection } from "./accountVisibility";
+export {
+  publicError,
+  narrowPublicError,
+  isPublicErrorCode,
+  safePublicErrorMessage,
+} from "./errors";
+export type { PublicError, PublicErrorCode } from "./errors";
