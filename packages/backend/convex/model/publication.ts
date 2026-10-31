@@ -97,7 +97,12 @@ export async function commitBatch(
       digest: version.digest,
     };
   }
-  if (batch.status !== "parsed" || !batch.contentHash || !batch.parserVersion)
+  if (
+    batch.status !== "parsed" ||
+    !batch.contentHash ||
+    !batch.parserVersion ||
+    batch.rowCount < 1
+  )
     throw new ConvexError({
       code: "CONFLICT",
       message: "Only a parsed import can be committed",

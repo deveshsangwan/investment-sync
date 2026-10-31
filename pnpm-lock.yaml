@@ -238,6 +238,9 @@ importers:
       '@investment-sync/importers':
         specifier: workspace:*
         version: link:../importers
+      '@investment-sync/portfolio-domain':
+        specifier: workspace:*
+        version: link:../portfolio-domain
       '@supabase/supabase-js':
         specifier: ^2.107.0
         version: 2.107.0
@@ -257,9 +260,6 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
-      '@investment-sync/portfolio-domain':
-        specifier: workspace:*
-        version: link:../portfolio-domain
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
