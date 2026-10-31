@@ -27,3 +27,9 @@ Archived accounts remain in Accounts with an Unarchive action, and disappear imm
 Reported portfolio-level valuations cannot be split by account. While any account is archived, charts use visible holding history instead of unscoped reported totals. This is explained in Accounts. Archived reads decode the bounded active-version projection; the normal indexed read path remains in use when no account is archived. This costs more reads for archived portfolios and remains subject to existing portfolio capacity limits. No unpublished source facts participate in these reads.
 
 All management mutations respect the migration write freeze. Migration, reconciliation, rollback, and source retention tooling remain available. There is no deployment or production operation in this change.
+
+## Integrated rollout notes
+
+This branch includes the account-aware identity/history/cashflow/alias correction from #66 and the incremental exact-total selector from #67. Archival filters selected contributions without returning to the earlier full-selection implementation. Missing P&L continues to be derived for totals/read-time summaries under #68 while the original source field remains unchanged. For older materialized selections, #66 still requires the next successful publication to reflect its corrected selection behavior; no manual production publication was performed for this change.
+
+The queue validation uses a fake signed issuer and disposable Convex/PostgreSQL services. It does not verify hosted Clerk settings. Missing or unverified signed email claims remain fail-closed. Confirm the documented claim configuration before enabling redemption in a live deployment.
