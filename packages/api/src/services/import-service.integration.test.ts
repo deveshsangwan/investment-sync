@@ -730,7 +730,7 @@ describeDb("import service integration", () => {
     expect(failed).toMatchObject({
       status: "failed",
       sourceFileAvailable: false,
-      errors: ["Import Batch contains no usable rows"],
+      errors: ["Check the file or entry values and try again."],
     });
     expect(failed).not.toHaveProperty("storagePath");
     expect(failed).not.toHaveProperty("fileHash");

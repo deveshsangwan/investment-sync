@@ -67,7 +67,9 @@ export const refreshCurrencyRate = internalAction({
         { requestRevision },
       );
       console.warn("currency-rate refresh failed", {
-        message: error instanceof Error ? error.message : "Unknown failure",
+        error,
+        requestRevision,
+        pair: "USD/INR",
         attempts,
       });
 

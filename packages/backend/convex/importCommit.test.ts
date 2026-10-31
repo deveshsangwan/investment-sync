@@ -85,7 +85,7 @@ describe("import commit lifecycle", () => {
       ).rejects.toMatchObject({
         data: {
           code: "CONFLICT",
-          message: "Only a parsed import can be committed",
+          message: "The data has changed. Reload and try again.",
         },
       });
       expect(await storedState(t)).toEqual(before);

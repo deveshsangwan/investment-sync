@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logger } from "../logger";
 import {
   commitImport,
-  isImportError,
+  publicImportError,
   listImports,
   runImportEffect,
 } from "../services/import-service";
@@ -28,42 +29,38 @@ export const importsRouter = router({
           commitImport(ctx, ctx.membership, input.importBatchId),
         );
       } catch (error) {
-        throw toImportTrpcError(error);
+        throw toImportTrpcError(error, { importBatchId: input.importBatchId });
       }
     }),
   list: protectedProcedure.query(async ({ ctx }) => {
     try {
       return await runImportEffect(listImports(ctx, ctx.membership));
     } catch (error) {
-      throw toImportTrpcError(error);
+      throw toImportTrpcError(error, {});
     }
   }),
 });
 
-function toImportTrpcError(error: unknown) {
-  if (!isImportError(error)) {
-    logger.error("Unexpected import request failure", { error });
-    return new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Import operation failed",
-      cause: error,
-    });
-  }
-
+export function toImportTrpcError(
+  error: unknown,
+  context: { importBatchId?: string },
+) {
+  const failure = publicImportError(error);
+  const requestId = randomUUID();
   logger.error("Import request failed", {
-    tag: error._tag,
-    cause: "cause" in error ? error.cause : undefined,
+    ...context,
+    requestId,
+    code: failure.code,
+    error,
   });
-  const code = {
-    ImportValidationError: "BAD_REQUEST",
-    ImportNotFoundError: "NOT_FOUND",
-    ImportConflictError: "CONFLICT",
-    ImportStorageError: "INTERNAL_SERVER_ERROR",
-    ImportPersistenceError: "INTERNAL_SERVER_ERROR",
-  }[error._tag] as
-    | "BAD_REQUEST"
-    | "NOT_FOUND"
-    | "CONFLICT"
-    | "INTERNAL_SERVER_ERROR";
-  return new TRPCError({ code, message: error.message, cause: error });
+  const code =
+    failure.status === 400
+      ? "BAD_REQUEST"
+      : failure.status === 404
+        ? "NOT_FOUND"
+        : failure.status === 409
+          ? "CONFLICT"
+          : "INTERNAL_SERVER_ERROR";
+
+  return new TRPCError({ code, message: failure.message, cause: error });
 }

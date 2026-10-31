@@ -117,7 +117,10 @@ describe("duplicate source content", () => {
       await expect(
         owner.mutation(api.imports.commit, { batchId: loser }),
       ).rejects.toMatchObject({
-        data: { code: "CONFLICT", message: duplicateMessage },
+        data: {
+          code: "CONFLICT",
+          message: "The data has changed. Reload and try again.",
+        },
       });
     }
 
@@ -176,7 +179,10 @@ describe("duplicate source content", () => {
     await expect(
       owner.mutation(api.imports.commit, { batchId: earlierId }),
     ).rejects.toMatchObject({
-      data: { code: "CONFLICT", message: duplicateMessage },
+      data: {
+        code: "CONFLICT",
+        message: "The data has changed. Reload and try again.",
+      },
     });
     await t.run(async (ctx) => {
       expect(await ctx.db.query("importBatches").collect()).toHaveLength(14);
@@ -268,7 +274,10 @@ describe("duplicate source content", () => {
       await expect(
         owner.mutation(api.imports.commit, { batchId: duplicateId }),
       ).rejects.toMatchObject({
-        data: { code: "CONFLICT", message: duplicateMessage },
+        data: {
+          code: "CONFLICT",
+          message: "The data has changed. Reload and try again.",
+        },
       });
       await t.run(async (ctx) => {
         expect(await ctx.db.query("importDedupeKeys").collect()).toMatchObject([

@@ -1,3 +1,4 @@
+import { withMutationDiagnostics } from "./model/errors";
 import { ConvexError, v } from "convex/values";
 import { z } from "zod";
 import { exactNormalizedHoldingRowSchema } from "@investment-sync/importers/exact-types";
@@ -104,54 +105,55 @@ export const create = mutation({
     requestId: v.string(),
   },
   returns: resultValidator,
-  handler: async (ctx, args) => {
-    requireApplicationWritesEnabled();
-    const { user, household } = await requireOwner(ctx);
+  handler: async (ctx, args) =>
+    withMutationDiagnostics("manualPolicies.create", args, async () => {
+      requireApplicationWritesEnabled();
+      const { user, household } = await requireOwner(ctx);
 
-    const input = validate(manualPolicyInputSchema, args);
-    validateSnapshotDate(input.sourceDate);
+      const input = validate(manualPolicyInputSchema, args);
+      validateSnapshotDate(input.sourceDate);
 
-    const inputHash = digest(JSON.stringify(input));
-    const replay = await replayRequest(
-      ctx,
-      household._id,
-      args.requestId,
-      inputHash,
-    );
+      const inputHash = digest(JSON.stringify(input));
+      const replay = await replayRequest(
+        ctx,
+        household._id,
+        args.requestId,
+        inputHash,
+      );
 
-    if (replay) return replay;
+      if (replay) return replay;
 
-    const policies = await ctx.db
-      .query("manualPolicies")
-      .withIndex("by_householdId", (q) => q.eq("householdId", household._id))
-      .take(policyLimit);
+      const policies = await ctx.db
+        .query("manualPolicies")
+        .withIndex("by_householdId", (q) => q.eq("householdId", household._id))
+        .take(policyLimit);
 
-    if (policies.length >= policyLimit) {
-      throw new ConvexError({
-        code: "CAPACITY",
-        message: "A household can track up to 64 manual policies.",
+      if (policies.length >= policyLimit) {
+        throw new ConvexError({
+          code: "CAPACITY",
+          message: "A household can track up to 64 manual policies.",
+        });
+      }
+
+      const policyId = await ctx.db.insert("manualPolicies", {
+        householdId: household._id,
+        provider: input.provider,
+        name: input.name,
+        createdAt: Date.now(),
       });
-    }
+      const policy = await ctx.db.get("manualPolicies", policyId);
 
-    const policyId = await ctx.db.insert("manualPolicies", {
-      householdId: household._id,
-      provider: input.provider,
-      name: input.name,
-      createdAt: Date.now(),
-    });
-    const policy = await ctx.db.get("manualPolicies", policyId);
+      if (!policy) throw new Error("New policy was not found");
 
-    if (!policy) throw new Error("New policy was not found");
-
-    return saveSnapshot(
-      ctx,
-      policy,
-      user._id,
-      input,
-      args.requestId,
-      inputHash,
-    );
-  },
+      return saveSnapshot(
+        ctx,
+        policy,
+        user._id,
+        input,
+        args.requestId,
+        inputHash,
+      );
+    }),
 });
 
 export const updateValue = mutation({
@@ -164,64 +166,65 @@ export const updateValue = mutation({
     requestId: v.string(),
   },
   returns: resultValidator,
-  handler: async (ctx, args) => {
-    requireApplicationWritesEnabled();
-    const { user, household } = await requireOwner(ctx);
+  handler: async (ctx, args) =>
+    withMutationDiagnostics("manualPolicies.updateValue", args, async () => {
+      requireApplicationWritesEnabled();
+      const { user, household } = await requireOwner(ctx);
 
-    const policy = await ctx.db.get("manualPolicies", args.policyId);
+      const policy = await ctx.db.get("manualPolicies", args.policyId);
 
-    if (!policy || policy.householdId !== household._id) {
-      throw new ConvexError({
-        code: "NOT_FOUND",
-        message: "Policy not found.",
+      if (!policy || policy.householdId !== household._id) {
+        throw new ConvexError({
+          code: "NOT_FOUND",
+          message: "Policy not found.",
+        });
+      }
+
+      const values = validate(manualPolicyInputSchema, args);
+      validateSnapshotDate(values.sourceDate);
+
+      const inputHash = digest(
+        JSON.stringify({ policyId: policy._id, ...values }),
+      );
+      const replay = await replayRequest(
+        ctx,
+        household._id,
+        args.requestId,
+        inputHash,
+      );
+
+      if (replay) return replay;
+
+      if (policy.latestBatchId !== args.expectedBatchId) {
+        throw new ConvexError({
+          code: "CONFLICT",
+          message: "This policy has changed. Reload it before saving.",
+        });
+      }
+
+      const previous = await ctx.db.get("importBatches", args.expectedBatchId);
+
+      if (previous?.status === "publishing") {
+        throw new ConvexError({
+          code: "CONFLICT",
+          message: "The previous value is still saving. Wait for it to finish.",
+        });
+      }
+
+      await ctx.db.patch("manualPolicies", policy._id, {
+        provider: values.provider,
+        name: values.name,
       });
-    }
 
-    const values = validate(manualPolicyInputSchema, args);
-    validateSnapshotDate(values.sourceDate);
-
-    const inputHash = digest(
-      JSON.stringify({ policyId: policy._id, ...values }),
-    );
-    const replay = await replayRequest(
-      ctx,
-      household._id,
-      args.requestId,
-      inputHash,
-    );
-
-    if (replay) return replay;
-
-    if (policy.latestBatchId !== args.expectedBatchId) {
-      throw new ConvexError({
-        code: "CONFLICT",
-        message: "This policy has changed. Reload it before saving.",
-      });
-    }
-
-    const previous = await ctx.db.get("importBatches", args.expectedBatchId);
-
-    if (previous?.status === "publishing") {
-      throw new ConvexError({
-        code: "CONFLICT",
-        message: "The previous value is still saving. Wait for it to finish.",
-      });
-    }
-
-    await ctx.db.patch("manualPolicies", policy._id, {
-      provider: values.provider,
-      name: values.name,
-    });
-
-    return saveSnapshot(
-      ctx,
-      { ...policy, provider: values.provider, name: values.name },
-      user._id,
-      values,
-      args.requestId,
-      inputHash,
-    );
-  },
+      return saveSnapshot(
+        ctx,
+        { ...policy, provider: values.provider, name: values.name },
+        user._id,
+        values,
+        args.requestId,
+        inputHash,
+      );
+    }),
 });
 
 function validate<T>(schema: z.ZodType<T>, value: unknown): T {

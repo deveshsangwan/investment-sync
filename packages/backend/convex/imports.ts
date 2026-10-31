@@ -1,3 +1,4 @@
+import { withMutationDiagnostics } from "./model/errors";
 import {
   paginationOptsValidator,
   paginationResultValidator,
@@ -21,10 +22,11 @@ import { requireApplicationWritesEnabled } from "./model/migrationFreeze";
 export const commit = mutation({
   args: { batchId: v.id("importBatches") },
   returns: commitResultValidator,
-  handler: async (ctx, { batchId }) => {
-    requireApplicationWritesEnabled();
-    return commitBatch(ctx, await requireBatch(ctx, batchId, true));
-  },
+  handler: async (ctx, { batchId }) =>
+    withMutationDiagnostics("imports.commit", { batchId }, async () => {
+      requireApplicationWritesEnabled();
+      return commitBatch(ctx, await requireBatch(ctx, batchId, true));
+    }),
 });
 
 export const createUpload = mutation({
@@ -34,155 +36,166 @@ export const createUpload = mutation({
     sizeBytes: v.number(),
   },
   returns: v.object({ batchId: v.id("importBatches"), uploadUrl: v.string() }),
-  handler: async (ctx, args) => {
-    requireApplicationWritesEnabled();
-    const { user, household } = await requireOwner(ctx);
-    if (
-      !args.fileName.trim() ||
-      args.fileName.length > 255 ||
-      !/\.(csv|xlsx)$/i.test(args.fileName)
-    )
-      throw new ConvexError({
-        code: "VALIDATION",
-        message: "Import files must be CSV or XLSX files",
-      });
-    if (
-      !Number.isSafeInteger(args.sizeBytes) ||
-      args.sizeBytes < 1 ||
-      args.sizeBytes > importLimits.fileBytes
-    )
-      throw new ConvexError({
-        code: "CAPACITY",
-        message: "Import files must be 256 KiB or smaller",
-      });
-    const mimeType = args.mimeType?.trim().toLowerCase();
-    if (
-      mimeType &&
-      ![
-        "text/csv",
-        "application/csv",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ].includes(mimeType)
-    )
-      throw new ConvexError({
-        code: "VALIDATION",
-        message: "Import file type is not supported",
-      });
+  handler: async (ctx, args) =>
+    withMutationDiagnostics("imports.createUpload", args, async () => {
+      requireApplicationWritesEnabled();
+      const { user, household } = await requireOwner(ctx);
+      if (
+        !args.fileName.trim() ||
+        args.fileName.length > 255 ||
+        !/\.(csv|xlsx)$/i.test(args.fileName)
+      )
+        throw new ConvexError({
+          code: "VALIDATION",
+          message: "Import files must be CSV or XLSX files",
+        });
+      if (
+        !Number.isSafeInteger(args.sizeBytes) ||
+        args.sizeBytes < 1 ||
+        args.sizeBytes > importLimits.fileBytes
+      )
+        throw new ConvexError({
+          code: "CAPACITY",
+          message: "Import files must be 256 KiB or smaller",
+        });
+      const mimeType = args.mimeType?.trim().toLowerCase();
+      if (
+        mimeType &&
+        ![
+          "text/csv",
+          "application/csv",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ].includes(mimeType)
+      )
+        throw new ConvexError({
+          code: "VALIDATION",
+          message: "Import file type is not supported",
+        });
 
-    const batchId = await ctx.db.insert("importBatches", {
-      ...args,
-      mimeType,
-      householdId: household._id,
-      uploaderId: user._id,
-      status: "awaiting_upload",
-      attempt: 0,
-      createdAt: Date.now(),
-      rowCount: 0,
-      normalizedBytes: 0,
-      previewRowsJson: "[]",
-      warnings: [],
-    });
-    await ctx.db.insert("sourceFiles", {
-      batchId,
-      householdId: household._id,
-      uploaderId: user._id,
-      status: "reserved",
-      expiresAt: Date.now() + importLimits.uploadGraceMs,
-    });
-    return { batchId, uploadUrl: await ctx.storage.generateUploadUrl() };
-  },
+      const batchId = await ctx.db.insert("importBatches", {
+        ...args,
+        mimeType,
+        householdId: household._id,
+        uploaderId: user._id,
+        status: "awaiting_upload",
+        attempt: 0,
+        createdAt: Date.now(),
+        rowCount: 0,
+        normalizedBytes: 0,
+        previewRowsJson: "[]",
+        warnings: [],
+      });
+      await ctx.db.insert("sourceFiles", {
+        batchId,
+        householdId: household._id,
+        uploaderId: user._id,
+        status: "reserved",
+        expiresAt: Date.now() + importLimits.uploadGraceMs,
+      });
+      return { batchId, uploadUrl: await ctx.storage.generateUploadUrl() };
+    }),
 });
 
 export const attachUpload = mutation({
   args: { batchId: v.id("importBatches"), storageId: v.id("_storage") },
   returns: v.id("importBatches"),
-  handler: async (ctx, args) => {
-    requireApplicationWritesEnabled();
-    const batch = await requireBatch(ctx, args.batchId, true);
-    const file = await sourceFile(ctx, batch._id);
-    if (file.storageId === args.storageId) return batch._id;
-    if (
-      batch.status !== "awaiting_upload" ||
-      file.status !== "reserved" ||
-      file.expiresAt <= Date.now()
-    )
-      throw new ConvexError({
-        code: "CONFLICT",
-        message: "Upload reservation has expired or already been used",
-      });
-    const claimed = await ctx.db
-      .query("sourceFiles")
-      .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
-      .unique();
-    if (claimed) throw new ConvexError({ code: "NOT_FOUND" });
-    const metadata = await ctx.db.system.get("_storage", args.storageId);
-    if (
-      !metadata ||
-      metadata._creationTime < batch.createdAt ||
-      metadata.size !== batch.sizeBytes ||
-      metadata.size > importLimits.fileBytes ||
-      (batch.mimeType && metadata.contentType !== batch.mimeType)
-    )
-      throw new ConvexError({
-        code: "VALIDATION",
-        message: "Uploaded file metadata does not match the reservation",
-      });
+  handler: async (ctx, args) =>
+    withMutationDiagnostics("imports.attachUpload", args, async () => {
+      requireApplicationWritesEnabled();
+      const batch = await requireBatch(ctx, args.batchId, true);
+      const file = await sourceFile(ctx, batch._id);
+      if (file.storageId === args.storageId) return batch._id;
+      if (
+        batch.status !== "awaiting_upload" ||
+        file.status !== "reserved" ||
+        file.expiresAt <= Date.now()
+      )
+        throw new ConvexError({
+          code: "CONFLICT",
+          message: "Upload reservation has expired or already been used",
+        });
+      const claimed = await ctx.db
+        .query("sourceFiles")
+        .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
+        .unique();
+      if (claimed) throw new ConvexError({ code: "NOT_FOUND" });
+      const metadata = await ctx.db.system.get("_storage", args.storageId);
+      if (
+        !metadata ||
+        metadata._creationTime < batch.createdAt ||
+        metadata.size !== batch.sizeBytes ||
+        metadata.size > importLimits.fileBytes ||
+        (batch.mimeType && metadata.contentType !== batch.mimeType)
+      )
+        throw new ConvexError({
+          code: "VALIDATION",
+          message: "Uploaded file metadata does not match the reservation",
+        });
 
-    await ctx.db.patch("sourceFiles", file._id, {
-      storageId: args.storageId,
-      status: "stored",
-      expiresAt: Date.now() + importLimits.retentionMs,
-      sizeBytes: metadata.size,
-      contentHash: storageChecksumToHex(metadata.sha256),
-    });
-    const attempt = await beginParse(ctx, batch);
-    await ctx.scheduler.runAfter(0, internal.actions.parseImport.parseImport, {
-      batchId: batch._id,
-      attempt,
-    });
-    return batch._id;
-  },
+      await ctx.db.patch("sourceFiles", file._id, {
+        storageId: args.storageId,
+        status: "stored",
+        expiresAt: Date.now() + importLimits.retentionMs,
+        sizeBytes: metadata.size,
+        contentHash: storageChecksumToHex(metadata.sha256),
+      });
+      const attempt = await beginParse(ctx, batch);
+      await ctx.scheduler.runAfter(
+        0,
+        internal.actions.parseImport.parseImport,
+        {
+          batchId: batch._id,
+          attempt,
+        },
+      );
+      return batch._id;
+    }),
 });
 
 export const retryParse = mutation({
   args: { batchId: v.id("importBatches") },
   returns: v.id("importBatches"),
-  handler: async (ctx, { batchId }) => {
-    requireApplicationWritesEnabled();
-    const batch = await requireBatch(ctx, batchId, true);
-    if (
-      batch.status !== "failed" &&
-      !(
-        batch.status === "parsing" &&
-        (batch.leaseExpiresAt ?? Infinity) <= Date.now()
+  handler: async (ctx, { batchId }) =>
+    withMutationDiagnostics("imports.retryParse", { batchId }, async () => {
+      requireApplicationWritesEnabled();
+      const batch = await requireBatch(ctx, batchId, true);
+      if (
+        batch.status !== "failed" &&
+        !(
+          batch.status === "parsing" &&
+          (batch.leaseExpiresAt ?? Infinity) <= Date.now()
+        )
       )
-    )
-      throw new ConvexError({
-        code: "CONFLICT",
-        message: "Only a failed or timed-out parse can be retried",
+        throw new ConvexError({
+          code: "CONFLICT",
+          message: "Only a failed or timed-out parse can be retried",
+        });
+      const file = await sourceFile(ctx, batchId);
+      if (
+        !file.storageId ||
+        file.status !== "stored" ||
+        file.expiresAt <= Date.now()
+      )
+        throw new ConvexError({
+          code: "NOT_FOUND",
+          message: "Source file is no longer available",
+        });
+      const attempt = await beginParse(ctx, batch);
+      await ctx.scheduler.runAfter(
+        0,
+        internal.actions.parseImport.parseImport,
+        {
+          batchId,
+          attempt,
+        },
+      );
+      await ctx.scheduler.runAfter(0, internal.importCleanup.obsoleteChunks, {
+        batchId,
+        beforeAttempt: attempt,
       });
-    const file = await sourceFile(ctx, batchId);
-    if (
-      !file.storageId ||
-      file.status !== "stored" ||
-      file.expiresAt <= Date.now()
-    )
-      throw new ConvexError({
-        code: "NOT_FOUND",
-        message: "Source file is no longer available",
-      });
-    const attempt = await beginParse(ctx, batch);
-    await ctx.scheduler.runAfter(0, internal.actions.parseImport.parseImport, {
-      batchId,
-      attempt,
-    });
-    await ctx.scheduler.runAfter(0, internal.importCleanup.obsoleteChunks, {
-      batchId,
-      beforeAttempt: attempt,
-    });
-    return batchId;
-  },
+      return batchId;
+    }),
 });
 
 export const get = query({

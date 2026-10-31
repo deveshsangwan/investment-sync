@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { currencyRates, type Database } from "@investment-sync/db";
 import { and, eq, sql } from "drizzle-orm";
 import { Clock, Data, Effect, Schedule, Schema, SynchronizedRef } from "effect";
@@ -123,7 +124,11 @@ function loadUsdInrRate(
         Effect.map((rate) => ({ rate, isStale: false })),
         Effect.catchAll((error) => {
           if (!(error.cause instanceof SourceWritesPausedError)) {
-            logger.warn("USD/INR rate fetch failed", { error: error.message });
+            logger.warn("USD/INR rate fetch failed", {
+              requestId: randomUUID(),
+              pair: "USD/INR",
+              error,
+            });
           }
 
           const stale = newestUsableStale(cached, persisted, now);
@@ -234,7 +239,9 @@ function persistUsdInrRateEffect(db: Database | undefined, rate: CachedRate) {
         if (error instanceof SourceWritesPausedError) return;
 
         logger.warn("USD/INR rate persistence failed", {
-          error: error instanceof Error ? error.message : String(error),
+          requestId: randomUUID(),
+          pair: "USD/INR",
+          error,
         });
       }),
     ),
@@ -274,7 +281,9 @@ async function tryReadPersistedUsdInrRate(db: Database | undefined) {
     return await readPersistedUsdInrRate(db);
   } catch (error) {
     logger.warn("USD/INR rate persistence read failed", {
-      error: error instanceof Error ? error.message : String(error),
+      requestId: randomUUID(),
+      pair: "USD/INR",
+      error,
     });
     return undefined;
   }
