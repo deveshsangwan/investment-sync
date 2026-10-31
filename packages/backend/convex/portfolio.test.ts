@@ -228,6 +228,190 @@ afterEach(() => {
 });
 
 describe("public portfolio reads", () => {
+  it.each([
+    {
+      name: "gain",
+      rows: [holding({ currentValue: 125, pnlAmount: undefined })],
+      pnlAmount: 25,
+      pnlPercent: 25,
+      overviewPnl: 25,
+      oldInrPnl: "0",
+    },
+    {
+      name: "loss",
+      rows: [holding({ currentValue: 75, pnlAmount: undefined })],
+      pnlAmount: -25,
+      pnlPercent: -25,
+      overviewPnl: -25,
+      oldInrPnl: "0",
+    },
+    {
+      name: "zero",
+      rows: [holding({ currentValue: 100, pnlAmount: undefined })],
+      pnlAmount: 0,
+      pnlPercent: 0,
+      overviewPnl: 0,
+      oldInrPnl: "0",
+    },
+    {
+      name: "reported zero",
+      rows: [holding({ currentValue: 125, pnlAmount: 0 })],
+      pnlAmount: 0,
+      pnlPercent: 0,
+      overviewPnl: 25,
+      oldInrPnl: "0",
+    },
+    {
+      name: "independent accounts with the same instrument, mixed currencies and reported zero",
+      rows: [
+        holding({
+          accountName: "Broker A",
+          currentValue: 125,
+          pnlAmount: undefined,
+        }),
+        holding({
+          accountName: "Broker B",
+          currentValue: 75,
+          pnlAmount: undefined,
+        }),
+        holding({ accountName: "Broker C", currentValue: 125, pnlAmount: 0 }),
+        holding({
+          accountName: "US broker",
+          currency: "USD",
+          investedAmount: 10,
+          currentValue: 12.5,
+          pnlAmount: undefined,
+        }),
+      ],
+      pnlAmount: 200,
+      pnlPercent: 18.18,
+      overviewPnl: 225,
+      oldInrPnl: "0",
+    },
+    {
+      name: "mixed reported and absent P&L in INR and USD",
+      rows: [
+        holding({ currentValue: 125, pnlAmount: undefined }),
+        holding({
+          symbol: "BETA",
+          instrumentName: "BETA",
+          currentValue: 75,
+          pnlAmount: -25,
+        }),
+        holding({
+          symbol: "ZERO",
+          instrumentName: "ZERO",
+          currentValue: 100,
+          pnlAmount: 0,
+        }),
+        holding({
+          symbol: "USD",
+          instrumentName: "USD",
+          currency: "USD",
+          investedAmount: 10,
+          currentValue: 12.5,
+          pnlAmount: undefined,
+        }),
+      ],
+      pnlAmount: 200,
+      pnlPercent: 18.18,
+      overviewPnl: 200,
+      oldInrPnl: "-25",
+    },
+  ])(
+    "serves corrected $name for new and already-persisted projections",
+    async ({ rows, pnlAmount, pnlPercent, overviewPnl, oldInrPnl }) => {
+      const state = await setupPortfolio(rows);
+      const readViews = () =>
+        Promise.all([
+          state.owner.query(api.portfolio.overview, {}),
+          state.owner.query(api.portfolio.assetClassDetail, {
+            assetClass: "indian_stock",
+          }),
+          state.owner.query(api.portfolio.positions, {}),
+        ]);
+      const [overview, asset, positions] = await readViews();
+
+      expect(overview.summary.pnlAmount).toBe(overviewPnl);
+      expect(asset.summary).toMatchObject({ pnlAmount, pnlPercent });
+      expect(asset.summary.investedAmount).toBe(
+        overview.summary.investedAmount,
+      );
+      expect(asset.summary.currentValue).toBe(overview.summary.currentValue);
+      expect(asset.holdings.map((row) => row.pnlAmount).sort()).toEqual(
+        positions.current.map((row) => row.pnlAmount).sort(),
+      );
+
+      // Recreate the old aggregation without changing retained holding rows or
+      // facts. A new reader must work before the next Import Batch is committed.
+      const persisted = await state.t.run(async (ctx) => {
+        const household = await ctx.db.query("households").unique();
+        const versionId = household?.activePortfolioVersionId;
+        if (!versionId) throw new Error("Missing active test version");
+
+        const version = await ctx.db.get("portfolioVersions", versionId);
+        if (!version) throw new Error("Missing test version");
+
+        const summary = await ctx.db
+          .query("portfolioSummaries")
+          .withIndex("by_versionId", (q) => q.eq("versionId", versionId))
+          .unique();
+        const assetSummary = await ctx.db
+          .query("assetClassSummaries")
+          .withIndex("by_versionId_and_assetClass", (q) =>
+            q.eq("versionId", versionId).eq("assetClass", "indian_stock"),
+          )
+          .unique();
+        if (!summary || !assetSummary) throw new Error("Missing test summary");
+
+        const oldTotals = summary.totals.map((total) => ({
+          ...total,
+          pnlAmount: total.currency === "INR" ? oldInrPnl : "0",
+        }));
+        await ctx.db.patch("portfolioSummaries", summary._id, {
+          totals: oldTotals,
+        });
+        await ctx.db.patch("assetClassSummaries", assetSummary._id, {
+          totals: oldTotals,
+        });
+
+        return {
+          household,
+          version,
+          positions: await ctx.db.query("portfolioPositions").collect(),
+          facts: await ctx.db.query("holdingSnapshots").collect(),
+          summaryId: summary._id,
+          assetSummaryId: assetSummary._id,
+          oldTotals,
+        };
+      });
+      const corrected = await readViews();
+
+      expect(corrected).toEqual([overview, asset, positions]);
+      await state.t.run(async (ctx) => {
+        expect(await ctx.db.get("households", persisted.household._id)).toEqual(
+          persisted.household,
+        );
+        expect(
+          await ctx.db.get("portfolioVersions", persisted.version._id),
+        ).toEqual(persisted.version);
+        expect(await ctx.db.query("portfolioPositions").collect()).toEqual(
+          persisted.positions,
+        );
+        expect(await ctx.db.query("holdingSnapshots").collect()).toEqual(
+          persisted.facts,
+        );
+        expect(
+          (await ctx.db.get("portfolioSummaries", persisted.summaryId))?.totals,
+        ).toEqual(persisted.oldTotals);
+        expect(
+          (await ctx.db.get("assetClassSummaries", persisted.assetSummaryId))
+            ?.totals,
+        ).toEqual(persisted.oldTotals);
+      });
+    },
+  );
+
   it("publishes separate account positions, histories, aliases and independent exits", async () => {
     const state = await setupPortfolio([
       holding({ accountName: "Broker A", currentValue: 125.1234 }),

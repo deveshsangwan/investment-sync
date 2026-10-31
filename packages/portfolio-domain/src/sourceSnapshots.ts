@@ -151,7 +151,13 @@ export function nativeTotals(
       currency,
       investedAmount,
       currentValue,
-      pnlAmount: sumDecimals(selected.map((row) => row.pnlAmount ?? "0")),
+      pnlAmount: sumDecimals(
+        selected.map(
+          (row) =>
+            row.pnlAmount ??
+            subtractDecimals(row.currentValue, row.investedAmount),
+        ),
+      ),
     };
   });
 }

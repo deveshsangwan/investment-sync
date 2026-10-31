@@ -99,6 +99,80 @@ const quote = {
 };
 
 describe("portfolio publication", () => {
+  it.each([
+    [125, 25],
+    [75, -25],
+    [100, 0],
+  ])(
+    "reconciles overview and asset-class gains when source P&L is absent at %s",
+    (currentValue, pnlAmount) => {
+      const rows = [holding({ currentValue, pnlAmount: undefined })];
+      const publication = publish(rows);
+      const views = valuePortfolioPublication(publication.projection);
+
+      expect(views.overview.summary).toMatchObject({
+        pnlAmount,
+        pnlPercent: pnlAmount,
+      });
+      expect(views.assetClassDetails[0]?.summary).toMatchObject({
+        pnlAmount,
+        pnlPercent: pnlAmount,
+      });
+      expect(publication.reconciliation.nativeTotals[0]?.pnlAmount).toBe(
+        String(pnlAmount),
+      );
+      expect(publication.projection.timeline[0]?.totals[0]?.pnlAmount).toBe(
+        String(pnlAmount),
+      );
+      expect(
+        publication.projection.assetClasses[0]?.timeline[0]?.totals[0]
+          ?.pnlAmount,
+      ).toBe(String(pnlAmount));
+      expect(publication.facts[0]?.row).not.toHaveProperty(
+        "pnlAmount",
+        expect.any(String),
+      );
+      expect(rows[0]?.kind === "holding" && rows[0].pnlAmount).toBeUndefined();
+    },
+  );
+
+  it("reconciles missing and reported P&L after converting supported currencies", () => {
+    const publication = publish([
+      holding({ currentValue: 125, pnlAmount: undefined }),
+      holding({
+        symbol: "BETA",
+        instrumentName: "BETA",
+        currentValue: 75,
+        pnlAmount: -25,
+      }),
+      holding({
+        symbol: "USD",
+        instrumentName: "USD",
+        currency: "USD",
+        investedAmount: 10,
+        currentValue: 12.5,
+        pnlAmount: undefined,
+      }),
+    ]);
+    const views = valuePortfolioPublication(publication.projection, quote);
+
+    expect(views.overview.summary).toMatchObject({
+      investedAmount: 1000,
+      currentValue: 1200,
+      pnlAmount: 200,
+      pnlPercent: 20,
+    });
+    expect(views.assetClassDetails[0]?.summary).toMatchObject({
+      investedAmount: 1000,
+      currentValue: 1200,
+      pnlAmount: 200,
+      pnlPercent: 20,
+    });
+    expect(
+      publication.projection.totals.map((total) => total.pnlAmount),
+    ).toEqual(["0", "2.5"]);
+  });
+
   it("carries unrelated holdings across manual updates without backfilling or inferring payment dates", () => {
     const original = publish([
       holding({ sourceDate: "2024-01-01" }),
