@@ -159,3 +159,44 @@ cases in total.
 Final `pnpm typecheck` exited 0 with 8 successful tasks, 7 cached. The dedicated
 issue-60 PostgreSQL cluster was stopped successfully after SQL checks. Final
 tracked/untracked diff review found only this issue's source, tests, and record.
+
+## Main integration on 2026-10-31
+
+Merged `origin/main` at `03591e2503c985d41a4f5a9d0e7c2b31eaf2b414`
+with an ordinary merge commit. The sole textual conflict appended tests to
+`convex/portfolio.test.ts`; both complete test blocks and existing helpers were
+retained. All changes from PRs 62 through 67 remain in the merge ancestry.
+
+The incremental currency updater already calls `nativeTotals` for each added or
+removed contribution. It therefore uses the same exact missing-P&L fallback.
+No additional runtime change was needed. New tests check gain-to-loss updates,
+complete omission and re-entry in one account while an independent account with
+the same instrument retains reported zero, USD policy losses becoming gains,
+and reported valuation mode. They compare six explicit decimal checkpoints and
+full-history reference selection in forward and reverse input order. A public
+Convex case also checks independent same-instrument accounts, INR/USD conversion,
+and a contradictory explicit zero, before and after replacing cached summaries
+with old totals.
+
+The first new test draft assumed a policy changing currency kept the same
+instrument identity. The domain deliberately includes currency in that identity;
+the fixture was corrected to update a policy within USD. No selection behavior
+or test guard was changed to accommodate that mistaken assumption.
+
+These latest receipts supersede the earlier timeouts for the suites below.
+There are seventeen new regression cases in this PR, including the two
+integration cases. SQL used only the same disposable fake-data local cluster.
+
+| Command                                                                                                                                                                                                                                                                     | Exit | Result                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------- |
+| `pnpm --filter @investment-sync/portfolio-domain test`                                                                                                                                                                                                                      | 0    | 66 passed, 0 skipped.                                                                           |
+| `pnpm --filter @investment-sync/backend test`                                                                                                                                                                                                                               | 0    | 174 passed, 0 skipped, including the existing publication-capacity test.                        |
+| `DATABASE_URL=postgresql://issue60@127.0.0.1:55460/issue60_test TEST_DATABASE_URL=postgresql://issue60@127.0.0.1:55460/issue60_test pnpm --filter @investment-sync/api exec vitest run src/services/portfolio/publication-parity.integration.test.ts --no-file-parallelism` | 0    | 33 passed, 0 skipped, including concurrent independent account updates.                         |
+| `ROLLBACK_TEST_DATABASE_URL=postgresql://issue60:fake-test-only@127.0.0.1:55460/investment_sync_rollback_issue60 node --test --test-concurrency=1 scripts/convex-migration/*.test.cjs`                                                                                      | 0    | 70 passed, 0 skipped, including both previously timed-out fixture guards and real SQL recovery. |
+| `pnpm lint`                                                                                                                                                                                                                                                                 | 0    | 8 successful tasks, 5 cached; one existing web image warning, no errors.                        |
+| `pnpm typecheck`                                                                                                                                                                                                                                                            | 0    | 8 successful tasks, 5 cached.                                                                   |
+| `pnpm format:check`                                                                                                                                                                                                                                                         | 0    | Whole repository passed.                                                                        |
+| `git diff --check`                                                                                                                                                                                                                                                          | 0    | No whitespace errors.                                                                           |
+
+Final integrated-head GitHub CI and review evidence are recorded in PR 68 and
+the merge-queue completion message, rather than predeclared here.

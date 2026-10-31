@@ -470,6 +470,145 @@ describe("manual policy timelines", () => {
     ).toEqual(referenceTimeline([...holdings].reverse(), baseline));
   });
 
+  it("adds and removes missing P&L exactly across independent accounts and mixed currencies", () => {
+    const complete = { ...partialSource, completeness: "complete" as const };
+    const accountA = {
+      accountName: "Broker A",
+      investedAmount: "100.1",
+      pnlAmount: undefined,
+      source: complete,
+    };
+    const policy = {
+      policyId: "currency-policy",
+      sourceType: "manual_snapshot",
+      accountName: "Fake insurer",
+      provider: "Fake insurer",
+      instrumentName: "Currency policy",
+      symbol: undefined,
+      assetClass: "ulip",
+      pnlAmount: undefined,
+      source: { ...partialSource, group: "manual-policy:currency-policy" },
+    } satisfies Partial<HoldingRow>;
+    const holdings = [
+      holding({ ...accountA, currentValue: "125.3" }),
+      holding({
+        accountName: "Broker B",
+        investedAmount: "100",
+        currentValue: "140",
+        pnlAmount: "0",
+        source: complete,
+      }),
+      holding({
+        ...policy,
+        currency: "USD",
+        investedAmount: "10.1",
+        currentValue: "9.9",
+      }),
+      holding({ ...accountA, sourceDate: "2025-01-02", currentValue: "75.2" }),
+      holding({
+        ...accountA,
+        sourceDate: "2025-01-03",
+        symbol: "NEXT",
+        instrumentName: "NEXT",
+        investedAmount: "0",
+        currentValue: "0",
+      }),
+      holding({
+        ...policy,
+        sourceDate: "2025-01-04",
+        currency: "USD",
+        investedAmount: "10.1",
+        currentValue: "12.5",
+      }),
+      holding({
+        ...accountA,
+        sourceDate: "2025-01-05",
+        currentValue: "140",
+        pnlAmount: "0",
+      }),
+      holding({ ...accountA, sourceDate: "2025-01-06", currentValue: "80.1" }),
+    ];
+    const baseline = snapshotTimeline(holdings);
+    const timeline = timelineWithManualPolicies(holdings, baseline);
+
+    expect(
+      timeline.map((point) =>
+        point.totals.map((total) => [
+          total.currency,
+          total.investedAmount,
+          total.currentValue,
+          total.pnlAmount,
+        ]),
+      ),
+    ).toEqual([
+      [
+        ["INR", "200.1", "265.3", "25.2"],
+        ["USD", "10.1", "9.9", "-0.2"],
+      ],
+      [
+        ["INR", "200.1", "215.2", "-24.9"],
+        ["USD", "10.1", "9.9", "-0.2"],
+      ],
+      [
+        ["INR", "100", "140", "0"],
+        ["USD", "10.1", "9.9", "-0.2"],
+      ],
+      [
+        ["INR", "100", "140", "0"],
+        ["USD", "10.1", "12.5", "2.4"],
+      ],
+      [
+        ["INR", "200.1", "280", "0"],
+        ["USD", "10.1", "12.5", "2.4"],
+      ],
+      [
+        ["INR", "200.1", "220.1", "-20"],
+        ["USD", "10.1", "12.5", "2.4"],
+      ],
+    ]);
+
+    const reported: NativeTimelinePoint[] = [
+      {
+        snapshotDate: "2024-12-31",
+        totals: nativeTotals([
+          { currency: "INR", investedAmount: "1000", currentValue: "1100" },
+        ]),
+      },
+    ];
+    const explicitTimeline = timelineWithManualPolicies(
+      holdings,
+      reported,
+      true,
+    );
+
+    expect(explicitTimeline.at(-1)?.totals).toEqual([
+      {
+        currency: "INR",
+        investedAmount: "1000",
+        currentValue: "1100",
+        pnlAmount: "100",
+      },
+      {
+        currency: "USD",
+        investedAmount: "10.1",
+        currentValue: "12.5",
+        pnlAmount: "2.4",
+      },
+    ]);
+    for (const ordered of [holdings, [...holdings].reverse()]) {
+      expect(timelineWithManualPolicies(ordered, baseline)).toEqual(timeline);
+      expect(timelineWithManualPolicies(ordered, baseline)).toEqual(
+        referenceTimeline(ordered, baseline),
+      );
+      expect(timelineWithManualPolicies(ordered, reported, true)).toEqual(
+        explicitTimeline,
+      );
+      expect(timelineWithManualPolicies(ordered, reported, true)).toEqual(
+        referenceTimeline(ordered, reported, true),
+      );
+    }
+  });
+
   it("does not revisit unchanged positions for each manual update", () => {
     const stocks = Array.from({ length: 32 }, (_, index) =>
       holding({ instrumentName: `STOCK-${index}`, symbol: `STOCK-${index}` }),

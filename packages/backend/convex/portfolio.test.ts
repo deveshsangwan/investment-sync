@@ -262,6 +262,33 @@ describe("public portfolio reads", () => {
       oldInrPnl: "0",
     },
     {
+      name: "independent accounts with the same instrument, mixed currencies and reported zero",
+      rows: [
+        holding({
+          accountName: "Broker A",
+          currentValue: 125,
+          pnlAmount: undefined,
+        }),
+        holding({
+          accountName: "Broker B",
+          currentValue: 75,
+          pnlAmount: undefined,
+        }),
+        holding({ accountName: "Broker C", currentValue: 125, pnlAmount: 0 }),
+        holding({
+          accountName: "US broker",
+          currency: "USD",
+          investedAmount: 10,
+          currentValue: 12.5,
+          pnlAmount: undefined,
+        }),
+      ],
+      pnlAmount: 200,
+      pnlPercent: 18.18,
+      overviewPnl: 225,
+      oldInrPnl: "0",
+    },
+    {
       name: "mixed reported and absent P&L in INR and USD",
       rows: [
         holding({ currentValue: 125, pnlAmount: undefined }),
