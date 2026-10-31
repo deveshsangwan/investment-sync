@@ -21,6 +21,7 @@ import {
   type ValuationQuote,
 } from "@investment-sync/portfolio-domain";
 import { parseImportFile } from "@investment-sync/importers";
+import { vestedWorkbook } from "../../../../importers/src/vested-fixtures";
 import { parserGoldenFixtures } from "../../../../importers/src/golden-fixtures";
 import { appRouter } from "../../root";
 import { commitImport, runImportEffect } from "../import-service";
@@ -272,6 +273,149 @@ describeDb("Postgres portfolio publication parity", () => {
       await assertParity(fixture);
     },
   );
+
+  it("matches reported realized lots across same-day fills, overlapping reports and corrections", async () => {
+    const rows = parseImportFile(
+      vestedWorkbook({
+        sales: [
+          [
+            "FAKE",
+            "2025-02-15",
+            "2024-01-01",
+            "1",
+            "20.123456",
+            "10",
+            "10.123456",
+            "execution-z",
+            "lot-z",
+          ],
+          [
+            "FAKE",
+            "2025-02-15",
+            "2024-02-01",
+            "2",
+            "20.123456",
+            "15",
+            "5.123456",
+            "execution-a",
+            "lot-a",
+          ],
+          [
+            "FAKE",
+            "2025-02-15",
+            "2024-03-01",
+            "1",
+            "20.123456",
+            "10",
+            "10.123456",
+          ],
+          [
+            "FAKE",
+            "2025-02-15",
+            "2024-03-01",
+            "1",
+            "20.123456",
+            "10",
+            "10.123456",
+          ],
+        ],
+      }),
+    ).rows;
+    const fixture = await createFixture(db, rows, "vested_drivewealth_xlsx");
+    await commit(fixture);
+    const first = await assertParity(fixture);
+    const detail = first.actual.holdingDetails[0];
+    expect(detail?.holding.isCurrent).toBe(true);
+    expect(detail?.sales).toHaveLength(4);
+    expect(detail?.sales.map((sale) => sale.proceeds)).toEqual(
+      Array(4).fill("20.1235"),
+    );
+    expect(detail?.sales.map((sale) => sale.realizedPnl)).toContain("5.123456");
+
+    const sale = rows.find(
+      (row) =>
+        row.kind === "transaction" &&
+        row.metadata.realizedSale?.executionId === "execution-z",
+    );
+    const identical = rows.find(
+      (row) =>
+        row.kind === "transaction" && !row.metadata.realizedSale?.executionId,
+    );
+    if (!sale || sale.kind !== "transaction" || !identical)
+      throw new Error("Missing generated sale lots");
+    const buy = {
+      ...sale,
+      type: "buy",
+      metadata: { sourceSheet: sale.metadata.sourceSheet },
+    };
+    const mixed = await createBatch(
+      db,
+      fixture.membership,
+      [buy],
+      "vested_drivewealth_xlsx",
+    );
+    await commit(fixture, mixed);
+    const mixedResult = await assertParity(fixture);
+    expect(mixedResult.actual.holdingDetails[0]?.transactions[0]?.type).toBe(
+      "buy",
+    );
+
+    const overlap = await createBatch(
+      db,
+      fixture.membership,
+      [sale, identical],
+      "vested_drivewealth_xlsx",
+      { parserVersion: "overlapping-report" },
+    );
+    await commit(fixture, overlap);
+    expect(
+      (await assertParity(fixture)).actual.holdingDetails[0]?.sales,
+    ).toHaveLength(4);
+
+    const correction = {
+      ...sale,
+      amount: 25.123456,
+      metadata: {
+        ...sale.metadata,
+        realizedSale: {
+          ...sale.metadata.realizedSale,
+          costBasis: "10",
+          realizedPnl: "15.123456",
+        },
+      },
+    };
+    const corrected = await createBatch(
+      db,
+      fixture.membership,
+      [correction],
+      "vested_drivewealth_xlsx",
+      { parserVersion: "corrected-report" },
+    );
+    await commit(fixture, corrected);
+    const result = await assertParity(fixture);
+    expect(result.actual.holdingDetails[0]?.sales).toHaveLength(4);
+    expect(result.actual.holdingDetails[0]?.sales).toContainEqual(
+      expect.objectContaining({
+        executionId: "execution-z",
+        proceeds: "25.1235",
+        costBasis: "10",
+        realizedPnl: "15.123456",
+      }),
+    );
+  });
+
+  it("returns an empty sales contract without exposing internal transaction metadata", async () => {
+    const fixture = await createFixture(db, [holdingRow(), transactionRow()]);
+    await commit(fixture);
+    await assertParity(fixture);
+    const caller = appRouter.createCaller(contextFor(db, fixture));
+    const [position] = await caller.portfolio.holdings();
+    if (!position) throw new Error("Missing generated holding");
+
+    const detail = await caller.portfolio.holdingDetail({ id: position.id });
+    expect(detail?.sales).toEqual([]);
+    expect(detail?.transactions[0]).not.toHaveProperty("metadata");
+  });
 
   it.each([false, true])(
     "matches source priority and NPS details, portal first=%s",

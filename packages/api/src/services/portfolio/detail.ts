@@ -3,8 +3,13 @@ import {
   resolveHoldingXirr,
   type PerformanceValuationInput,
 } from "@investment-sync/analytics";
-import { transactions } from "@investment-sync/db";
+import { transactions, importBatches } from "@investment-sync/db";
 import { and, eq } from "drizzle-orm";
+import {
+  canonicalizeDecimal,
+  realizedSaleSchema,
+  parseStoredRealizedSaleIdentity,
+} from "@investment-sync/importers";
 import {
   assetClassSnapshotRows,
   historyByHoldingPositions,
@@ -61,8 +66,10 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
         currency: transactions.currency,
         notes: transactions.notes,
         metadata: transactions.metadata,
+        sourceType: importBatches.sourceType,
       })
       .from(transactions)
+      .leftJoin(importBatches, eq(importBatches.id, transactions.importBatchId))
       .where(
         and(
           eq(transactions.householdId, ctx.membership.householdId),
@@ -122,6 +129,35 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
     valuations: holdingValuations,
   });
 
+  const orderedTransactions = transactionsForHolding
+    .map((row) => {
+      const storedSale =
+        typeof row.metadata.realizedSaleIdentity === "string"
+          ? parseStoredRealizedSaleIdentity(row.metadata.realizedSaleIdentity)
+          : undefined;
+      const sourceGroup =
+        typeof row.metadata.sourceSheet === "string"
+          ? row.metadata.sourceSheet
+          : "";
+      // Account and instrument are constant within this query. The remaining
+      // source identity orders buys/dividends and sale lots on the same day.
+      const identity = JSON.stringify([
+        row.sourceType ?? "unknown",
+        sourceGroup,
+        row.tradeDate,
+        row.type,
+        storedSale?.[0] ?? canonicalizeDecimal(row.amount),
+        row.currency,
+      ]);
+      return { row, key: JSON.stringify([identity, storedSale?.[1] ?? 1]) };
+    })
+    .sort((left, right) => {
+      if (left.row.tradeDate !== right.row.tradeDate)
+        return left.row.tradeDate < right.row.tradeDate ? -1 : 1;
+      return left.key < right.key ? -1 : left.key > right.key ? 1 : 0;
+    })
+    .map(({ row }) => row);
+
   return {
     holding: {
       ...enrichedLatest,
@@ -167,10 +203,27 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
       };
     }),
     npsDetails,
-    transactions: transactionsForHolding.map((transaction) => ({
-      ...transaction,
-      amount: Number(transaction.amount).toString(),
-    })),
+    sales: orderedTransactions.flatMap((transaction) => {
+      if (transaction.metadata.realizedSale === undefined) return [];
+
+      const sale = realizedSaleSchema.parse(transaction.metadata.realizedSale);
+      return [
+        {
+          id: transaction.id,
+          saleDate: transaction.tradeDate,
+          quantity: transaction.quantity,
+          proceeds: canonicalizeDecimal(transaction.amount),
+          currency: transaction.currency,
+          ...sale,
+        },
+      ];
+    }),
+    transactions: orderedTransactions.map(
+      ({ metadata: _metadata, sourceType: _sourceType, ...transaction }) => ({
+        ...transaction,
+        amount: canonicalizeDecimal(transaction.amount),
+      }),
+    ),
   };
 }
 
