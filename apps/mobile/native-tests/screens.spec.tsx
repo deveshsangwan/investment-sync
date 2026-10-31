@@ -25,7 +25,7 @@ function portfolioViews() {
         accountName,
         provider: "Fake broker",
         instrumentName: "Fake Company",
-        symbol: index === 0 ? "FAKECO" : "FAKECO_SECOND_ACCOUNT",
+        symbol: "FAKECO",
         assetClass: "indian_stock",
         currency: "INR",
         investedAmount: index === 0 ? "200.25" : "150.5",
@@ -44,25 +44,12 @@ function portfolioViews() {
     },
   });
 
-  const valued = valuePortfolioPublication(publication.projection, {
+  return valuePortfolioPublication(publication.projection, {
     status: "stale",
     rate: "1",
     fetchedAt: "2026-05-16T00:00:00Z",
     provider: "frankfurter",
   });
-
-  // Exercise a valid multi-account screen response independently of the
-  // backend's cross-account source selection, which is covered in #15.
-  return {
-    ...valued,
-    positions: {
-      ...valued.positions,
-      current: valued.positions.current.map((position) => ({
-        ...position,
-        symbol: "FAKECO",
-      })),
-    },
-  };
 }
 
 test("overview renders a loading state until a subscription returns, then navigates to holdings", async () => {
