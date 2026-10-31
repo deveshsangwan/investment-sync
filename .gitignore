@@ -17,3 +17,7 @@ web-build
 *.tsbuildinfo
 # Agent worktrees / local tooling scratch
 .claude/worktrees/
+
+# Browser test reports contain only fake fixtures, but are not source.
+playwright-report/
+test-results/
