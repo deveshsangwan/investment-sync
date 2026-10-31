@@ -228,6 +228,107 @@ afterEach(() => {
 });
 
 describe("public portfolio reads", () => {
+  it("publishes separate account positions, histories, aliases and independent exits", async () => {
+    const state = await setupPortfolio([
+      holding({ accountName: "Broker A", currentValue: 125.1234 }),
+      holding({
+        accountName: "Broker B",
+        investedAmount: 200,
+        currentValue: 210.5678,
+      }),
+      transaction({ accountName: "Broker A", amount: 100 }),
+      transaction({ accountName: "Broker B", amount: 200 }),
+    ]);
+    const [positions, overview, asset] = await Promise.all([
+      state.owner.query(api.portfolio.positions, {}),
+      state.owner.query(api.portfolio.overview, {}),
+      state.owner.query(api.portfolio.assetClassDetail, {
+        assetClass: "indian_stock",
+      }),
+    ]);
+
+    expect(positions.current).toHaveLength(2);
+    expect(overview.summary.currentValue).toBe(335.69);
+    expect(overview.summary.investedAmount).toBe(300);
+    expect(overview.summary.allocationByAssetClass[0]?.currentValue).toBe(
+      335.69,
+    );
+    expect(asset.summary.holdingCount).toBe(2);
+    expect(asset.timeline[0]?.currentValue).toBe(335.69);
+
+    const current = await state.owner.query(api.users.current, {});
+    for (const [
+      index,
+      position,
+    ] of state.publication.projection.positions.entries()) {
+      const legacyId = `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`;
+      await state.t.run((ctx) =>
+        ctx.db.insert("legacyHoldingAliases", {
+          householdId: current.householdId,
+          legacyId,
+          positionKey: position.positionKey,
+        }),
+      );
+      const detail = await state.owner.query(api.portfolio.holdingDetail, {
+        positionKey: legacyId,
+      });
+      const assetHolding = asset.holdings.find(
+        (holding) => holding.accountName === detail?.holding.accountName,
+      );
+
+      expect(detail?.holding.isCurrent).toBe(true);
+      expect(detail?.history).toHaveLength(1);
+      expect(detail?.history[0]?.accountName).toBe(
+        position.holding.row.accountName,
+      );
+      expect(detail?.transactions).toHaveLength(1);
+      expect(detail?.transactions[0]?.amount).toBe(
+        position.holding.row.investedAmount,
+      );
+      expect(assetHolding?.xirr).toBe(detail?.holding.xirr);
+    }
+
+    await commitAdditionalPortfolio(
+      state,
+      [
+        holding({
+          accountName: "Broker A",
+          symbol: "BETA",
+          instrumentName: "BETA",
+          sourceDate: "2025-03-02",
+        }),
+        holding({
+          accountName: "Broker B",
+          investedAmount: 200,
+          currentValue: 220,
+          sourceDate: "2025-03-02",
+        }),
+      ],
+      state.publication.facts,
+      2,
+    );
+    const next = await state.owner.query(api.portfolio.positions, {});
+
+    expect(
+      next.current.map((row) => [row.accountName, row.symbol]).sort(),
+    ).toEqual([
+      ["Broker A", "BETA"],
+      ["Broker B", "ALPHA"],
+    ]);
+    expect(next.exited).toMatchObject([
+      { accountName: "Broker A", symbol: "ALPHA" },
+    ]);
+    expect(next.exited).toHaveLength(1);
+    const brokerB = next.current.find((row) => row.accountName === "Broker B");
+    if (!brokerB) throw new Error("Missing Broker B position");
+
+    const detail = await state.owner.query(api.portfolio.holdingDetail, {
+      positionKey: brokerB.id,
+    });
+    expect(detail?.history).toHaveLength(2);
+    expect(detail?.holding.isCurrent).toBe(true);
+  });
+
   it("preserves portfolio summation order when hydrating detail views", async () => {
     const state = await setupPortfolio([
       holding({
@@ -327,7 +428,7 @@ describe("public portfolio reads", () => {
       holding({ sourceDate: "2025-01-01", quantity: 10 }),
       holding({ sourceDate: "2025-03-01", quantity: 6, currentValue: 72 }),
       holding({
-        accountName: "Suppressed Account",
+        metadata: { sourceSheet: "Older Source" },
         sourceDate: "2025-02-01",
         currentValue: 110,
       }),

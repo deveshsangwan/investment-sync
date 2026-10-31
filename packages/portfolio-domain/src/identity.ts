@@ -52,6 +52,7 @@ export function canonicalPositionKey(row: PositionRow): string {
   // Legacy reads group by the symbol-or-name text, even though stored
   // instruments distinguish a symbol from an identical name.
   return JSON.stringify([
+    selectionAccountKey(row),
     row.assetClass,
     row.currency,
     (row.symbol?.trim() || row.instrumentName.trim()).toUpperCase(),
@@ -72,4 +73,49 @@ export function positionKey(row: PositionRow): string {
 
 export function policyPositionKey(policyId: string): string {
   return JSON.stringify(["policy", policyId]);
+}
+
+function selectionAccountKey(row: PositionRow): string {
+  const sheet = row.metadata.sourceSheet ?? "";
+  const isWorkbook =
+    row.provider === "Manual Workbook" &&
+    row.sourceType === "investment_portfolio_xlsx";
+
+  // Only these importer-defined representations describe the same account.
+  // Other brokers, account names and sheets must retain independent positions.
+  if (
+    row.accountName === "US Stocks" &&
+    row.assetClass === "us_stock" &&
+    row.currency === "USD" &&
+    ((isWorkbook && sheet === "US stocks") ||
+      (row.provider === "Vested / DriveWealth" &&
+        row.sourceType === "vested_drivewealth_xlsx" &&
+        sheet === ""))
+  ) {
+    return JSON.stringify(["workbook-vested-us-stocks"]);
+  }
+
+  if (
+    row.currency === "INR" &&
+    ((row.accountName === "Indian Stocks" &&
+      row.assetClass === "indian_stock" &&
+      ((isWorkbook && sheet === "Stock Investments") ||
+        (row.provider === "Tickertape" &&
+          row.sourceType === "tickertape_stock_csv" &&
+          sheet === ""))) ||
+      (row.accountName === "Mutual Funds" &&
+        row.assetClass === "mutual_fund" &&
+        ((isWorkbook && sheet === "Mutual Funds") ||
+          (row.provider === "Tickertape" &&
+            row.sourceType === "tickertape_mutual_fund_csv" &&
+            sheet === ""))))
+  ) {
+    return JSON.stringify([
+      "source-overlap",
+      "workbook-tickertape",
+      row.assetClass,
+    ]);
+  }
+
+  return accountKey(row);
 }
