@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { chunkRows, digest, parseRows, utf8Bytes } from "./model/importLimits";
 import schema from "./schema";
+import { activePortfolio, completeProjection } from "./model/portfolioReads";
 import { modules } from "./test.setup";
 
 const ownerIdentity = {
@@ -1021,6 +1022,7 @@ describe("public portfolio reads", () => {
     await expect(foreign.query(api.accounts.list, {})).resolves.toEqual([
       {
         id: "foreign-account",
+        isArchived: false,
         provider: "Foreign",
         name: "Foreign account",
         accountType: "indian_stock",
@@ -1188,4 +1190,286 @@ describe("public portfolio reads", () => {
       state.t.run((ctx) => ctx.db.query("portfolioVersions").collect()),
     ).resolves.toHaveLength(1);
   });
+});
+
+it("renames without changing import identity; archive immediately changes every portfolio view and restores history", async () => {
+  const { t, owner, publication } = await setupPortfolio([
+    holding(),
+    transaction(),
+  ]);
+  const before = await owner.query(api.portfolio.overview);
+  const beforePositions = await owner.query(api.portfolio.positions);
+  const [account] = await owner.query(api.accounts.list);
+  if (!account) throw new Error("Missing account");
+  const rawBefore = await t.run(async (ctx) => ({
+    facts: await ctx.db.query("holdingSnapshots").collect(),
+    history: await ctx.db.query("portfolioHistoryFacts").collect(),
+  }));
+  await owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    name: "Renamed portfolio",
+  });
+  expect(
+    (await owner.query(api.portfolio.positions)).current[0]?.accountName,
+  ).toBe("Renamed portfolio");
+  const renamedKey = beforePositions.current[0]?.id;
+  if (!renamedKey) throw new Error("Missing position");
+  expect(
+    (
+      await owner.query(api.portfolio.holdingDetail, {
+        positionKey: renamedKey,
+      })
+    )?.holding.accountName,
+  ).toBe("Renamed portfolio");
+  await owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    isArchived: true,
+  });
+  expect(await owner.query(api.accounts.list)).toEqual([]);
+  expect(await owner.query(api.accounts.listAll)).toMatchObject([
+    { name: "Renamed portfolio", isArchived: true },
+  ]);
+  const archived = await owner.query(api.portfolio.positions);
+  expect(archived.current).toEqual([]);
+  expect((await owner.query(api.portfolio.overview)).summary.currentValue).toBe(
+    0,
+  );
+  expect(
+    (
+      await owner.query(api.portfolio.assetClassDetail, {
+        assetClass: "indian_stock",
+      })
+    ).holdings,
+  ).toEqual([]);
+  const key = beforePositions.current[0]?.id;
+  if (!key) throw new Error("Missing position");
+  expect(
+    await owner.query(api.portfolio.holdingDetail, { positionKey: key }),
+  ).toBeNull();
+  expect(
+    await t.run(async (ctx) => ({
+      facts: await ctx.db.query("holdingSnapshots").collect(),
+      history: await ctx.db.query("portfolioHistoryFacts").collect(),
+    })),
+  ).toEqual(rawBefore);
+  await owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    isArchived: false,
+  });
+  expect((await owner.query(api.portfolio.overview)).summary).toEqual(
+    before.summary,
+  );
+  expect(
+    (await owner.query(api.portfolio.positions)).current[0]?.accountName,
+  ).toBe("Renamed portfolio");
+  await commitAdditionalPortfolio(
+    { t, owner },
+    [holding({ currentValue: 140, sourceDate: "2025-04-01" })],
+    publication.facts,
+    2,
+  );
+  expect(await owner.query(api.accounts.list)).toHaveLength(1);
+});
+
+it("authorizes account changes on the server for owner, viewer and foreign household", async () => {
+  const { t, owner } = await setupPortfolio([holding()]);
+  const [account] = await owner.query(api.accounts.list);
+  if (!account) throw new Error("Missing account");
+  const viewerIdentity = {
+    subject: "fake_viewer",
+    issuer: "https://fake.example",
+    tokenIdentifier: "fake|viewer",
+    email: "viewer@example.invalid",
+    emailVerified: true,
+  };
+  const viewer = t.withIdentity(viewerIdentity);
+  await viewer.mutation(api.users.ensureCurrent);
+  await viewer.mutation(
+    api.households.acceptInvite,
+    await owner.action(api.actions.householdInvites.create, {
+      email: viewerIdentity.email,
+    }),
+  );
+  await expect(
+    viewer.mutation(api.accounts.update, {
+      accountKey: account.id,
+      isArchived: true,
+    }),
+  ).rejects.toThrow();
+  const foreign = t.withIdentity({ ...viewerIdentity, subject: "foreign" });
+  await foreign.mutation(api.users.ensureCurrent);
+  await expect(
+    foreign.mutation(api.accounts.update, {
+      accountKey: account.id,
+      name: "Foreign",
+    }),
+  ).rejects.toThrow();
+  await expect(
+    owner.mutation(api.accounts.update, { accountKey: account.id, name: " " }),
+  ).rejects.toThrow();
+  await expect(
+    owner.mutation(api.accounts.update, {
+      accountKey: account.id,
+      name: "x".repeat(121),
+    }),
+  ).rejects.toThrow();
+});
+
+it("archiving an unrelated account preserves duplicate transaction occurrences across reimports", async () => {
+  const state = await setupPortfolio([
+    holding(),
+    transaction(),
+    transaction(),
+    holding({ accountName: "Other", symbol: "BETA", instrumentName: "BETA" }),
+  ]);
+  await commitAdditionalPortfolio(
+    state,
+    [transaction()],
+    state.publication.facts,
+    2,
+  );
+  const positions = await state.owner.query(api.portfolio.positions);
+  const alpha = positions.current.find(
+    (position) => position.symbol === "ALPHA",
+  );
+  const account = (await state.owner.query(api.accounts.list)).find(
+    (account) => account.name === "Other",
+  );
+  if (!alpha || !account) throw new Error("Missing fake portfolio");
+  const before = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alpha.id,
+  });
+  expect(before?.transactions).toHaveLength(2);
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: account.id,
+    isArchived: true,
+  });
+  const after = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alpha.id,
+  });
+  expect(after?.transactions).toEqual(before?.transactions);
+});
+
+it("archives one account without mixing another account's same-symbol history, aliases or decimal cash flows", async () => {
+  const state = await setupPortfolio([
+    holding({
+      accountName: "Broker A",
+      provider: "Broker A",
+      currentValue: 125.3,
+      investedAmount: 100.1,
+      pnlAmount: undefined,
+    }),
+    holding({
+      accountName: "Broker B",
+      provider: "Broker B",
+      currentValue: 150.7,
+      investedAmount: 120.2,
+      pnlAmount: undefined,
+    }),
+    transaction({
+      accountName: "Broker A",
+      provider: "Broker A",
+      amount: 100.1,
+    }),
+    transaction({
+      accountName: "Broker B",
+      provider: "Broker B",
+      amount: 120.2,
+    }),
+  ]);
+  const accounts = await state.owner.query(api.accounts.list);
+  const accountA = accounts.find((account) => account.name === "Broker A");
+  const positions = await state.owner.query(api.portfolio.positions);
+  const positionA = positions.current.find(
+    (position) => position.accountName === "Broker A",
+  );
+  const positionB = positions.current.find(
+    (position) => position.accountName === "Broker B",
+  );
+  if (!accountA || !positionA || !positionB)
+    throw new Error("Missing independent account fixtures");
+  const alias = "fake-account-b-alias";
+  const current = await state.owner.query(api.users.current);
+  await state.t.run((ctx) =>
+    ctx.db.insert("legacyHoldingAliases", {
+      householdId: current.householdId,
+      legacyId: alias,
+      positionKey: positionB.id,
+    }),
+  );
+  const beforeB = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alias,
+  });
+  expect(beforeB?.transactions).toHaveLength(1);
+  expect(beforeB?.holding.pnlAmount).toBeNull();
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: accountA.id,
+    isArchived: true,
+  });
+
+  expect(
+    (await state.owner.query(api.portfolio.positions)).current.map(
+      (position) => position.id,
+    ),
+  ).toEqual([positionB.id]);
+  expect(
+    (await state.owner.query(api.portfolio.overview)).summary,
+  ).toMatchObject({
+    currentValue: 150.7,
+    investedAmount: 120.2,
+    pnlAmount: 30.5,
+  });
+  const afterB = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alias,
+  });
+  expect(afterB?.history).toEqual(beforeB?.history);
+  expect(afterB?.transactions).toEqual(beforeB?.transactions);
+  expect(
+    await state.owner.query(api.portfolio.holdingDetail, {
+      positionKey: positionA.id,
+    }),
+  ).toBeNull();
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: accountA.id,
+    isArchived: false,
+  });
+  expect(
+    (await state.owner.query(api.portfolio.positions)).current,
+  ).toHaveLength(2);
+});
+
+it("keeps the full archived read model in publication asset-class order and reports its real reads", async () => {
+  const { owner, publication } = await setupPortfolio([
+    holding({
+      accountName: "US",
+      assetClass: "us_stock",
+      currency: "USD",
+      sourceDate: "2025-03-03",
+    }),
+    holding({
+      accountName: "Funds",
+      assetClass: "mutual_fund",
+      sourceDate: "2025-03-02",
+    }),
+    holding({ accountName: "Stocks", sourceDate: "2025-03-01" }),
+  ]);
+  const readModel = await owner.run(async (ctx) => {
+    const active = await activePortfolio(ctx);
+    if (!active) throw new Error("Missing published portfolio");
+    return completeProjection(ctx, active);
+  });
+
+  expect(
+    readModel.projection.assetClasses.map((asset) => asset.assetClass),
+  ).toEqual(
+    publication.projection.assetClasses.map((asset) => asset.assetClass),
+  );
+  expect(readModel.counts).toMatchObject({
+    ranges: 5,
+    positions: 3,
+    historyFacts: 3,
+  });
+  expect(readModel.counts.timelinePoints).toBe(
+    publication.projection.timeline.length,
+  );
 });

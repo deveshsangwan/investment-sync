@@ -279,3 +279,202 @@ test("storage transport failure is visible and a second real upload recovers", a
     page.getByRole("heading", { name: "Review detected data" }),
   ).toBeVisible();
 });
+
+test("owner manages archived accounts and email-bound invitations while shared viewers stay isolated", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  await signIn(page);
+  await page.getByRole("link", { name: "Accounts", exact: true }).click();
+  const account = page
+    .getByRole("listitem")
+    .filter({ hasText: "Indian Stocks" });
+  await account.getByRole("button", { name: "Rename", exact: true }).click();
+  await page
+    .getByLabel("Account name", { exact: true })
+    .fill("Shared stock account");
+  await page.getByRole("button", { name: "Save name", exact: true }).click();
+  const renamed = page
+    .getByRole("listitem")
+    .filter({ hasText: "Shared stock account" });
+  await expect(
+    renamed.getByRole("button", { name: "Archive", exact: true }),
+  ).toBeVisible();
+  await renamed.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(
+    renamed.getByRole("button", { name: "Unarchive", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Portfolio summary" }),
+  ).toContainText("250");
+  await expect(page.getByText("FAKECO", { exact: true })).toHaveCount(0);
+  const owner = await clientFor("e2e_owner");
+  expect(
+    (await owner.query(api.portfolio.overview, {})).summary.currentValue,
+  ).toBe(250.25);
+
+  await page.getByRole("link", { name: "Accounts", exact: true }).click();
+  await renamed.getByRole("button", { name: "Unarchive", exact: true }).click();
+  await expect(
+    renamed.getByRole("button", { name: "Archive", exact: true }),
+  ).toBeVisible();
+  expect(
+    (await owner.query(api.portfolio.overview, {})).summary.currentValue,
+  ).toBe(500.5);
+  expect(
+    (await owner.query(api.portfolio.positions, {})).current.find(
+      (holding) => holding.symbol === "FAKECO",
+    )?.accountName,
+  ).toBe("Shared stock account");
+
+  await page
+    .getByLabel("Invitee email", { exact: true })
+    .fill("e2e_other@example.invalid");
+  await page
+    .getByRole("button", { name: "Create invitation link", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Invitation link", { exact: true }),
+  ).toBeVisible();
+  const revokedLink = await page
+    .getByLabel("Invitation link", { exact: true })
+    .inputValue();
+  await page
+    .getByRole("listitem")
+    .filter({ hasText: "e2e_other@example.invalid" })
+    .getByRole("button", { name: "Revoke", exact: true })
+    .click();
+  await expect(
+    page.getByText("No pending invitations.", { exact: true }),
+  ).toBeVisible();
+  const other = await clientFor("e2e_other");
+  const originalHousehold = await other.query(api.users.current, {});
+  const revokedToken = new URLSearchParams(
+    new URL(revokedLink).hash.slice(1),
+  ).get("invite");
+  if (!revokedToken) throw new Error("Missing generated test token");
+  await expect(
+    other.mutation(api.households.acceptInvite, { token: revokedToken }),
+  ).rejects.toThrow();
+  await page
+    .getByRole("button", { name: "Create invitation link", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Invitation link", { exact: true }),
+  ).toBeVisible();
+  const link = await page
+    .getByLabel("Invitation link", { exact: true })
+    .inputValue();
+  const token = new URLSearchParams(new URL(link).hash.slice(1)).get("invite");
+  if (!token) throw new Error("Missing generated test token");
+
+  const context = await browser.newContext();
+  const sharedPage = await context.newPage();
+  try {
+    await sharedPage.goto(link);
+    await sharedPage
+      .getByRole("button", { name: "e2e_other", exact: true })
+      .click();
+    await sharedPage
+      .getByRole("button", { name: "Accept invitation as viewer", exact: true })
+      .click();
+    await expect(
+      sharedPage.getByRole("heading", { name: "Accounts", exact: true }),
+    ).toBeVisible();
+    await expect(
+      sharedPage.getByText("Shared stock account", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      sharedPage.getByRole("button", { name: "Rename", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      sharedPage.getByRole("button", {
+        name: "Create invitation link",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    expect((await other.query(api.users.current, {})).role).toBe("viewer");
+    const [sharedAccount] = await other.query(api.accounts.list, {});
+    if (!sharedAccount) throw new Error("Missing shared account");
+    await expect(
+      other.mutation(api.accounts.update, {
+        accountKey: sharedAccount.id,
+        isArchived: true,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      other.mutation(api.households.acceptInvite, { token }),
+    ).rejects.toThrow();
+
+    await sharedPage
+      .getByRole("button", { name: /My Portfolio \(owner\)/ })
+      .click();
+    await expect(
+      sharedPage.getByText("No portfolio accounts yet", { exact: true }),
+    ).toBeVisible();
+    expect((await other.query(api.users.current, {})).householdId).toBe(
+      originalHousehold.householdId,
+    );
+    expect((await other.query(api.portfolio.overview, {})).holdings).toEqual(
+      [],
+    );
+    await sharedPage
+      .getByRole("button", { name: /My Portfolio \(viewer\)/ })
+      .click();
+    await expect(
+      sharedPage.getByText("Shared stock account", { exact: true }),
+    ).toBeVisible();
+
+    const member = page
+      .getByRole("listitem")
+      .filter({ hasText: "e2e_other@example.invalid" });
+    await member.getByRole("button", { name: "Remove", exact: true }).click();
+    await member
+      .getByRole("button", { name: "Confirm removal", exact: true })
+      .click();
+    await expect(
+      sharedPage.getByText("No portfolio accounts yet", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      other.mutation(api.households.acceptInvite, { token }),
+    ).rejects.toThrow();
+
+    const nextOwner = page
+      .getByRole("listitem")
+      .filter({ hasText: "e2e_viewer@example.invalid" });
+    await nextOwner
+      .getByRole("button", { name: "Transfer ownership", exact: true })
+      .click();
+    await expect(
+      nextOwner.getByRole("button", { name: "Confirm transfer", exact: true }),
+    ).toBeDisabled();
+    await nextOwner
+      .getByLabel("Confirmation", { exact: true })
+      .fill("TRANSFER");
+    await nextOwner
+      .getByRole("button", { name: "Confirm transfer", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Create invitation link", exact: true }),
+    ).toHaveCount(0);
+    const successor = await clientFor("e2e_viewer");
+    expect((await successor.query(api.users.current, {})).role).toBe("owner");
+    expect(
+      (await successor.query(api.households.auditEvents, {})).map(
+        (event) => event.action,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "invite.created",
+        "invite.revoked",
+        "invite.accepted",
+        "member.removed",
+        "ownership.transferred",
+      ]),
+    );
+  } finally {
+    await context.close();
+  }
+});

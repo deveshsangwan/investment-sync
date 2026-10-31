@@ -182,7 +182,10 @@ try {
       response.setHeader("Content-Type", "application/json");
       response.end(JSON.stringify({ keys: [jwk] }));
     } else if (["e2e_owner", "e2e_viewer", "e2e_other"].includes(subject)) {
-      void new SignJWT({ email: `${subject}@example.invalid` })
+      void new SignJWT({
+        email: `${subject}@example.invalid`,
+        email_verified: true,
+      })
         .setProtectedHeader({ alg: "RS256", kid: jwk.kid })
         .setSubject(subject)
         .setIssuer(issuer)

@@ -212,6 +212,7 @@ export function timelineWithManualPolicies(
   holdings: HoldingFact[],
   baseline: NativeTimelinePoint[],
   hasExplicitValuations = false,
+  archivedAccountKeys: ReadonlySet<string> = new Set(),
 ): NativeTimelinePoint[] {
   const manualDates = holdings
     .filter(
@@ -272,7 +273,11 @@ export function timelineWithManualPolicies(
       nextReportedPoint = reportedPoints.next();
     }
 
-    updateTimelineSelection(selection, hasExplicitValuations);
+    updateTimelineSelection(
+      selection,
+      hasExplicitValuations,
+      archivedAccountKeys,
+    );
     const selectedTotals = [...selection.totals]
       .sort(([left], [right]) => compareText(left, right))
       .map(([currency, total]) => ({
@@ -388,6 +393,7 @@ function retainTimelineCandidate(
 function updateTimelineSelection(
   selection: TimelineSelection,
   hasExplicitValuations: boolean,
+  archivedAccountKeys: ReadonlySet<string>,
 ) {
   // Only a changed group candidate can alter a position's winner. Other source
   // groups stay indexed so a complete omission can reveal an older candidate.
@@ -403,13 +409,20 @@ function updateTimelineSelection(
     const previous = selection.current.get(key);
     if (winner === previous) continue;
 
-    if (previous && (!hasExplicitValuations || previous.fact.row.policyId)) {
+    if (
+      previous &&
+      !archivedAccountKeys.has(previous.fact.accountKey) &&
+      (!hasExplicitValuations || previous.fact.row.policyId)
+    ) {
       updateTimelineCurrencyTotal(selection.totals, previous.fact, -1);
     }
 
     if (winner) {
       selection.current.set(key, winner);
-      if (!hasExplicitValuations || winner.fact.row.policyId) {
+      if (
+        !archivedAccountKeys.has(winner.fact.accountKey) &&
+        (!hasExplicitValuations || winner.fact.row.policyId)
+      ) {
         updateTimelineCurrencyTotal(selection.totals, winner.fact, 1);
       }
     } else {

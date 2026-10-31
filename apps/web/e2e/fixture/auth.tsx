@@ -57,3 +57,11 @@ export function useAuth() {
     [subject, getToken],
   );
 }
+
+export function SignInButton({ children }: { children: ReactNode }) {
+  return children;
+}
+
+export function SignUpButton({ children }: { children: ReactNode }) {
+  return children;
+}

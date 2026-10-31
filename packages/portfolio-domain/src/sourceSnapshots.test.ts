@@ -99,6 +99,7 @@ function referenceTimeline(
   holdings: HoldingFact[],
   baseline: NativeTimelinePoint[],
   hasExplicitValuations = false,
+  archivedAccountKeys: ReadonlySet<string> = new Set(),
 ) {
   const firstManualDate = holdings
     .filter(
@@ -123,7 +124,7 @@ function referenceTimeline(
     ...dates.map((snapshotDate) => {
       const current = selectPositions(
         holdings.filter((fact) => fact.snapshotDate <= snapshotDate),
-      ).current;
+      ).current.filter((fact) => !archivedAccountKeys.has(fact.accountKey));
       const reportedTotals =
         baseline.filter((point) => point.snapshotDate <= snapshotDate).at(-1)
           ?.totals ?? [];
@@ -834,4 +835,71 @@ describe("manual policy timelines", () => {
       );
     }
   });
+});
+
+it("keeps incremental exact totals equal to select-then-hide reference across account archives and omissions", () => {
+  const workbook = holding({
+    sourceType: "investment_portfolio_xlsx",
+    provider: "Manual Workbook",
+    accountName: "US Stocks",
+    currency: "USD",
+    assetClass: "us_stock",
+    metadata: { sourceSheet: "US stocks" },
+    investedAmount: "100.1",
+    currentValue: "125.3",
+    pnlAmount: undefined,
+    source: { ...partialSource, completeness: "complete" },
+  });
+  const vested = holding({
+    ...workbook.row,
+    sourceType: "vested_drivewealth_xlsx",
+    provider: "Vested / DriveWealth",
+    metadata: {},
+    sourceDate: "2025-01-02",
+    currentValue: "140.0001",
+  });
+  const independent = holding({
+    ...workbook.row,
+    provider: "Independent Broker",
+    accountName: "Separate Account",
+    investedAmount: "0.0001",
+    currentValue: "0.0002",
+    pnlAmount: "0",
+  });
+  const policy = manualPolicy("2025-01-01", "10.0001");
+  const holdings = [
+    workbook,
+    vested,
+    independent,
+    policy,
+    holding({
+      ...vested.row,
+      symbol: "REPLACEMENT",
+      instrumentName: "REPLACEMENT",
+      sourceDate: "2025-01-03",
+      currentValue: "110.1",
+    }),
+    manualPolicy("2025-01-04", "9.9999"),
+  ];
+
+  for (const archived of [
+    new Set([vested.accountKey]),
+    new Set([vested.accountKey, policy.accountKey]),
+    new Set([independent.accountKey]),
+  ]) {
+    const baseline = snapshotTimeline(
+      holdings.filter((fact) => !archived.has(fact.accountKey)),
+    );
+    for (const ordered of [holdings, [...holdings].reverse()]) {
+      const result = timelineWithManualPolicies(
+        ordered,
+        baseline,
+        false,
+        archived,
+      );
+      expect(result).toEqual(
+        referenceTimeline(ordered, baseline, false, archived),
+      );
+    }
+  }
 });

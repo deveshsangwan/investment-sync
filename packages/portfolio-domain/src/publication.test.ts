@@ -7,6 +7,7 @@ import type {
 } from "@investment-sync/importers";
 import {
   buildPortfolioPublication,
+  visibleAccountProjection,
   valuePortfolioPublication,
   type PortfolioFact,
   type PublicationInput,
@@ -1012,4 +1013,77 @@ describe("portfolio publication", () => {
       valuePortfolioPublication(result.projection).overview.summary,
     ).toMatchObject({ investedAmount: 0, currentValue: 0, asOfDate: null });
   });
+});
+
+it("archives a selected overlap source while retaining independent same-symbol accounts and exact history", () => {
+  const original = publish([
+    holding({
+      sourceType: "investment_portfolio_xlsx",
+      provider: "Manual Workbook",
+      accountName: "Indian Stocks",
+      metadata: { sourceSheet: "Stock Investments" },
+      currentValue: 0.1,
+      investedAmount: 0.1,
+    }),
+    holding({
+      provider: "Tickertape",
+      accountName: "Indian Stocks",
+      sourceDate: "2025-02-01",
+      currentValue: 0.2,
+      investedAmount: 0.2,
+    }),
+    holding({
+      accountName: "Independent",
+      symbol: "BETA",
+      instrumentName: "BETA",
+      currentValue: 0.3,
+      investedAmount: 0.3,
+    }),
+    holding({
+      provider: "Other Broker",
+      accountName: "Separate Account",
+      currentValue: 0.4,
+      investedAmount: 0.4,
+    }),
+  ]);
+  const selected = original.projection.positions.find(
+    (position) =>
+      position.status === "current" &&
+      position.holding.row.provider === "Tickertape",
+  );
+  if (!selected) throw new Error("Missing selected source");
+  const archived = visibleAccountProjection(
+    original.projection,
+    new Set([selected.holding.accountKey]),
+  );
+
+  expect(
+    archived.positions
+      .filter((position) => position.status === "current")
+      .map((position) => position.holding.row.accountName)
+      .sort(),
+  ).toEqual(["Independent", "Separate Account"]);
+  expect(archived.totals[0]?.currentValue).toBe("0.7");
+  expect(
+    buildPortfolioPublication({ existingFacts: original.facts }).projection,
+  ).toEqual(original.projection);
+});
+
+it("uses the latest visible date after archival regardless of indexed position ordering", () => {
+  const original = publish([
+    holding({ accountName: "A", symbol: "A", sourceDate: "2025-03-01" }),
+    holding({ accountName: "B", symbol: "B", sourceDate: "2025-04-01" }),
+    holding({ accountName: "C", symbol: "C", sourceDate: "2025-06-01" }),
+  ]);
+  const archivedAccount = original.projection.positions.find(
+    (position) => position.holding.row.symbol === "C",
+  )?.holding.accountKey;
+  if (!archivedAccount) throw new Error("Missing account");
+  const reordered = {
+    ...original.projection,
+    positions: [...original.projection.positions].reverse(),
+  };
+  expect(
+    visibleAccountProjection(reordered, new Set([archivedAccount])).asOfDate,
+  ).toBe("2025-04-01");
 });
