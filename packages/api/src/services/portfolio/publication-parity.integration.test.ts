@@ -320,7 +320,7 @@ describeDb("Postgres portfolio publication parity", () => {
           ],
         ],
       }),
-    ).rows;
+    ).rows.map((row) => ({ ...row }));
     const fixture = await createFixture(db, rows, "vested_drivewealth_xlsx");
     await commit(fixture);
     const first = await assertParity(fixture);
