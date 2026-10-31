@@ -24,3 +24,12 @@ export default function Link(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
     />
   );
 }
+
+export function useRouter() {
+  return {
+    replace(href: string) {
+      window.history.replaceState({}, "", href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+  };
+}

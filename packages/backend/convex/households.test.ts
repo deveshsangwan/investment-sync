@@ -318,3 +318,36 @@ it("blocks transfer during publication and allows only one of two independent co
     ),
   ).toHaveLength(1);
 });
+
+it("fails closed without signed email verification and consumes the same token only after configured verification", async () => {
+  const { t, owner, invitee } = await setup();
+  const invite = await owner.action(api.actions.householdInvites.create, {
+    email: "invitee@example.invalid",
+  });
+  const baseIdentity = {
+    subject: "invitee",
+    issuer: "https://fake.example",
+    tokenIdentifier: "fake|invitee",
+  };
+
+  for (const claims of [
+    baseIdentity,
+    { ...baseIdentity, email: "invitee@example.invalid" },
+    { ...baseIdentity, emailVerified: true },
+  ]) {
+    await expect(
+      t.withIdentity(claims).mutation(api.households.acceptInvite, invite),
+    ).rejects.toMatchObject({ data: { code: "VERIFIED_EMAIL_UNAVAILABLE" } });
+  }
+  await expect(
+    t
+      .withIdentity({ ...identity("invitee"), emailVerified: false })
+      .mutation(api.households.acceptInvite, invite),
+  ).rejects.toMatchObject({ data: { code: "INVALID_INVITE" } });
+  expect(await owner.query(api.households.pendingInvites)).toHaveLength(1);
+  await invitee.mutation(api.households.acceptInvite, invite);
+  expect((await invitee.query(api.users.current)).role).toBe("viewer");
+  await expect(
+    invitee.mutation(api.households.acceptInvite, invite),
+  ).rejects.toThrow();
+});

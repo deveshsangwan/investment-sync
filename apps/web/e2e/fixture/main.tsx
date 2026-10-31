@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { ConvexAppProvider } from "../../src/app/convex-provider";
 import { DashboardClient } from "../../src/app/dashboard/dashboard-client";
 import { UploadsRoute } from "../../src/app/uploads/uploads-client";
+import { SettingsClient } from "../../src/app/settings/settings-client";
+import JoinPage from "../../src/app/join/page";
 import { TestIdentityProvider } from "./auth";
 import Link, { usePathname } from "./navigation";
 
@@ -14,9 +16,18 @@ function App() {
       <ConvexAppProvider>
         <nav aria-label="Portfolio pages">
           <Link href="/uploads">Imports</Link>{" "}
-          <Link href="/dashboard">Dashboard</Link>
+          <Link href="/dashboard">Dashboard</Link>{" "}
+          <Link href="/settings">Accounts</Link>
         </nav>
-        {pathname === "/dashboard" ? <DashboardClient /> : <UploadsRoute />}
+        {pathname === "/dashboard" ? (
+          <DashboardClient />
+        ) : pathname === "/settings" ? (
+          <SettingsClient />
+        ) : pathname === "/join" ? (
+          <JoinPage />
+        ) : (
+          <UploadsRoute />
+        )}
       </ConvexAppProvider>
     </TestIdentityProvider>
   );

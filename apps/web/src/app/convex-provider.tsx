@@ -291,14 +291,22 @@ function HouseholdScope({
   children: ReactNode;
 }) {
   const current = useQuery(api.users.current, enabled ? {} : "skip");
+  const session = useConvexSession();
+  const isHouseholdLoading = enabled && current === undefined;
   const scope = enabled
     ? (current?.householdId ?? "loading-household")
     : "unavailable";
 
   return (
-    <QueryCacheProvider key={scope} enabled={enabled}>
-      <HoldingsNavigationProvider>{children}</HoldingsNavigationProvider>
-    </QueryCacheProvider>
+    <ConvexSessionContext.Provider
+      value={
+        isHouseholdLoading ? { ...session, status: "provisioning" } : session
+      }
+    >
+      <QueryCacheProvider key={scope} enabled={enabled && !isHouseholdLoading}>
+        <HoldingsNavigationProvider>{children}</HoldingsNavigationProvider>
+      </QueryCacheProvider>
+    </ConvexSessionContext.Provider>
   );
 }
 

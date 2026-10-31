@@ -1348,3 +1348,91 @@ it("archiving an unrelated account preserves duplicate transaction occurrences a
   });
   expect(after?.transactions).toEqual(before?.transactions);
 });
+
+it("archives one account without mixing another account's same-symbol history, aliases or decimal cash flows", async () => {
+  const state = await setupPortfolio([
+    holding({
+      accountName: "Broker A",
+      provider: "Broker A",
+      currentValue: 125.3,
+      investedAmount: 100.1,
+      pnlAmount: undefined,
+    }),
+    holding({
+      accountName: "Broker B",
+      provider: "Broker B",
+      currentValue: 150.7,
+      investedAmount: 120.2,
+      pnlAmount: undefined,
+    }),
+    transaction({
+      accountName: "Broker A",
+      provider: "Broker A",
+      amount: 100.1,
+    }),
+    transaction({
+      accountName: "Broker B",
+      provider: "Broker B",
+      amount: 120.2,
+    }),
+  ]);
+  const accounts = await state.owner.query(api.accounts.list);
+  const accountA = accounts.find((account) => account.name === "Broker A");
+  const positions = await state.owner.query(api.portfolio.positions);
+  const positionA = positions.current.find(
+    (position) => position.accountName === "Broker A",
+  );
+  const positionB = positions.current.find(
+    (position) => position.accountName === "Broker B",
+  );
+  if (!accountA || !positionA || !positionB)
+    throw new Error("Missing independent account fixtures");
+  const alias = "fake-account-b-alias";
+  const current = await state.owner.query(api.users.current);
+  await state.t.run((ctx) =>
+    ctx.db.insert("legacyHoldingAliases", {
+      householdId: current.householdId,
+      legacyId: alias,
+      positionKey: positionB.id,
+    }),
+  );
+  const beforeB = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alias,
+  });
+  expect(beforeB?.transactions).toHaveLength(1);
+  expect(beforeB?.holding.pnlAmount).toBeNull();
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: accountA.id,
+    isArchived: true,
+  });
+
+  expect(
+    (await state.owner.query(api.portfolio.positions)).current.map(
+      (position) => position.id,
+    ),
+  ).toEqual([positionB.id]);
+  expect(
+    (await state.owner.query(api.portfolio.overview)).summary,
+  ).toMatchObject({
+    currentValue: 150.7,
+    investedAmount: 120.2,
+    pnlAmount: 30.5,
+  });
+  const afterB = await state.owner.query(api.portfolio.holdingDetail, {
+    positionKey: alias,
+  });
+  expect(afterB?.history).toEqual(beforeB?.history);
+  expect(afterB?.transactions).toEqual(beforeB?.transactions);
+  expect(
+    await state.owner.query(api.portfolio.holdingDetail, {
+      positionKey: positionA.id,
+    }),
+  ).toBeNull();
+  await state.owner.mutation(api.accounts.update, {
+    accountKey: accountA.id,
+    isArchived: false,
+  });
+  expect(
+    (await state.owner.query(api.portfolio.positions)).current,
+  ).toHaveLength(2);
+});
