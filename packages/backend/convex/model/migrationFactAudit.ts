@@ -3,6 +3,7 @@ import { adaptLegacyRow } from "@investment-sync/importers/exact-adapter";
 import { exactNormalizedImportRowSchema } from "@investment-sync/importers/exact-types";
 import { normalizedImportRowSchema } from "@investment-sync/importers/types";
 import {
+  accountKey,
   buildPortfolioPublication,
   canonicalDecimal,
   type PortfolioFact,
@@ -17,6 +18,7 @@ import {
   holdingSchema,
   instrumentSchema,
   parseJson,
+  sourceSnapshotSchema,
   transactionSchema,
   valuationSchema,
 } from "./migrationValidators";
@@ -113,6 +115,9 @@ export function expectedMigratedFact(input: {
       batchId: legacyBatchId ?? "legacy:" + source.id,
       parserVersion: batch?.parser_version ?? "legacy-postgres",
       sequence: Date.parse(source.created_at),
+      ...(batch?.source_sequence == null
+        ? {}
+        : { sourceSequence: Number(batch.source_sequence) }),
       rowNumber: ordinal,
       fallbackDate: new Date(batch ? batch.uploaded_at : source.created_at)
         .toISOString()
@@ -286,4 +291,132 @@ function sourceFinancialAmounts(
         pnlAmount: source.pnl_amount,
         ...("quantity" in source ? { quantity: source.quantity } : {}),
       };
+}
+
+export function expectedMigratedSourceSnapshot(input: {
+  source: z.infer<typeof sourceSnapshotSchema>;
+  account: z.infer<typeof accountSchema>;
+  batch: z.infer<typeof batchSchema>;
+}): PortfolioFact {
+  const { source, account, batch } = input;
+  const row = source.normalized_payload;
+  if (
+    account.id !== source.account_id ||
+    batch.id !== source.import_batch_id ||
+    account.household_id !== source.household_id ||
+    batch.household_id !== source.household_id ||
+    accountKey(row) !==
+      accountKey({ accountName: account.name, provider: account.provider }) ||
+    batch.status !== "committed" ||
+    batch.source_type !== source.source_type ||
+    batch.parser_version !== source.parser_version ||
+    batch.source_sequence !== source.source_sequence ||
+    row.sourceType !== source.source_type ||
+    row.assetClass !== source.asset_class ||
+    row.currency !== source.currency ||
+    row.sourceGroup !== source.source_group ||
+    row.source.group !== source.source_group ||
+    row.completeness !== source.completeness ||
+    (row.sourceDate ?? source.fallback_date) !== source.snapshot_date
+  )
+    throw new Error(
+      "Source snapshot payload, provenance or parents do not match retained evidence",
+    );
+
+  return {
+    row,
+    provenance: {
+      batchId: source.import_batch_id,
+      parserVersion: source.parser_version,
+      sequence: source.source_sequence,
+      sourceSequence: source.source_sequence,
+      rowNumber: source.row_number,
+      fallbackDate: source.fallback_date,
+      legacyId: source.id,
+    },
+  };
+}
+
+export async function auditMigratedSourceSnapshot(
+  ctx: QueryCtx,
+  run: Doc<"migrationRuns">,
+  record: Doc<"migrationRecords">,
+) {
+  const source = sourceSnapshotSchema.parse(parseJson(record.sourceJson));
+  const account = accountSchema.parse(
+    parseJson(
+      (await migrationRecord(ctx, run.runKey, "accounts", source.account_id))
+        .sourceJson,
+    ),
+  );
+  const batch = batchSchema.parse(
+    parseJson(
+      (
+        await migrationRecord(
+          ctx,
+          run.runKey,
+          "import_batches",
+          source.import_batch_id,
+        )
+      ).sourceJson,
+    ),
+  );
+  const expected = expectedMigratedSourceSnapshot({ source, account, batch });
+  const identity = expectedMigratedIdentity(expected);
+  if (identity.kind !== "source_snapshot")
+    throw new Error("Migrated declaration identity mismatch");
+
+  const [target, household, targetAccount, targetBatch] = await Promise.all([
+    migrationTarget(
+      ctx,
+      run.runKey,
+      "source_snapshots",
+      source.id,
+      "sourceSnapshots",
+    ),
+    migrationTarget(
+      ctx,
+      run.runKey,
+      "households",
+      source.household_id,
+      "households",
+    ),
+    migrationTarget(ctx, run.runKey, "accounts", source.account_id, "accounts"),
+    migrationTarget(
+      ctx,
+      run.runKey,
+      "import_batches",
+      source.import_batch_id,
+      "importBatches",
+    ),
+  ]);
+  assertEqual(parseJson(target.factJson), expected);
+  assertEqual(
+    [
+      target.legacyId,
+      target.householdId,
+      target.batchId,
+      target.key,
+      target.accountKey,
+      target.sourceGroupKey,
+      target.date,
+      record.batchLegacyId,
+      record.rowNumber,
+    ],
+    [
+      source.id,
+      household._id,
+      targetBatch._id,
+      JSON.stringify([source.import_batch_id, source.row_number]),
+      identity.accountKey,
+      identity.sourceGroupKey,
+      identity.snapshotDate,
+      source.import_batch_id,
+      source.row_number,
+    ],
+  );
+  assertEqual(
+    [targetAccount.householdId, targetBatch.householdId, targetAccount.key],
+    [household._id, household._id, identity.accountKey],
+  );
 }

@@ -24,6 +24,7 @@ const MAPPING_TARGETS = {
   import_batches: ["importBatches", "sourceFiles"],
   import_rows: ["migrationRecords"],
   holding_snapshots: ["holdingSnapshots"],
+  source_snapshots: ["sourceSnapshots"],
   transactions: ["transactions"],
   portfolio_valuations: ["portfolioValuations"],
   currency_rates: ["currencyRates"],
@@ -178,6 +179,11 @@ function replayParents({ tables, maps, rowsByTable }) {
         };
     if (row.household_id !== mapped(maps.households, account.householdId))
       reject("changed_account_ownership");
+    if (account.isArchived !== undefined) {
+      if (typeof account.isArchived !== "boolean")
+        reject("invalid_account_archive_state");
+      row.is_archived = account.isArchived;
+    }
 
     maps.accounts.set(account._id, id);
     rowsByTable.accounts.set(id, row);
@@ -260,9 +266,25 @@ function transactionUniqueKey(fact, maps, targetTables) {
     findInstrumentId(fact, maps, targetTables),
     date(row.tradeDate),
     text(row.type),
-    scaled(row.amount, 4),
+    row.metadata.realizedSale ? "0" : scaled(row.amount, 4),
     row.currency,
+    realizedSaleSqlIdentity(fact),
   ]);
+}
+
+function realizedSaleSqlIdentity(fact) {
+  if (!fact.row.metadata.realizedSale) return "";
+
+  const [fingerprint, occurrence] = JSON.parse(text(fact.doc.occurrenceKey));
+  const identity = JSON.parse(fingerprint)[6];
+  if (
+    typeof identity !== "string" ||
+    !Number.isSafeInteger(occurrence) ||
+    occurrence < 1
+  )
+    reject("invalid_realized_sale_identity");
+
+  return JSON.stringify([identity, occurrence]);
 }
 
 function findAccountId(fact, maps, tables) {
@@ -317,4 +339,5 @@ module.exports = {
   findInstrumentId,
   replayParents,
   transactionUniqueKey,
+  realizedSaleSqlIdentity,
 };

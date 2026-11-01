@@ -311,7 +311,7 @@ function vestedWorkbookGolden(): ParserGoldenFixture {
     file: { fileName: "fake-vested.xlsx", content: workbookBuffer(workbook) },
     expected: {
       sourceType: "vested_drivewealth_xlsx",
-      parserVersion: "vested-drivewealth-v3",
+      parserVersion: "vested-drivewealth-v5",
       warnings: [],
       rows: [
         {
@@ -329,6 +329,17 @@ function vestedWorkbookGolden(): ParserGoldenFixture {
           pnlAmount: 25,
           pnlPercent: 25,
           metadata: { profitLossInr: 2075 },
+        },
+        {
+          kind: "source_snapshot",
+          sourceType: "vested_drivewealth_xlsx",
+          accountName: "US Stocks",
+          provider: "Vested / DriveWealth",
+          assetClass: "us_stock",
+          currency: "USD",
+          sourceGroup: "",
+          completeness: "complete",
+          metadata: { evidenceSheet: "Unrealized P&L - Summary" },
         },
       ],
     },

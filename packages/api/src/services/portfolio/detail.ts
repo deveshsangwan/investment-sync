@@ -3,10 +3,16 @@ import {
   resolveHoldingXirr,
   type PerformanceValuationInput,
 } from "@investment-sync/analytics";
-import { transactions } from "@investment-sync/db";
+import { transactions, importBatches } from "@investment-sync/db";
 import { and, eq } from "drizzle-orm";
 import {
+  canonicalizeDecimal,
+  realizedSaleSchema,
+  parseStoredRealizedSaleIdentity,
+} from "@investment-sync/importers";
+import {
   assetClassSnapshotRows,
+  sourceSnapshotDates,
   historyByHoldingPositions,
   transactionsByHoldingPositions,
 } from "./data";
@@ -15,6 +21,7 @@ import {
   holdingById,
   holdingHistory,
   latestCurrentHoldings,
+  holdingsAtSourceSnapshot,
 } from "./latest-holdings";
 import {
   buildPortfolioSummary,
@@ -60,8 +67,11 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
         amount: transactions.amount,
         currency: transactions.currency,
         notes: transactions.notes,
+        metadata: transactions.metadata,
+        sourceType: importBatches.sourceType,
       })
       .from(transactions)
+      .leftJoin(importBatches, eq(importBatches.id, transactions.importBatchId))
       .where(
         and(
           eq(transactions.householdId, ctx.membership.householdId),
@@ -103,20 +113,52 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
     toPerformanceValuation(point, usdInrRate?.rate),
   );
   const resolvedXirr = resolveHoldingXirr({
-    cashFlows: transactionsForHolding.map((transaction) => ({
-      date: parseDate(transaction.tradeDate) ?? new Date(transaction.tradeDate),
-      amount: convertToInr(
-        Number(transaction.amount),
-        transaction.currency,
-        usdInrRate?.rate,
-      ),
-      type: transaction.type,
-    })),
+    cashFlows: transactionsForHolding
+      .filter((transaction) => !transaction.metadata.realizedSale)
+      .map((transaction) => ({
+        date:
+          parseDate(transaction.tradeDate) ?? new Date(transaction.tradeDate),
+        amount: convertToInr(
+          Number(transaction.amount),
+          transaction.currency,
+          usdInrRate?.rate,
+        ),
+        type: transaction.type,
+      })),
     terminalValue: latestCurrentValueInInr,
     asOfDate: parseDate(latest.snapshotDate) ?? new Date(),
     sourceXirr,
     valuations: holdingValuations,
   });
+
+  const orderedTransactions = transactionsForHolding
+    .map((row) => {
+      const storedSale =
+        typeof row.metadata.realizedSaleIdentity === "string"
+          ? parseStoredRealizedSaleIdentity(row.metadata.realizedSaleIdentity)
+          : undefined;
+      const sourceGroup =
+        typeof row.metadata.sourceSheet === "string"
+          ? row.metadata.sourceSheet
+          : "";
+      // Account and instrument are constant within this query. The remaining
+      // source identity orders buys/dividends and sale lots on the same day.
+      const identity = JSON.stringify([
+        row.sourceType ?? "unknown",
+        sourceGroup,
+        row.tradeDate,
+        row.type,
+        storedSale?.[0] ?? canonicalizeDecimal(row.amount),
+        row.currency,
+      ]);
+      return { row, key: JSON.stringify([identity, storedSale?.[1] ?? 1]) };
+    })
+    .sort((left, right) => {
+      if (left.row.tradeDate !== right.row.tradeDate)
+        return left.row.tradeDate < right.row.tradeDate ? -1 : 1;
+      return left.key < right.key ? -1 : left.key > right.key ? 1 : 0;
+    })
+    .map(({ row }) => row);
 
   return {
     holding: {
@@ -163,10 +205,27 @@ export async function buildHoldingDetail(ctx: PortfolioContext, id: string) {
       };
     }),
     npsDetails,
-    transactions: transactionsForHolding.map((transaction) => ({
-      ...transaction,
-      amount: Number(transaction.amount).toString(),
-    })),
+    sales: orderedTransactions.flatMap((transaction) => {
+      if (transaction.metadata.realizedSale === undefined) return [];
+
+      const sale = realizedSaleSchema.parse(transaction.metadata.realizedSale);
+      return [
+        {
+          id: transaction.id,
+          saleDate: transaction.tradeDate,
+          quantity: transaction.quantity,
+          proceeds: canonicalizeDecimal(transaction.amount),
+          currency: transaction.currency,
+          ...sale,
+        },
+      ];
+    }),
+    transactions: orderedTransactions.map(
+      ({ metadata: _metadata, sourceType: _sourceType, ...transaction }) => ({
+        ...transaction,
+        amount: canonicalizeDecimal(transaction.amount),
+      }),
+    ),
   };
 }
 
@@ -212,6 +271,55 @@ export async function buildAssetClassDetail(
   const assetClassValuations = valuationsFromSnapshotRows(
     assetClassSnapshots,
     usdInrRate?.rate,
+  );
+  const declarations = await sourceSnapshotDates(ctx, assetClass);
+  const firstDeclarationDate = declarations
+    .map((declaration) => declaration.snapshotDate)
+    .sort()[0];
+  const selectedDates = new Set([
+    ...assetClassValuations.map((point) =>
+      point.date.toISOString().slice(0, 10),
+    ),
+    ...declarations.map((declaration) => declaration.snapshotDate),
+  ]);
+  for (const snapshotDate of selectedDates) {
+    if (!firstDeclarationDate || snapshotDate < firstDeclarationDate) continue;
+    const current = await holdingsAtSourceSnapshot(
+      ctx,
+      snapshotDate,
+      assetClass,
+    );
+    const point = {
+      date: new Date(snapshotDate),
+      investedAmount: current.reduce(
+        (total, row) =>
+          total +
+          convertToInr(
+            Number(row.investedAmount),
+            row.currency,
+            usdInrRate?.rate,
+          ),
+        0,
+      ),
+      currentValue: current.reduce(
+        (total, row) =>
+          total +
+          convertToInr(
+            Number(row.currentValue),
+            row.currency,
+            usdInrRate?.rate,
+          ),
+        0,
+      ),
+    };
+    const index = assetClassValuations.findIndex(
+      (value) => value.date.toISOString().slice(0, 10) === snapshotDate,
+    );
+    if (index === -1) assetClassValuations.push(point);
+    else assetClassValuations[index] = point;
+  }
+  assetClassValuations.sort(
+    (left, right) => left.date.getTime() - right.date.getTime(),
   );
   const [transactionsByHolding, historyByHolding] = await Promise.all([
     transactionsByHoldingPositions(ctx, assetHoldings),

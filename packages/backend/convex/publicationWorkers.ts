@@ -249,6 +249,8 @@ export const finalize = internalMutation({
           fact.provenance.batchId !== batch._id ||
           fact.provenance.rowNumber !== index + 1 ||
           fact.provenance.sequence !== version.sequence ||
+          (fact.provenance.sourceSequence !== undefined &&
+            fact.provenance.sourceSequence !== version.sequence) ||
           fact.provenance.parserVersion !== batch.parserVersion,
       )
     )

@@ -42,10 +42,11 @@ export function testDatabase(): Database | undefined {
  * (--no-file-parallelism). Give each file its own schema if that stops holding.
  */
 export async function resetDatabase(db: Database) {
+  // The migration suite locks users before cascading account deletes. Acquire
+  // parent locks first so the new child table cannot invert that lock order.
   await db.execute(sql`
-    truncate table
-      users, households, household_members, accounts, instruments,
-      holding_snapshots, transactions, portfolio_valuations,
+    truncate table users, households, household_members, accounts, instruments,
+      holding_snapshots, source_snapshots, transactions, portfolio_valuations,
       import_batches, import_rows, currency_rates, prices
     restart identity cascade
   `);

@@ -4,6 +4,15 @@ import type { ImportSourceMetadata } from "./exact-types";
 export function legacySourceMetadata(
   row: NormalizedImportRow,
 ): ImportSourceMetadata {
+  if (row.kind === "source_snapshot") {
+    return {
+      group: row.sourceGroup,
+      completeness: row.completeness,
+      granularity: "instrument",
+      priority: row.sourceType === "nps_csv" ? 100 : 0,
+    };
+  }
+
   const group =
     typeof row.metadata.sourceSheet === "string"
       ? row.metadata.sourceSheet

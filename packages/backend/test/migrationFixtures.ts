@@ -41,6 +41,7 @@ export function fixtures() {
     import_batches: [],
     import_rows: [],
     holding_snapshots: [],
+    source_snapshots: [],
     transactions: [],
     portfolio_valuations: [],
     currency_rates: [],

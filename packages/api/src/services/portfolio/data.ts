@@ -3,12 +3,18 @@ import {
   holdingSnapshots,
   instruments,
   portfolioValuations,
+  sourceSnapshots,
   transactions,
 } from "@investment-sync/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import {
+  holdingsAtSourceSnapshot,
+  retainedAtDeclaredSnapshotSql,
+} from "./latest-holdings";
 import { cachedPortfolioData } from "./cache";
 import {
   aggregateSnapshotTotalsByDate,
+  convertToInr,
   getUsdInrRateIfNeeded,
   holdingPositionKey,
   holdingCashFlowKey,
@@ -54,17 +60,30 @@ export async function cashFlowRows(
         currency: transactions.currency,
       })
       .from(transactions)
-      .where(eq(transactions.householdId, ctx.membership.householdId)),
+      .where(
+        and(
+          eq(transactions.householdId, ctx.membership.householdId),
+          sql`${transactions.metadata}->'realizedSale' is null`,
+        ),
+      ),
   );
 }
 
-export async function holdingSnapshotTimelineRows(ctx: PortfolioContext) {
-  return cachedPortfolioData(ctx, "portfolio.holdingSnapshotTimeline", () =>
-    holdingSnapshotTimelineRowsUncached(ctx),
+export async function holdingSnapshotTimelineRows(
+  ctx: PortfolioContext,
+  includePnl = false,
+) {
+  return cachedPortfolioData(
+    ctx,
+    `portfolio.holdingSnapshotTimeline.${includePnl}`,
+    () => holdingSnapshotTimelineRowsUncached(ctx, includePnl),
   );
 }
 
-async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
+async function holdingSnapshotTimelineRowsUncached(
+  ctx: PortfolioContext,
+  includePnl: boolean,
+) {
   const rows = await ctx.db
     .select({
       accountId: holdingSnapshots.accountId,
@@ -83,7 +102,12 @@ async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
     .from(holdingSnapshots)
     .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
     .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
-    .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
+    .where(
+      and(
+        eq(holdingSnapshots.householdId, ctx.membership.householdId),
+        retainedAtDeclaredSnapshotSql(),
+      ),
+    )
     .orderBy(
       holdingSnapshots.snapshotDate,
       holdingSnapshots.createdAt,
@@ -94,6 +118,59 @@ async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
     ctx.db,
   );
   const totalsByDate = aggregateSnapshotTotalsByDate(rows, usdInrRate?.rate);
+  const declarations = await ctx.db
+    .select({ snapshotDate: sourceSnapshots.snapshotDate })
+    .from(sourceSnapshots)
+    .where(eq(sourceSnapshots.householdId, ctx.membership.householdId));
+  const firstDeclarationDate = declarations
+    .map((declaration) => declaration.snapshotDate)
+    .sort()[0];
+  const selectedDates = new Set([
+    ...totalsByDate.keys(),
+    ...declarations.map((declaration) => declaration.snapshotDate),
+  ]);
+  const pnlByDate = new Map<string, number>();
+  for (const snapshotDate of selectedDates) {
+    if (!firstDeclarationDate || snapshotDate < firstDeclarationDate) continue;
+    const current = await holdingsAtSourceSnapshot(ctx, snapshotDate);
+    pnlByDate.set(
+      snapshotDate,
+      current.reduce(
+        (total, row) =>
+          total +
+          convertToInr(
+            row.pnlAmount === null
+              ? Number(row.currentValue) - Number(row.investedAmount)
+              : Number(row.pnlAmount),
+            row.currency,
+            usdInrRate?.rate,
+          ),
+        0,
+      ),
+    );
+    totalsByDate.set(snapshotDate, {
+      investedAmount: current.reduce(
+        (total, row) =>
+          total +
+          convertToInr(
+            Number(row.investedAmount),
+            row.currency,
+            usdInrRate?.rate,
+          ),
+        0,
+      ),
+      currentValue: current.reduce(
+        (total, row) =>
+          total +
+          convertToInr(
+            Number(row.currentValue),
+            row.currency,
+            usdInrRate?.rate,
+          ),
+        0,
+      ),
+    });
+  }
 
   return [...totalsByDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
@@ -101,6 +178,9 @@ async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
       snapshotDate,
       investedAmount: roundMoney(totals.investedAmount),
       currentValue: roundMoney(totals.currentValue),
+      ...(includePnl && pnlByDate.has(snapshotDate)
+        ? { pnlAmount: roundMoney(pnlByDate.get(snapshotDate) ?? 0) }
+        : {}),
       currency: "INR" as const,
     }));
 }
@@ -138,6 +218,7 @@ export async function assetClassSnapshotRows(
           and(
             eq(holdingSnapshots.householdId, ctx.membership.householdId),
             eq(instruments.assetClass, assetClass),
+            retainedAtDeclaredSnapshotSql(),
           ),
         )
         .orderBy(
@@ -214,6 +295,7 @@ export async function transactionsByHoldingPositions(
       and(
         eq(transactions.householdId, ctx.membership.householdId),
         inArray(transactions.instrumentId, instrumentIds),
+        sql`${transactions.metadata}->'realizedSale' is null`,
       ),
     )
     .orderBy(transactions.tradeDate);
@@ -225,4 +307,19 @@ export async function transactionsByHoldingPositions(
     grouped.set(key, [...(grouped.get(key) ?? []), row]);
   }
   return grouped;
+}
+
+export async function sourceSnapshotDates(
+  ctx: PortfolioContext,
+  assetClass?: AssetClass,
+) {
+  return ctx.db
+    .select({ snapshotDate: sourceSnapshots.snapshotDate })
+    .from(sourceSnapshots)
+    .where(
+      and(
+        eq(sourceSnapshots.householdId, ctx.membership.householdId),
+        assetClass ? eq(sourceSnapshots.assetClass, assetClass) : undefined,
+      ),
+    );
 }

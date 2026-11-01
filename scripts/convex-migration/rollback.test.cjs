@@ -494,6 +494,89 @@ test("rejects the approved identical-occurrence correction when the old unique k
   });
 });
 
+test("replays realized lots and execution corrections without collapsing same-day proceeds", () => {
+  const fixture = createRollbackFixture();
+  const original = JSON.parse(
+    fixture.targetSnapshot.tables.transactions[0].factJson,
+  ).row;
+  const sale = {
+    ...original,
+    type: "sell",
+    metadata: {
+      realizedSale: {
+        acquisitionDate: "2024-01-01",
+        costBasis: "10",
+        realizedPnl: "10",
+        executionId: "fake-execution",
+        lotId: "fake-lot",
+      },
+    },
+  };
+  const identity = JSON.stringify([
+    "realized-execution-lot-v1",
+    sale.tradeDate,
+    "fake-execution",
+    "fake-lot",
+  ]);
+  const fingerprint = JSON.stringify([
+    "account",
+    "instrument",
+    sale.sourceType,
+    sale.source.group,
+    sale.tradeDate,
+    sale.type,
+    identity,
+    sale.currency,
+  ]);
+  const occurrenceKeys = [
+    JSON.stringify([fingerprint, 1]),
+    JSON.stringify([fingerprint, 2]),
+  ];
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "realized-lots",
+    "household-old",
+    "user-old",
+    3,
+    [sale, sale],
+    Date.parse("2026-01-03T12:00:00Z"),
+    { occurrenceKeys },
+  );
+  const correction = {
+    ...sale,
+    amount: "25",
+    metadata: {
+      realizedSale: { ...sale.metadata.realizedSale, realizedPnl: "15" },
+    },
+  };
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "corrected-sale",
+    "household-old",
+    "user-old",
+    4,
+    [correction],
+    Date.parse("2026-01-04T12:00:00Z"),
+    { occurrenceKeys: occurrenceKeys.slice(0, 1) },
+  );
+
+  const plan = buildReverseReplayPlan(fixture);
+  const realized = plan.tables.transactions.filter(
+    (row) => row.metadata.realizedSale,
+  );
+  assert.equal(realized.length, 2);
+  assert.equal(
+    new Set(realized.map((row) => row.metadata.realizedSaleIdentity)).size,
+    2,
+  );
+  assert.ok(
+    realized.some(
+      (row) =>
+        row.amount === "25" && row.metadata.realizedSale.realizedPnl === "15",
+    ),
+  );
+});
+
 test("does not convert an exact source amount into a rounded JS numeric normalized row", () => {
   const fixture = createRollbackFixture();
   appendCommittedBatch(
@@ -960,4 +1043,328 @@ test("restores the first source ISIN for a newly created global instrument", () 
     ).isin,
     row.isin,
   );
+});
+
+function sourceDeclaration() {
+  return {
+    kind: "source_snapshot",
+    sourceType: "manual_snapshot",
+    sourceDate: "2026-01-04",
+    accountName: "Synthetic broker",
+    provider: "Synthetic",
+    assetClass: "us_stock",
+    currency: "USD",
+    sourceGroup: "",
+    completeness: "complete",
+    metadata: { evidence: "generated-complete-report" },
+    source: {
+      group: "",
+      completeness: "complete",
+      granularity: "instrument",
+      priority: 0,
+    },
+    numericProvenance: {},
+  };
+}
+
+test("replays instrument-free complete snapshots with exact scope and provenance without changing instruments", () => {
+  const fixture = createRollbackFixture();
+  const before = buildReverseReplayPlan(fixture);
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "batch-empty-snapshot",
+    "household-old",
+    "user-old",
+    3,
+    [sourceDeclaration()],
+    Date.parse("2026-01-04T00:00:00Z"),
+  );
+  const plan = buildReverseReplayPlan(fixture);
+  assert.deepEqual(plan.tables.instruments, before.tables.instruments);
+  assert.equal(plan.tables.source_snapshots.length, 1);
+  const row = plan.tables.source_snapshots[0];
+  assert.deepEqual(row.normalized_payload, sourceDeclaration());
+  assert.equal(row.source_sequence, 3);
+  assert.equal(row.row_number, 1);
+  assert.equal(row.fallback_date, "2026-01-04");
+  assert.equal(row.parser_version, "fixture-decimal-v1");
+  assert.equal(
+    row.import_batch_id,
+    deterministicUuid("import_batches", "batch-empty-snapshot"),
+  );
+  assert.equal(
+    plan.tables.import_batches.find((batch) => batch.id === row.import_batch_id)
+      .source_sequence,
+    3,
+  );
+  assert.equal(Object.hasOwn(row, "instrument_id"), false);
+  fixture.targetSnapshot.tables.sourceSnapshots.length = 0;
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "conflicting_publication_fact_payload",
+  });
+});
+
+test("current exports cannot omit declaration data and declaration writes invalidate a frozen target", () => {
+  const fixture = createRollbackFixture();
+  fixture.targetSnapshot.schemaVersion = 2;
+  const initial = structuredClone(fixture.targetSnapshot);
+  assert.equal(
+    verifyNoConvexWrites(initial, fixture.targetSnapshot).unchanged,
+    true,
+  );
+  fixture.targetSnapshot.tables.sourceSnapshots.push({
+    _id: "new-declaration",
+    factJson: "{}",
+  });
+  assert.throws(() => verifyNoConvexWrites(initial, fixture.targetSnapshot), {
+    code: "convex_only_writes_detected",
+  });
+  delete fixture.targetSnapshot.tables.sourceSnapshots;
+  assert.throws(() => verifyNoConvexWrites(initial, fixture.targetSnapshot), {
+    code: "incomplete_snapshot_declarations",
+  });
+  fixture.sourceSnapshot.schemaVersion = 2;
+  delete fixture.sourceSnapshot.tables.source_snapshots;
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "incomplete_snapshot_declarations",
+  });
+});
+
+test("historical sealed digests are checked before adding compatibility declaration arrays", () => {
+  const { legacyTables, sealSnapshot } = require("./phase6-artifacts.cjs");
+  const fixture = createRollbackFixture();
+  const body = {
+    schemaVersion: 1,
+    sourceKind: "synthetic",
+    evaluationTime: fixture.sourceSnapshot.evaluationTime,
+    tables: Object.fromEntries(legacyTables.map((table) => [table, []])),
+    sourceFiles: [],
+    views: [],
+  };
+  fixture.sourceSnapshot = sealSnapshot(body);
+  fixture.sourceSnapshot.inputDigest = "0".repeat(64);
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "source_snapshot_checksum_mismatch",
+  });
+});
+
+test("migrated declarations audit original SQL parents and provenance before replay", () => {
+  const fixture = createRollbackFixture();
+  const row = sourceDeclaration();
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "migrated-declaration-batch",
+    "household-old",
+    "user-old",
+    123456,
+    [row],
+    Date.parse("2026-01-04T00:00:00Z"),
+  );
+  const targetBatch = fixture.targetSnapshot.tables.importBatches.at(-1);
+  const sourceBatch = {
+    ...fixture.sourceSnapshot.tables.import_batches[0],
+    id: deterministicUuid("import_batches", "migrated-declaration-batch"),
+    status: "committed",
+    committed_at: "2026-01-04T00:00:00Z",
+    row_count: 1,
+    original_file_name: targetBatch.fileName,
+    file_hash: targetBatch.contentHash,
+    source_sequence: 123456,
+  };
+  fixture.sourceSnapshot.tables.import_batches.push(sourceBatch);
+  fixture.targetSnapshot.mappings.push({
+    legacyTable: "import_batches",
+    legacyId: sourceBatch.id,
+    targetTable: "importBatches",
+    targetId: targetBatch._id,
+    sourceJson: JSON.stringify(sourceBatch),
+  });
+  const { legacyNormalizedRow } = require("./reverse-replay-values.cjs");
+  fixture.sourceSnapshot.tables.import_rows.push({
+    id: deterministicUuid("import_rows", "migrated-declaration-row"),
+    import_batch_id: sourceBatch.id,
+    row_number: 1,
+    normalized_payload: legacyNormalizedRow(row),
+    row_errors: [],
+    is_committed: true,
+    created_at: CREATED_AT,
+  });
+  const source = {
+    id: deterministicUuid("source_snapshots", "migrated"),
+    household_id: sourceBatch.household_id,
+    account_id: fixture.sourceSnapshot.tables.accounts[0].id,
+    import_batch_id: sourceBatch.id,
+    row_number: 1,
+    source_type: row.sourceType,
+    snapshot_date: row.sourceDate,
+    asset_class: row.assetClass,
+    currency: row.currency,
+    source_group: row.sourceGroup,
+    completeness: "complete",
+    normalized_payload: row,
+    source_sequence: 123456,
+    parser_version: "fixture-decimal-v1",
+    fallback_date: "2026-01-04",
+    created_at: CREATED_AT,
+  };
+  fixture.sourceSnapshot.tables.source_snapshots.push(source);
+  const doc = fixture.targetSnapshot.tables.sourceSnapshots.at(-1);
+  doc.legacyId = source.id;
+  doc.factJson = JSON.stringify({
+    row,
+    provenance: {
+      batchId: sourceBatch.id,
+      parserVersion: source.parser_version,
+      sequence: source.source_sequence,
+      sourceSequence: source.source_sequence,
+      rowNumber: source.row_number,
+      fallbackDate: source.fallback_date,
+      legacyId: source.id,
+    },
+  });
+  fixture.targetSnapshot.mappings.push({
+    legacyTable: "source_snapshots",
+    legacyId: source.id,
+    targetTable: "sourceSnapshots",
+    targetId: doc._id,
+    sourceJson: JSON.stringify(source),
+  });
+  const result = buildReverseReplayPlan(fixture);
+  assert.deepEqual(result.tables.source_snapshots, [source]);
+  const fact = JSON.parse(doc.factJson);
+  fact.provenance.rowNumber += 1;
+  doc.factJson = JSON.stringify(fact);
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "invalid_migrated_source_snapshot",
+  });
+});
+
+test("current declarations cannot override committed observation sequence", () => {
+  const fixture = createRollbackFixture();
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "batch-invalid-observation",
+    "household-old",
+    "user-old",
+    3,
+    [sourceDeclaration()],
+    Date.parse("2026-01-04T00:00:00Z"),
+  );
+  const doc = fixture.targetSnapshot.tables.sourceSnapshots[0];
+  const fact = JSON.parse(doc.factJson);
+  fact.provenance.sourceSequence = 999;
+  doc.factJson = JSON.stringify(fact);
+  const tables = fixture.targetSnapshot.tables;
+  const version = tables.portfolioVersions.find(
+    (row) => row.batchId === doc.batchId,
+  );
+  const receipt = tables.publicationReceipts.find(
+    (row) => row.versionId === version._id && row.stage === "facts",
+  );
+  const values = JSON.parse(receipt.payloadJson);
+  values[0].provenance = fact.provenance;
+  receipt.payloadJson = JSON.stringify(values);
+  receipt.bytes = Buffer.byteLength(receipt.payloadJson);
+  receipt.digest = nodeCrypto
+    .createHash("sha256")
+    .update(receipt.payloadJson)
+    .digest("hex");
+  const entry = version.rootManifest.find((row) => row.stage === "facts");
+  entry.bytes = receipt.bytes;
+  entry.digest = receipt.digest;
+  version.rootDigest = nodeCrypto
+    .createHash("sha256")
+    .update(
+      JSON.stringify(
+        version.rootManifest.map((row) => [
+          row.stage,
+          row.index,
+          row.count,
+          row.bytes,
+          row.digest,
+        ]),
+      ),
+    )
+    .digest("hex");
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "committed_fact_input_mismatch",
+  });
+});
+
+for (const granularity of ["portfolio", "asset_class"]) {
+  test(`rejects complete declaration granularity ${granularity} before reverse replay`, () => {
+    const fixture = createRollbackFixture();
+    const row = sourceDeclaration();
+    row.source.granularity = granularity;
+    appendCommittedBatch(
+      fixture.targetSnapshot,
+      "invalid-declaration",
+      "household-old",
+      "user-old",
+      3,
+      [row],
+      Date.parse("2026-01-04T00:00:00Z"),
+    );
+    assert.throws(() => buildReverseReplayPlan(fixture), {
+      code: "invalid_source_snapshot",
+    });
+  });
+}
+
+test("rejects invalid numeric provenance on a complete declaration before reverse replay", () => {
+  const fixture = createRollbackFixture();
+  const row = sourceDeclaration();
+  row.numericProvenance = { unknown: "invalid-tag" };
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "invalid-declaration",
+    "household-old",
+    "user-old",
+    3,
+    [row],
+    Date.parse("2026-01-04T00:00:00Z"),
+  );
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "invalid_source_snapshot",
+  });
+});
+
+test("reverse replay preserves current archive and restore flags for new and migrated accounts", () => {
+  for (const isArchived of [true, false]) {
+    const fixture = createRollbackFixture();
+    for (const account of fixture.targetSnapshot.tables.accounts)
+      account.isArchived = isArchived;
+    const plan = buildReverseReplayPlan(fixture);
+    assert.deepEqual(
+      plan.tables.accounts.map((account) => account.is_archived),
+      [isArchived, isArchived],
+    );
+  }
+});
+
+test("historical account exports without an archive flag retain the frozen SQL state", () => {
+  const fixture = createRollbackFixture();
+  fixture.sourceSnapshot.tables.accounts[0].is_archived = true;
+  const mapping = fixture.targetSnapshot.mappings.find(
+    (entry) => entry.legacyTable === "accounts",
+  );
+  assert.ok(mapping);
+  mapping.sourceJson = JSON.stringify(
+    fixture.sourceSnapshot.tables.accounts[0],
+  );
+  const plan = buildReverseReplayPlan(fixture);
+  assert.equal(
+    plan.tables.accounts.find(
+      (account) => account.id === fixture.sourceSnapshot.tables.accounts[0].id,
+    ).is_archived,
+    true,
+  );
+});
+
+test("reverse replay rejects malformed account archive flags", () => {
+  const fixture = createRollbackFixture();
+  fixture.targetSnapshot.tables.accounts[0].isArchived = "false";
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "invalid_account_archive_state",
+  });
 });

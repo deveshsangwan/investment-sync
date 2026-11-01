@@ -203,6 +203,7 @@ export const inspect = internalQuery({
       "holdingSnapshots",
       "transactions",
       "portfolioValuations",
+      "sourceSnapshots",
     ] as const) {
       const facts = await ctx.db
         .query(table)

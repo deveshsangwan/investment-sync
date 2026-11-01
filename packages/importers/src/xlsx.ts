@@ -1,3 +1,4 @@
+import { parseVestedSales } from "./vested-sales";
 import { parseSourceDecimal } from "./numeric";
 import { parseVestedUnrealizedSheet } from "./vested-unrealized";
 import { getSourceDecimals, withSourceDecimals } from "./source-decimals";
@@ -7,6 +8,7 @@ import type {
   Currency,
   ImportFile,
   NormalizedHoldingRow,
+  NormalizedSourceSnapshotRow,
   NormalizedImportRow,
   ParseResult,
   PortfolioImporter,
@@ -31,9 +33,16 @@ interface WorkbookContext {
   rowsBySheet: Map<string, unknown[][]>;
 }
 
-function createWorkbookContext(file: ImportFile): WorkbookContext {
+function createWorkbookContext(
+  file: ImportFile,
+  preserveFormulaStubs = false,
+): WorkbookContext {
   return {
-    workbook: XLSX.read(file.content, { type: "buffer", cellDates: true }),
+    workbook: XLSX.read(file.content, {
+      type: "buffer",
+      cellDates: true,
+      sheetStubs: preserveFormulaStubs,
+    }),
     rowsBySheet: new Map(),
   };
 }
@@ -58,7 +67,7 @@ function workbookRows(
 
 export const vestedDrivewealthImporter: PortfolioImporter = {
   sourceType: "vested_drivewealth_xlsx",
-  parserVersion: "vested-drivewealth-v3",
+  parserVersion: "vested-drivewealth-v5",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -71,9 +80,11 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
       type: "buffer",
       bookSheets: true,
     });
-    const hasVestedSheets =
-      workbook.SheetNames.includes("Unrealized P&L - Summary ") ||
-      workbook.SheetNames.includes("Realized P&L - Summary ");
+    const hasVestedSheets = workbook.SheetNames.some((name) =>
+      ["Unrealized P&L - Summary", "Realized P&L - Summary"].includes(
+        name.trim(),
+      ),
+    );
     return {
       sourceType: "vested_drivewealth_xlsx",
       confidence: hasVestedSheets ? 0.95 : 0,
@@ -83,19 +94,49 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
     };
   },
   parse(file: ImportFile): ParseResult {
-    const workbook = createWorkbookContext(file);
+    const workbook = createWorkbookContext(file, true);
+    const vestedSheet = (name: string) => {
+      const matches = workbook.workbook.SheetNames.filter(
+        (sheet) => sheet.trim() === name,
+      );
+      if (matches.length > 1)
+        throw new Error(`Vested report has ambiguous ${name} sheets`);
+
+      return matches[0] ?? name;
+    };
+    const vestedRows = (name: string) =>
+      workbookRows(workbook, vestedSheet(name));
     const holdings = parseVestedUnrealizedSheet(
-      workbook.workbook.Sheets["Unrealized P&L - Summary "],
+      workbook.workbook.Sheets[vestedSheet("Unrealized P&L - Summary")],
+    );
+
+    const sales = parseVestedSales(
+      vestedRows("Realized P&L - Breakdown"),
+      vestedRows("Realized P&L - Summary"),
     );
 
     return {
       sourceType: "vested_drivewealth_xlsx",
       parserVersion: this.parserVersion,
-      rows: holdings,
-      warnings:
-        holdings.length === 0
-          ? ["No Vested holdings were parsed from the workbook"]
-          : [],
+      rows: [
+        ...holdings,
+        ...sales.transactions,
+        withSourceDecimals<NormalizedSourceSnapshotRow>(
+          {
+            kind: "source_snapshot",
+            sourceType: "vested_drivewealth_xlsx",
+            accountName: "US Stocks",
+            provider: "Vested / DriveWealth",
+            assetClass: "us_stock",
+            currency: "USD",
+            sourceGroup: "",
+            completeness: "complete",
+            metadata: { evidenceSheet: "Unrealized P&L - Summary" },
+          },
+          {},
+        ),
+      ],
+      warnings: [...sales.warnings],
     };
   },
 };

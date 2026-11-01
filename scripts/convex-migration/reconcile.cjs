@@ -1,6 +1,6 @@
 const { parseArguments, assertAllowedArguments } = require("./runtime.cjs");
 const {
-  legacyTables,
+  snapshotTableNames,
   canonicalJson,
   digest,
   readSnapshot,
@@ -27,6 +27,7 @@ const targetTables = [
   "importRowChunks",
   "importDedupeKeys",
   "holdingSnapshots",
+  "sourceSnapshots",
   "transactions",
   "portfolioValuations",
   "portfolioVersions",
@@ -190,7 +191,7 @@ async function exportTarget(connection, runKey) {
     } while (cursor !== null);
   }
 
-  return { schemaVersion: 1, projectorVersion: "portfolio-v1", tables };
+  return { schemaVersion: 2, projectorVersion: "portfolio-v1", tables };
 }
 
 function sourceDispositions(snapshot) {
@@ -249,7 +250,7 @@ async function reconcileSnapshot(
   }
   reconcileRecords(snapshot, target, findings);
   const records = target.tables.migrationRecords;
-  for (const table of legacyTables) {
+  for (const table of snapshotTableNames(snapshot.schemaVersion)) {
     const actual = records
       .filter((record) => record.legacyTable === table)
       .map((record) => JSON.parse(record.sourceJson));

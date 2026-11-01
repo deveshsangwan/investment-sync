@@ -45,6 +45,7 @@ const TABLE_COLUMNS = {
     "expires_at",
     "processed_at",
     "committed_at",
+    "source_sequence",
   ],
   import_rows: [
     "id",
@@ -53,6 +54,24 @@ const TABLE_COLUMNS = {
     "normalized_payload",
     "row_errors",
     "is_committed",
+    "created_at",
+  ],
+  source_snapshots: [
+    "id",
+    "household_id",
+    "account_id",
+    "import_batch_id",
+    "row_number",
+    "source_type",
+    "snapshot_date",
+    "asset_class",
+    "currency",
+    "source_group",
+    "completeness",
+    "normalized_payload",
+    "source_sequence",
+    "parser_version",
+    "fallback_date",
     "created_at",
   ],
   holding_snapshots: [
@@ -149,6 +168,7 @@ const TIMESTAMP_COLUMNS = new Set([
 ]);
 const DATE_COLUMNS = new Set([
   "snapshot_date",
+  "fallback_date",
   "trade_date",
   "valuation_date",
   "price_date",
@@ -176,6 +196,12 @@ function digest(value) {
 
 function normalizeSqlTables(tables) {
   const result = {};
+  // Callers validate the archive version before this compatibility adapter.
+  tables = { ...tables, source_snapshots: tables.source_snapshots ?? [] };
+  tables.import_batches = tables.import_batches.map((row) => ({
+    source_sequence: null,
+    ...row,
+  }));
 
   for (const [table, columns] of Object.entries(TABLE_COLUMNS)) {
     if (!Array.isArray(tables[table]))
@@ -222,6 +248,13 @@ function normalizeSqlTables(tables) {
 
 function normalizeSqlValue(column, value) {
   if (value === null) return null;
+  if (column === "source_sequence") {
+    const sequence = Number(value);
+    if (!Number.isSafeInteger(sequence) || sequence < 0)
+      throw new Error("Invalid source sequence");
+
+    return sequence;
+  }
 
   if (TIMESTAMP_COLUMNS.has(column)) {
     if (
@@ -486,6 +519,7 @@ function columnSqlType(column) {
   if (DATE_COLUMNS.has(column)) return "date";
   if (column === "id" || (column.endsWith("_id") && column !== "clerk_user_id"))
     return "uuid";
+  if (column === "source_sequence") return "bigint";
   if (["row_count", "row_number"].includes(column)) return "integer";
   if (["is_archived", "is_committed"].includes(column)) return "boolean";
   if (["currency", "base", "quote"].includes(column)) return "currency";

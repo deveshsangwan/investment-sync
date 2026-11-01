@@ -8,7 +8,7 @@ import { capacityError, checkedJson, portfolioLimits } from "./portfolioLimits";
 
 type HistoryRecord = {
   key: string;
-  kind: "holding" | "transaction" | "valuation";
+  kind: "holding" | "transaction" | "valuation" | "source_snapshot";
   factJson: string;
   assetClass?: AssetClass;
   positionKey?: string;
@@ -130,6 +130,16 @@ export function projectionRecords(projection: PortfolioProjection) {
       return key;
     }),
   });
+  for (const fact of projection.sourceSnapshots ?? []) {
+    const key = `source_snapshot:${fact.factKey}`;
+    histories.set(key, {
+      key,
+      kind: "source_snapshot",
+      assetClass: fact.row.assetClass,
+      factJson: checkedJson({ row: fact.row, provenance: fact.provenance }),
+    });
+  }
+
   if (histories.size > portfolioLimits.historyFacts)
     capacityError("Portfolio history capacity exceeded");
   const scopeRows: ScopeRecord[] = [];

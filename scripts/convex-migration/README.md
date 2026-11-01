@@ -33,3 +33,15 @@ The generator requires matching run IDs and database fingerprints, supported art
 ```
 
 Finding keys and reason codes accept lowercase letters, digits, and underscores only. This prevents a disposition from carrying record identities or financial details into the committed note.
+
+## Complete source snapshots and archive compatibility
+
+Exports from the current SQL schema use snapshot schema version 2. Export and inventory detect the historical layout explicitly; a database with neither declaration storage nor the sequence column retains version 1, while a partially applied schema fails closed. The SQL archive includes `source_snapshots`, even when it is empty; target exports include `sourceSnapshots`. Version 1 archives keep their original twelve-table manifest and checksum. Readers verify the original envelope before adapting the absent declaration table to an empty array. They never infer historical completeness from holdings, transactions, expired files, or reparsing with a newer importer.
+
+`source_snapshots` stores an immutable declaration for each committed batch row. It owns an account, household, source group, asset class, currency, effective date, complete scope, exact normalized payload, and the original parser version, fallback date, row number, and source sequence. It has no instrument or financial columns. Declarations remain durable when source files or import row chunks expire. Migration maps parent document IDs while preserving the original SQL batch ID in fact provenance; reverse replay maps that batch back to its SQL ID.
+
+The nullable `import_batches.source_sequence` column records observation order for new SQL commits. The existing commit lock assigns a safe integer from the database clock and the retained high-water mark. Source dates still determine chronology; sequence only resolves observation order on equal report dates. Legacy holding creation order remains separate so chart arithmetic does not change after upserts. SQL migration `0013` must be included in any reviewed SQL recovery build before restoring a version 2 archive. Applying that schema or operating production remains an operator action outside this implementation.
+
+The loader sends declarations after accounts, batches, and import rows, before financial facts. A declaration retains its original batch row key. Financial migration ordinals skip reserved declaration keys. Reverse replay includes declarations in receipt completeness, no-writes checks, schema checks, locks, table digests, and atomic replay. An arbitrary empty import still fails; a validated complete declaration is meaningful input.
+
+Storage inventory compares persisted and newly parsed row counts only for the same parser version. Parser version differences are reported separately: adding an explicit declaration can legitimately add a row to a Vested report. This distinction does not excuse hash changes, same-version row-count mismatches, or parse failures.

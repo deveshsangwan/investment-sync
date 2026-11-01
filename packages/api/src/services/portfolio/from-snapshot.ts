@@ -35,6 +35,7 @@ export function buildPortfolioSummaryFromSnapshot(
   latestHoldings: CurrentHoldingRow[],
   usdInrRate?: number,
   exchangeRates: CurrencyRateQuote[] = [],
+  sourceSnapshotDate: string | null = null,
 ) {
   const summary = summarizePortfolio(
     latestHoldings.map((holding) => ({
@@ -56,7 +57,11 @@ export function buildPortfolioSummaryFromSnapshot(
     ...summary,
     currency: "INR" as const,
     exchangeRates,
-    asOfDate: latestHoldings[0]?.snapshotDate ?? null,
+    asOfDate:
+      [latestHoldings[0]?.snapshotDate, sourceSnapshotDate]
+        .filter((date): date is string => Boolean(date))
+        .sort()
+        .at(-1) ?? null,
   };
 }
 
@@ -65,8 +70,14 @@ export function buildPortfolioPerformanceFromSnapshot(
   valuations: PortfolioValuationRow[],
   cashFlows: CashFlowRow[],
   usdInrRate?: number,
+  sourceSnapshotDate: string | null = null,
 ) {
-  const asOfDate = parseDate(latestHoldings[0]?.snapshotDate) ?? new Date();
+  const selectedDate =
+    [latestHoldings[0]?.snapshotDate, sourceSnapshotDate]
+      .filter((date): date is string => Boolean(date))
+      .sort()
+      .at(-1) ?? null;
+  const asOfDate = parseDate(selectedDate ?? undefined) ?? new Date();
   const performanceHoldings = latestHoldings.map((holding) => ({
     assetClass: holding.assetClass,
     investedAmount: convertToInr(
@@ -108,7 +119,7 @@ export function buildPortfolioPerformanceFromSnapshot(
   return {
     ...performance,
     byAssetClass: xirrByAssetClass({ holdings: performanceHoldings }),
-    asOfDate: latestHoldings[0]?.snapshotDate ?? null,
+    asOfDate: selectedDate,
   };
 }
 

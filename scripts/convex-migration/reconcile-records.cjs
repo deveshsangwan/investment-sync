@@ -71,6 +71,7 @@ function reconcileRecords(snapshot, target, findings) {
     "importBatches",
     "sourceFiles",
     "holdingSnapshots",
+    "sourceSnapshots",
     "transactions",
     "portfolioValuations",
     "currencyRates",
@@ -273,6 +274,51 @@ function reconcileRecords(snapshot, target, findings) {
     }
   }
 
+  for (const source of snapshot.tables.source_snapshots ?? []) {
+    const entries = mapped("source_snapshots", source.id, "sourceSnapshots");
+    const base = `native.sourceSnapshots.${source.id}`;
+    equal(1, entries.length, `${base}.mappingCount`);
+    const actual = byId.sourceSnapshots?.get(entries[0]?.targetId);
+    if (!actual) continue;
+
+    const row = exactNormalizedImportRowSchema.parse(source.normalized_payload);
+    const provenance = {
+      batchId: source.import_batch_id,
+      parserVersion: source.parser_version,
+      sequence: Number(source.source_sequence),
+      sourceSequence: Number(source.source_sequence),
+      rowNumber: source.row_number,
+      fallbackDate: source.fallback_date,
+      legacyId: source.id,
+    };
+    equal({ row, provenance }, JSON.parse(actual.factJson), `${base}.fullFact`);
+    equal(
+      JSON.stringify([source.import_batch_id, source.row_number]),
+      actual.key,
+      `${base}.key`,
+    );
+    equal(
+      parentId("households", source.household_id, "households"),
+      actual.householdId,
+      `${base}.householdId`,
+    );
+    equal(
+      parentId("import_batches", source.import_batch_id, "importBatches"),
+      actual.batchId,
+      `${base}.batchId`,
+    );
+    equal(source.snapshot_date, actual.date, `${base}.date`);
+    equal(source.currency, row.currency, `${base}.currency`);
+    equal(source.asset_class, row.assetClass, `${base}.assetClass`);
+    equal(source.source_group, row.sourceGroup, `${base}.sourceGroup`);
+    equal(source.completeness, row.completeness, `${base}.completeness`);
+    const account = snapshot.tables.accounts.find(
+      (candidate) => candidate.id === source.account_id,
+    );
+    equal(account?.name, row.accountName, `${base}.accountName`);
+    equal(account?.provider, row.provider, `${base}.provider`);
+  }
+
   let factOrdinal = 0;
   const sourceById = Object.fromEntries(
     Object.entries(snapshot.tables).map(([table, rows]) => [
@@ -309,6 +355,14 @@ function reconcileRecords(snapshot, target, findings) {
   for (const [table, config] of Object.entries(financialTables)) {
     for (const source of snapshot.tables[table]) {
       factOrdinal += 1;
+      while (
+        (snapshot.tables.source_snapshots ?? []).some(
+          (declaration) =>
+            declaration.import_batch_id === source.import_batch_id &&
+            declaration.row_number === factOrdinal,
+        )
+      )
+        factOrdinal += 1;
       const entries = mapped(table, source.id, config.target);
       if (entries.length !== 1) {
         findings.push({

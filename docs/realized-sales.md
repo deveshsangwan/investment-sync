@@ -1,0 +1,43 @@
+# Vested realized sales and complete snapshots
+
+The Vested importer retains reported acquisition lots and explicit complete source snapshots. The active web backend is Convex, with selection and sale projection in the shared portfolio domain. Parser `vested-drivewealth-v5`, with the existing `-decimal-v1` suffix on exact imports, combines strict unrealized validation, realized lot parsing and complete-report evidence.
+
+## Statement contract
+
+The importer reads Unrealized P&L - Summary, Realized P&L - Breakdown and Realized P&L - Summary. Sheet names tolerate surrounding whitespace; multiple names resolving to the same evidence sheet fail. An absent realized sheet remains compatible. A breakdown without a summary imports with a reconciliation warning. Tests generate fake XLSX files without personal financial fixtures or screenshot adjustments.
+
+The breakdown requires Security or Symbol, sale date, Quantity, reported USD proceeds, Cost Basis (USD), and Profit/Loss (USD). Supported aliases are listed in `packages/importers/src/vested-sales.ts`. Acquisition dates, execution IDs and lot IDs are retained when supplied. Invalid supplied dates, required amounts and populated unknown layouts fail parsing.
+
+Each breakdown row becomes one sell transaction. Validated `metadata.realizedSale` retains reported proceeds, cost basis, gain or loss and acquisition details as canonical decimal strings. Exact input facts retain source proceeds and quantity precision. The summary never creates transactions. Per-security quantities reconcile within 0.0000000001 units and amounts within USD 0.01 to accommodate report rounding. Supplied grand totals are checked separately; nonzero summary-only activity fails.
+
+Unrealized reports require the financial headers and valid basis/market-value cells already required by #59. A complete header-only sheet is meaningful empty evidence. An optional empty Total must contain exact zero amounts; nonzero totals, blank-symbol populated rows, incomplete-report markers, inconsistent totals, spreadsheet errors, uncached formulas and worksheet dimensions hiding populated cells fail. Cached formula zeroes remain valid. The importer validates the sheet before declaring completeness.
+
+Every validated unrealized report emits an instrument-free complete source snapshot, including reports with no holdings and reports without sales. It carries account/provider, asset class/currency, source group and completeness. A supplied source date determines its date; otherwise it uses the original upload date, never the sale date. A declaration contains no invented holding, amount or portfolio valuation. Arbitrary empty batches still fail the normal empty-input guards.
+
+## Selection, sales and history
+
+Complete source snapshots determine whether earlier positions remain current. A complete empty Vested report can close the sole remaining position. A partial sale with eight reported shares and USD96 still leaves that position current; transactions alone never establish completeness. Later purchases reopen the position while retaining earlier holding history and sold lots.
+
+Declarations retain the existing source-overlap priorities, including the known workbook/Vested overlap. They apply within the authenticated household and account/source scope. Financial dates take precedence over import order; same-date accepted corrections use their retained observation order. Lower-priority complete reports cannot introduce holdings behind a winning declaration. Timeline contributions carry independent accounts forward and record a zero point when a complete scope becomes empty. Historical explicit valuation dates remain retained; a later complete source report supplies a new snapshot point from known holding scopes.
+
+Selection precedes account visibility. Hiding a winning account never revives a superseded overlapping source. Archive/restore changes the visible projection while retaining immutable holding, transaction and declaration facts. Source-file expiry, staged-chunk cleanup and superseded publication cleanup retain those durable facts.
+
+Sales attach by account plus instrument within the household. Web details show sale and acquisition dates, quantity, proceeds, basis, reported gain or loss, and available execution/lot IDs. Exited holding values remain labelled as the last observed snapshot. They do not become sale proceeds. Reported USD sale results stay separate from current unrealized values and today's INR conversion. No fee, commission, basis correction or historical FX adjustment is estimated. Realized reports lack complete purchase cashflows, so their sales are excluded from XIRR inputs.
+
+Execution ID plus sale date and lot ID identifies a lot when available; acquisition date is the fallback lot identifier. Without an execution ID, identity includes sale/acquisition dates, quantity, proceeds, basis, gain and within-report occurrence. Repeated and overlapping reports retain the maximum observed multiplicity. Parser versions and reporting periods are not sale identities. Stable execution/lot corrections replace projected amounts while immutable input facts remain.
+
+Source ambiguity remains when identical rows occur in separate reporting subsets without stable IDs, or corrections change an untagged financial identity. Changing IDs, dates or lot grouping requires an explicit correction process. Imports do not guess that unrelated rows replace one another.
+
+A sale-only symbol with no historical holding has retained transaction facts, but no holding-detail position. The importer does not fabricate a holding or an exit to create that position. Missing sales outside a report's coverage never imply zero realized gain.
+
+## Retained SQL and recovery
+
+SQL detail independently projects the same validated sales and stable same-day ordering. Migration `0012_realized_sale_identity` retains source identity plus occurrence through rounding, upserts and replay. Tagged execution-lot corrections update proceeds, quantity and metadata; existing untagged transactions retain their financial identity. Legacy SQL numeric column scales remain unchanged. Sale metadata preserves the reported native lot decimals separately.
+
+Migration `0013_busy_madame_masque.sql` adds immutable SQL `source_snapshots` and optional import-batch observation sequence. Migration `0014_round_aaron_stack.sql` indexes the observation high-water lookup. Declarations retain their exact normalized payload, original batch/row, parser version, financial/fallback dates and observation sequence. SQL publication reads use declaration boundaries alongside holding facts. Retained declaration data is independent of source-file retention.
+
+Current migration artifacts use schema version 2 and explicitly include declaration tables, even when empty. Historical version 1 artifacts keep their original layout and checksum. Readers verify that checksum before normalizing absent declaration arrays internally. Old artifacts never acquire invented completeness evidence. Forward migration validates declaration parents and scope, preserves original provenance and reserves declaration batch-row slots when assigning legacy financial ordinals. Publication capacity, export, reconciliation and reverse replay include declarations. Replay rejects inconsistent payload/provenance and retains current account archive/restore flags; historical exports without the optional flag retain the frozen SQL state.
+
+These migrations are code prerequisites for using retained SQL writes and recovery. Apply them through the reviewed rollout procedure; this PR does not authorize or perform a production migration, deployment, backfill or republication. Existing materialized versions need a successful normal publication to include new declaration behavior. Reimport a retained original workbook through the normal versioned import workflow to capture an empty boundary that an older parser discarded. Exports that never retained that evidence cannot reconstruct it from sales or screenshots.
+
+Regression coverage exercises true empty reports with and without sales, sole-position full exits, partial/sale-only negatives, malformed apparent empties, reentry, same-date/out-of-order reports, overlap priorities, repeats/reprocessing, exact lot identity/multiplicity, independent accounts and households, archive/restore, cleanup, migration auditing and real PostgreSQL rollback. The local Chromium journey uses signed fake identities and a real isolated Convex backend to verify partial holdings, sold-lot display, zero-current liquidation, overlap and reentry. It does not verify hosted Clerk, Next middleware/SSR, cloud operations or a native device.

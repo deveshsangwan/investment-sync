@@ -6,11 +6,14 @@ import {
   importRows,
   instruments,
   portfolioValuations,
+  sourceSnapshots,
   transactions,
   type Database,
 } from "@investment-sync/db";
 import {
+  adaptLegacyRow,
   normalizedImportRowSchema,
+  realizedSaleIdentity,
   type NormalizedHoldingRow,
   type NormalizedImportRow,
 } from "@investment-sync/importers";
@@ -123,7 +126,11 @@ async function commitImportPromise(
     }
 
     const batchRows = await db
-      .select({ id: importRows.id, payload: importRows.normalizedPayload })
+      .select({
+        id: importRows.id,
+        rowNumber: importRows.rowNumber,
+        payload: importRows.normalizedPayload,
+      })
       .from(importRows)
       .innerJoin(importBatches, eq(importRows.importBatchId, importBatches.id))
       .where(
@@ -147,13 +154,14 @@ async function commitImportPromise(
           cause: parsed.error,
         });
       }
-      return { id: row.id, payload: parsed.data };
+      return { id: row.id, rowNumber: row.rowNumber, payload: parsed.data };
     });
     const accountRows: AccountImportRow[] = [];
     for (const row of parsedRows) {
       if (
         row.payload.kind === "holding" ||
-        row.payload.kind === "transaction"
+        row.payload.kind === "transaction" ||
+        row.payload.kind === "source_snapshot"
       ) {
         accountRows.push(row.payload);
       }
@@ -166,7 +174,61 @@ async function commitImportPromise(
       membership.householdId,
       accountRows,
     );
-    const instrumentIds = await ensureInstruments(db, accountRows);
+    const instrumentIds = await ensureInstruments(
+      db,
+      accountRows.filter(
+        (row): row is InstrumentImportRow => row.kind !== "source_snapshot",
+      ),
+    );
+    // Use the database clock under the commit lock: application test clocks and
+    // out-of-order report dates must not reorder same-day source evidence.
+    const [sequence] = await db.execute(sql`
+      select greatest(floor(extract(epoch from clock_timestamp()) * 1000)::bigint,
+        coalesce((select max(source_sequence) + 1 from import_batches), 0))::text as value
+    `);
+    const sourceSequence = Number(sequence?.value);
+    if (!Number.isSafeInteger(sourceSequence) || sourceSequence < 0) {
+      throw new ImportPersistenceError({ message: "Invalid source sequence" });
+    }
+
+    assertSourceWritesAllowed();
+
+    await db
+      .update(importBatches)
+      .set({ sourceSequence })
+      .where(eq(importBatches.id, importBatchId));
+    const fallbackDate = batch.uploadedAt.toISOString().slice(0, 10);
+    const declarationValues = parsedRows.flatMap(({ payload, rowNumber }) => {
+      if (payload.kind !== "source_snapshot") return [];
+
+      return [
+        {
+          householdId: membership.householdId,
+          accountId: requiredMapValue(
+            accountIds,
+            accountKey(payload),
+            "account",
+          ),
+          importBatchId,
+          rowNumber,
+          sourceType: payload.sourceType,
+          snapshotDate: payload.sourceDate ?? fallbackDate,
+          assetClass: payload.assetClass,
+          currency: payload.currency,
+          sourceGroup: payload.sourceGroup,
+          completeness: payload.completeness,
+          normalizedPayload: { ...adaptLegacyRow(payload) },
+          sourceSequence,
+          parserVersion: batch.parserVersion ?? "legacy-postgres",
+          fallbackDate,
+        },
+      ];
+    });
+    if (declarationValues.length > 0) {
+      assertSourceWritesAllowed();
+
+      await db.insert(sourceSnapshots).values(declarationValues);
+    }
 
     const holdingValues = parsedRows.flatMap(({ payload }) => {
       if (payload.kind !== "holding") return [];
@@ -231,8 +293,19 @@ async function commitImportPromise(
         });
     }
 
+    const saleOccurrences = new Map<string, number>();
     const transactionValues = parsedRows.flatMap(({ payload }) => {
       if (payload.kind !== "transaction") return [];
+
+      const saleIdentity = realizedSaleIdentity(payload);
+      const occurrenceScope = JSON.stringify([
+        accountKey(payload),
+        instrumentKey(payload),
+        saleIdentity,
+      ]);
+      const occurrence = (saleOccurrences.get(occurrenceScope) ?? 0) + 1;
+      saleOccurrences.set(occurrenceScope, occurrence);
+
       return [
         {
           householdId: membership.householdId,
@@ -253,7 +326,15 @@ async function commitImportPromise(
           price: payload.price?.toString(),
           amount: payload.amount.toString(),
           currency: payload.currency,
-          metadata: payload.metadata,
+          metadata: saleIdentity
+            ? {
+                ...payload.metadata,
+                realizedSaleIdentity: JSON.stringify([
+                  saleIdentity,
+                  occurrence,
+                ]),
+              }
+            : payload.metadata,
         },
       ];
     });
@@ -261,26 +342,19 @@ async function commitImportPromise(
     if (transactionValues.length > 0) {
       assertSourceWritesAllowed();
 
-      await db
-        .insert(transactions)
-        .values(transactionValues)
-        .onConflictDoUpdate({
-          target: [
-            transactions.householdId,
-            transactions.accountId,
-            transactions.instrumentId,
-            transactions.tradeDate,
-            transactions.type,
-            transactions.amount,
-            transactions.currency,
-          ],
-          set: {
-            importBatchId,
-            quantity: sql`excluded.quantity`,
-            price: sql`excluded.price`,
-            metadata: sql`excluded.metadata`,
-          },
-        });
+      // Drizzle requires column targets for its upsert API; this index includes expressions.
+      await db.execute(sql`
+        ${db.insert(transactions).values(transactionValues).getSQL()}
+        on conflict (household_id, account_id, instrument_id, trade_date, type,
+          (case when metadata->'realizedSale' is not null then 0::numeric else amount end), currency,
+          (coalesce(metadata->>'realizedSaleIdentity', '')))
+        do update set
+          import_batch_id = excluded.import_batch_id,
+          amount = excluded.amount,
+          quantity = excluded.quantity,
+          price = excluded.price,
+          metadata = excluded.metadata
+      `);
     }
 
     const valuationValues = parsedRows.flatMap(({ payload }) => {
@@ -353,7 +427,10 @@ async function commitImportPromise(
   return { committed };
 }
 
-type AccountImportRow = NormalizedHoldingRow | NormalizedTransactionRow;
+type InstrumentImportRow = NormalizedHoldingRow | NormalizedTransactionRow;
+type AccountImportRow =
+  | InstrumentImportRow
+  | Extract<NormalizedImportRow, { kind: "source_snapshot" }>;
 type NormalizedTransactionRow = Extract<
   NormalizedImportRow,
   { kind: "transaction" }
@@ -419,7 +496,7 @@ async function ensureAccounts(
 
 async function ensureInstruments(
   db: ImportDatabase,
-  rows: AccountImportRow[],
+  rows: InstrumentImportRow[],
 ): Promise<Map<string, string>> {
   const identities = uniqueByKey(
     rows.map((row) =>
@@ -504,7 +581,7 @@ function accountKey(row: AccountImportRow): string {
   });
 }
 
-function instrumentKey(row: AccountImportRow): string {
+function instrumentKey(row: InstrumentImportRow): string {
   return instrumentIdentityKey({
     assetClass: row.assetClass,
     currency: row.currency,

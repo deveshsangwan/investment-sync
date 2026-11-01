@@ -927,6 +927,18 @@ function summarizePreviewRow(row: PreviewRow) {
     };
   }
 
+  if (kind === "source_snapshot") {
+    return {
+      kind: "Complete snapshot",
+      title: readString(row.accountName) ?? "Portfolio account",
+      detail: [
+        safeFormatDate(row.sourceDate) ?? "Upload date",
+        "Complete report. Missing holdings are marked exited.",
+      ].join(" · "),
+      value: undefined,
+    };
+  }
+
   if (kind === "transaction") {
     return {
       kind: "Transaction",

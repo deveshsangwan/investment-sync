@@ -1,5 +1,6 @@
 import {
   exactNormalizedHoldingRowSchema,
+  exactNormalizedSourceSnapshotRowSchema,
   exactNormalizedTransactionRowSchema,
   exactNormalizedValuationRowSchema,
 } from "@investment-sync/importers/exact-types";
@@ -11,6 +12,7 @@ import {
 } from "@investment-sync/portfolio-domain";
 import type {
   HoldingFact,
+  SourceSnapshotFact,
   PositionProjection,
   TransactionFact,
   ValuationRow,
@@ -22,6 +24,7 @@ const provenanceSchema = z.object({
   batchId: z.string(),
   parserVersion: z.string(),
   sequence: z.number().int(),
+  sourceSequence: z.number().int().safe().optional(),
   rowNumber: z.number().int(),
   fallbackDate: z.string(),
   legacyId: z.string().optional(),
@@ -39,6 +42,25 @@ const transactionPayloadSchema = z.object({
   occurrenceKey: z.string(),
 });
 const valuationPayloadSchema = exactNormalizedValuationRowSchema;
+const sourceSnapshotPayloadSchema = z.object({
+  row: exactNormalizedSourceSnapshotRowSchema,
+  provenance: provenanceSchema,
+});
+
+export function decodeSourceSnapshot(doc: Doc<"portfolioHistoryFacts">) {
+  const payload = parseJson(doc.factJson, sourceSnapshotPayloadSchema);
+  const snapshotDate =
+    payload.row.sourceDate ?? payload.provenance.fallbackDate;
+  const group = sourceGroupKey(payload.row);
+
+  return {
+    ...payload,
+    accountKey: accountKey(payload.row),
+    sourceGroupKey: group,
+    snapshotDate,
+    factKey: JSON.stringify([group, snapshotDate]),
+  } satisfies SourceSnapshotFact;
+}
 const accountInstrumentSchema = z.tuple([z.string(), z.string()]);
 
 export interface ScopeFactSource {

@@ -30,16 +30,33 @@ const {
 const { replayFacts } = require("./reverse-replay-facts.cjs");
 
 function buildReverseReplayPlan({ sourceSnapshot, targetSnapshot }) {
-  assertEnvelope(sourceSnapshot);
-  assertEnvelope(targetSnapshot);
+  assertEnvelope(sourceSnapshot, "source_snapshots");
+  assertEnvelope(targetSnapshot, "sourceSnapshots");
   if (sourceSnapshot.sourceKind !== targetSnapshot.sourceKind)
     reject("source_kind_mismatch");
   if (targetSnapshot.projectorVersion !== "portfolio-v1")
     reject("unsupported_projector_version");
 
+  if (sourceSnapshot.inputDigest !== undefined) {
+    const { sealSnapshot, canonicalJson } = require("./phase6-artifacts.cjs");
+    const { inputDigest, tableManifest, perHouseholdCounts, ...body } =
+      sourceSnapshot;
+    const expected = sealSnapshot(body);
+    if (
+      inputDigest !== expected.inputDigest ||
+      canonicalJson(tableManifest) !== canonicalJson(expected.tableManifest) ||
+      canonicalJson(perHouseholdCounts) !==
+        canonicalJson(expected.perHouseholdCounts)
+    )
+      reject("source_snapshot_checksum_mismatch");
+  }
+
   const sourceTables = normalizeSqlTables(sourceSnapshot.tables);
   const tables = structuredClone(sourceTables);
-  const targetTables = requireTargetTables(targetSnapshot.tables);
+  const targetTables = requireTargetTables(
+    targetSnapshot.tables,
+    targetSnapshot.schemaVersion,
+  );
   const maps = createIdentityMaps(
     sourceTables,
     targetTables,
@@ -117,6 +134,7 @@ function buildReverseReplayPlan({ sourceSnapshot, targetSnapshot }) {
           expires_at: timestamp(sourceFile.expiresAt),
           processed_at: optionalTimestamp(batch.processedAt),
           committed_at: optionalTimestamp(batch.committedAt),
+          source_sequence: batch.sourceSequence ?? null,
         };
 
     if (
@@ -147,6 +165,7 @@ function buildReverseReplayPlan({ sourceSnapshot, targetSnapshot }) {
         reject("missing_commit_receipt");
       validatePublicationReceipts(version, batch, targetTables);
 
+      row.source_sequence = integer(version.sequence);
       row.status = "committed";
       row.row_count = rows.length;
       row.committed_at = timestamp(batch.committedAt);
@@ -259,14 +278,18 @@ function validatePublicationReceipts(version, batch, tables) {
   if (receipts.length !== manifest.length)
     reject("incomplete_publication_receipts");
   const persistedFacts = new Map(
-    ["holdingSnapshots", "transactions", "portfolioValuations"].flatMap(
-      (table) =>
-        tables[table]
-          .filter((doc) => doc.batchId === batch._id)
-          .map((doc) => {
-            const fact = JSON.parse(text(doc.factJson));
-            return [fact.provenance.rowNumber, fact];
-          }),
+    [
+      "holdingSnapshots",
+      "transactions",
+      "portfolioValuations",
+      "sourceSnapshots",
+    ].flatMap((table) =>
+      tables[table]
+        .filter((doc) => doc.batchId === batch._id)
+        .map((doc) => {
+          const fact = JSON.parse(text(doc.factJson));
+          return [fact.provenance.rowNumber, fact];
+        }),
     ),
   );
   const factRows = new Set();
@@ -314,10 +337,10 @@ function sha256(value) {
   return nodeCrypto.createHash("sha256").update(value).digest("hex");
 }
 
-function assertEnvelope(envelope) {
+function assertEnvelope(envelope, declarationTable) {
   object(envelope);
   if (
-    envelope.schemaVersion !== 1 ||
+    ![1, 2].includes(envelope.schemaVersion) ||
     !["synthetic", "production"].includes(envelope.sourceKind)
   )
     reject("invalid_replay_envelope");
@@ -327,15 +350,20 @@ function assertEnvelope(envelope) {
   )
     reject("invalid_evaluation_time");
   object(envelope.tables);
+  if (
+    envelope.schemaVersion === 2 &&
+    !Array.isArray(envelope.tables[declarationTable])
+  )
+    reject("incomplete_snapshot_declarations");
 }
 
 function verifyNoConvexWrites(initialSnapshot, currentSnapshot) {
-  assertEnvelope(initialSnapshot);
-  assertEnvelope(currentSnapshot);
+  assertEnvelope(initialSnapshot, "sourceSnapshots");
+  assertEnvelope(currentSnapshot, "sourceSnapshots");
   if (initialSnapshot.sourceKind !== currentSnapshot.sourceKind)
     reject("source_kind_mismatch");
   const normalize = (snapshot) => {
-    const tables = requireTargetTables(snapshot.tables);
+    const tables = requireTargetTables(snapshot.tables, snapshot.schemaVersion);
     return Object.fromEntries(
       TARGET_TABLES.map((table) => [
         table,
@@ -350,7 +378,10 @@ function verifyNoConvexWrites(initialSnapshot, currentSnapshot) {
   return { targetDigest: initialDigest, unchanged: true };
 }
 
-function requireTargetTables(tables) {
+function requireTargetTables(tables, schemaVersion) {
+  if (schemaVersion === 1 && tables.sourceSnapshots === undefined)
+    tables = { ...tables, sourceSnapshots: [] };
+
   for (const table of TARGET_TABLES) {
     if (!Array.isArray(tables[table])) reject("incomplete_target_export");
     const ids = new Set();

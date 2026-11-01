@@ -67,6 +67,7 @@ export const page = internalQuery({
       v.literal("holdingSnapshots"),
       v.literal("transactions"),
       v.literal("portfolioValuations"),
+      v.literal("sourceSnapshots"),
     ),
     cursor: v.union(v.string(), v.null()),
   },
@@ -106,7 +107,8 @@ export const page = internalQuery({
     const range =
       args.table === "holdingSnapshots" ||
       args.table === "transactions" ||
-      args.table === "portfolioValuations"
+      args.table === "portfolioValuations" ||
+      args.table === "sourceSnapshots"
         ? ctx.db
             .query(args.table)
             .withIndex("by_batchId", (q) => q.eq("batchId", batch._id))

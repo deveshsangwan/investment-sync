@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { z } from "zod";
+import { exactNormalizedSourceSnapshotRowSchema } from "@investment-sync/importers/exact-types";
 import {
   assetClassSchema,
   currencySchema,
@@ -14,6 +15,7 @@ export const legacyTables = [
   "instruments",
   "import_batches",
   "import_rows",
+  "source_snapshots",
   "holding_snapshots",
   "transactions",
   "portfolio_valuations",
@@ -36,6 +38,7 @@ export const exportTables = [
   "importRowChunks",
   "importDedupeKeys",
   "holdingSnapshots",
+  "sourceSnapshots",
   "transactions",
   "portfolioValuations",
   "portfolioVersions",
@@ -73,6 +76,13 @@ const decimal = z.string().regex(/^-?\d+(?:\.\d+)?$/);
 const identity = { id: z.string().uuid() };
 const created = { created_at: timestamp };
 const metadata = z.record(z.unknown());
+const safeSequence = z
+  .union([z.number(), z.string().regex(/^\d+$/)])
+  .transform(Number)
+  .refine(
+    (value) => Number.isSafeInteger(value) && value >= 0,
+    "Invalid source observation sequence",
+  );
 
 export const userSchema = z
   .object({
@@ -144,6 +154,7 @@ export const batchSchema = z
       "expired",
     ]),
     parser_version: z.string().nullable(),
+    source_sequence: safeSequence.nullable().optional(),
     original_file_name: z.string().min(1),
     storage_path: z.string().nullable(),
     file_hash: z.string().nullable(),
@@ -186,6 +197,27 @@ export const holdingSchema = z
     source_payload: metadata,
   })
   .strict();
+export const sourceSnapshotSchema = z
+  .object({
+    ...identity,
+    ...created,
+    household_id: z.string().uuid(),
+    account_id: z.string().uuid(),
+    import_batch_id: z.string().uuid(),
+    row_number: z.number().int().positive(),
+    source_type: importSourceTypeSchema,
+    snapshot_date: civilDate,
+    asset_class: assetClassSchema,
+    currency: currencySchema,
+    source_group: z.string(),
+    completeness: z.literal("complete"),
+    normalized_payload: exactNormalizedSourceSnapshotRowSchema,
+    source_sequence: safeSequence,
+    parser_version: z.string().min(1),
+    fallback_date: civilDate,
+  })
+  .strict();
+
 export const transactionSchema = z
   .object({
     ...identity,
@@ -251,7 +283,12 @@ export const priceSchema = z
 export const tableCountsSchema = z
   .object(
     Object.fromEntries(
-      legacyTables.map((table) => [table, z.number().int().nonnegative()]),
+      legacyTables.map((table) => [
+        table,
+        table === "source_snapshots"
+          ? z.number().int().nonnegative().default(0)
+          : z.number().int().nonnegative(),
+      ]),
     ),
   )
   .strict();

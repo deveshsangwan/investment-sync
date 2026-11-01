@@ -221,3 +221,32 @@ test("Convex targets require exact deployment classification without ambient cre
     ),
   );
 });
+
+test("v1 archives retain their original sealed layout while v2 explicitly requires declarations", () => {
+  const { currentTables } = require("./phase6-artifacts.cjs");
+  const runId = `snapshot-layout-test-${process.pid}`;
+  const historical = fixture();
+  const historicalDigest = historical.inputDigest;
+  const file = writeArtifact(runId, "historical.json", historical);
+  try {
+    const restored = readSnapshot(file);
+    assert.equal(restored.inputDigest, historicalDigest);
+    assert.deepEqual(
+      Object.keys(restored.tables).sort(),
+      [...legacyTables].sort(),
+    );
+    assert.equal(Object.hasOwn(restored.tables, "source_snapshots"), false);
+    const current = sealSnapshot({
+      ...unsealedFixture(),
+      schemaVersion: 2,
+      tables: Object.fromEntries(currentTables.map((table) => [table, []])),
+    });
+    const currentFile = writeArtifact(runId, "current.json", current);
+    assert.deepEqual(readSnapshot(currentFile).tables.source_snapshots, []);
+    delete current.tables.source_snapshots;
+    fs.writeFileSync(currentFile, JSON.stringify(current));
+    assert.throws(() => readSnapshot(currentFile), /incomplete/);
+  } finally {
+    fs.rmSync(path.dirname(file), { recursive: true });
+  }
+});

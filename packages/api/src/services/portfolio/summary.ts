@@ -1,5 +1,8 @@
 import { buildPortfolioSummaryFromSnapshot } from "./from-snapshot";
-import { latestCurrentHoldings } from "./latest-holdings";
+import {
+  latestCurrentHoldings,
+  latestSourceSnapshotDate,
+} from "./latest-holdings";
 import { getUsdInrRateIfNeeded } from "./utils";
 import type { PortfolioContext } from "./types";
 
@@ -16,5 +19,6 @@ export async function buildPortfolioSummary(ctx: PortfolioContext) {
     latestHoldings,
     usdInrRate?.rate,
     usdInrRate ? [usdInrRate] : [],
+    await latestSourceSnapshotDate(ctx),
   );
 }

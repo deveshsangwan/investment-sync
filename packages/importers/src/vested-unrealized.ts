@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
-import { parseSourceDecimal } from "./numeric";
-import { withSourceDecimals } from "./source-decimals";
+import { FinancialDecimal, parseSourceDecimal } from "./numeric";
+import { getSourceDecimals, withSourceDecimals } from "./source-decimals";
 import type { NormalizedHoldingRow } from "./types";
 import {
   objectFromRow,
@@ -21,6 +21,71 @@ const requiredColumns = {
 export function parseVestedUnrealizedSheet(
   sheet: XLSX.WorkSheet | undefined,
 ): NormalizedHoldingRow[] {
+  if (sheet) {
+    const reference: unknown = sheet["!ref"];
+    if (
+      typeof reference !== "string" ||
+      !/^[A-Z]+[1-9]\d*(?::[A-Z]+[1-9]\d*)?$/.test(reference)
+    )
+      throw new Error(`${sectionName}: invalid worksheet dimensions`);
+
+    const range = XLSX.utils.decode_range(reference);
+    for (const [address, value] of Object.entries(sheet)) {
+      const cell: unknown = value;
+      if (
+        typeof cell !== "object" ||
+        cell === null ||
+        !/^[A-Z]+[1-9]\d*$/.test(address)
+      )
+        continue;
+
+      const hasFormula =
+        "f" in cell && typeof cell.f === "string" && cell.f.trim() !== "";
+      const hasValue =
+        "v" in cell &&
+        cell.v !== undefined &&
+        cell.v !== null &&
+        (typeof cell.v !== "string" || cell.v.trim() !== "");
+      if (hasFormula || hasValue) {
+        const position = XLSX.utils.decode_cell(address);
+        if (
+          position.r < range.s.r ||
+          position.r > range.e.r ||
+          position.c < range.s.c ||
+          position.c > range.e.c
+        )
+          throw new Error(
+            `${sectionName} cell ${address}: populated cell lies outside worksheet dimensions`,
+          );
+      }
+
+      if (
+        "f" in cell &&
+        typeof cell.f === "string" &&
+        (("t" in cell && cell.t === "z") ||
+          !("v" in cell) ||
+          cell.v === undefined ||
+          cell.v === null)
+      ) {
+        throw new Error(
+          `${sectionName} cell ${address}: unresolved spreadsheet formula cannot establish complete evidence`,
+        );
+      }
+
+      if (
+        !address.startsWith("!") &&
+        typeof cell === "object" &&
+        cell !== null &&
+        "t" in cell &&
+        cell.t === "e"
+      ) {
+        throw new Error(
+          `${sectionName} cell ${address}: spreadsheet error cannot establish complete evidence`,
+        );
+      }
+    }
+  }
+
   // Reading from row 1 keeps validation locations aligned with the worksheet.
   const rows = sheet
     ? XLSX.utils.sheet_to_json<unknown[]>(sheet, {
@@ -35,18 +100,42 @@ export function parseVestedUnrealizedSheet(
     ["Security", "Quantity"],
     sectionName,
   );
+  if (
+    rows
+      .slice(0, headerRow)
+      .some((row) =>
+        row.some((cell) =>
+          /^\s*(?:partial|incomplete|truncated)\b/i.test(toStringValue(cell)),
+        ),
+      )
+  ) {
+    throw new Error(
+      `${sectionName}: incomplete reports cannot declare a complete snapshot`,
+    );
+  }
+
   const headers = rows[headerRow] ?? [];
   requireColumns(headers, requiredColumns, sectionName);
 
-  return rows.slice(headerRow + 1).flatMap((row, index) => {
+  const totals: Array<{ record: Record<string, unknown>; rowNumber: number }> =
+    [];
+  const holdings = rows.slice(headerRow + 1).flatMap((row, index) => {
     const record = objectFromRow(headers, row);
     const symbol = toStringValue(record.security).trim();
 
-    if (!symbol || symbol.toLowerCase() === "total") {
+    const rowNumber = headerRow + index + 2;
+    if (row.every((cell) => !toStringValue(cell).trim())) return [];
+
+    if (!symbol) {
+      throw new Error(
+        `${sectionName} row ${rowNumber}: Security is required for a populated row`,
+      );
+    }
+    if (symbol.toLowerCase() === "total") {
+      totals.push({ record, rowNumber });
       return [];
     }
 
-    const rowNumber = headerRow + index + 2;
     const investedAmount = parseRequiredUsdAmount(
       record["cost basis (usd)"],
       "Cost Basis (USD)",
@@ -87,6 +176,62 @@ export function parseVestedUnrealizedSheet(
       ),
     ];
   });
+
+  if (totals.length > 1)
+    throw new Error(`${sectionName}: duplicate Total rows`);
+  for (const { record, rowNumber } of totals) {
+    if (
+      holdings.length > 0 &&
+      ["cost basis (usd)", "market value (usd)", "quantity"].every(
+        (field) => !toStringValue(record[field]).trim(),
+      )
+    )
+      continue;
+    for (const [field, property] of [
+      ["Cost Basis (USD)", "investedAmount"],
+      ["Market Value (USD)", "currentValue"],
+    ] as const) {
+      parseRequiredUsdAmount(record[field.toLowerCase()], field, rowNumber);
+      const total = parseSourceDecimal(String(record[field.toLowerCase()]));
+      const sum = holdings.reduce(
+        (value, holding) =>
+          value.plus(
+            parseSourceDecimal(
+              toStringValue(
+                getSourceDecimals(holding)?.[property] ?? holding[property],
+              ),
+            ) ?? "0",
+          ),
+        new FinancialDecimal(0),
+      );
+      if (
+        total === undefined ||
+        (holdings.length === 0
+          ? total !== "0"
+          : sum.minus(total).abs().gt("0.01"))
+      ) {
+        throw new Error(
+          `${sectionName} row ${rowNumber}: ${field} Total does not reconcile with security rows`,
+        );
+      }
+    }
+    if (holdings.length === 0) {
+      for (const field of [
+        "quantity",
+        "profit/loss (usd)",
+        "profit/loss (%)",
+        "profit/loss (inr)",
+      ]) {
+        const cell = toStringValue(record[field]).trim();
+        if (cell && parseSourceDecimal(cell) !== "0")
+          throw new Error(
+            `${sectionName} row ${rowNumber}: empty snapshot must have zero totals`,
+          );
+      }
+    }
+  }
+
+  return holdings;
 }
 
 function parseRequiredUsdAmount(

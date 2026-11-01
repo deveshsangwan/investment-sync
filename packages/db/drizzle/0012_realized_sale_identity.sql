@@ -1,0 +1,2 @@
+DROP INDEX "transactions_import_dedupe_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "transactions_import_dedupe_idx" ON "transactions" USING btree ("household_id","account_id","instrument_id","trade_date","type",(case when "metadata"->'realizedSale' is not null then 0::numeric else "amount" end),"currency",coalesce("metadata"->>'realizedSaleIdentity', ''));

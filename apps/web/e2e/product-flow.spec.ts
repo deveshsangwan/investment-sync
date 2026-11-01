@@ -1,3 +1,4 @@
+import { vestedWorkbook } from "../../../packages/importers/src/vested-fixtures";
 import { expect, test, type Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@investment-sync/backend/api";
@@ -477,4 +478,235 @@ test("owner manages archived accounts and email-bound invitations while shared v
   } finally {
     await context.close();
   }
+});
+
+test("reported sale lots survive sole-position liquidation, overlap, reentry and empty reports on real Convex", async ({
+  page,
+}) => {
+  const workbook = vestedWorkbook({
+    holdings: [["FAKE", "8", "80", "96", "16"]],
+    sales: [
+      [
+        "FAKE",
+        "2025-02-15",
+        "2024-01-01",
+        "1.5",
+        "30",
+        "15",
+        "15",
+        "fake-execution",
+        "fake-lot-1",
+      ],
+      [
+        "FAKE",
+        "2025-02-15",
+        "2024-02-01",
+        "0.5",
+        "10",
+        "7",
+        "3",
+        "fake-execution",
+        "fake-lot-2",
+      ],
+    ],
+    summary: [["FAKE", "2", "40", "22", "18"]],
+  });
+  await signIn(page, "e2e_sales");
+  await review(page, {
+    name: workbook.fileName,
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from(workbook.content),
+  });
+  await apply(page);
+  await page.getByRole("link", { name: "View portfolio", exact: true }).click();
+  await page
+    .locator('a[href^="/dashboard/holdings/"]')
+    .filter({ hasText: "FAKE" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Realized sales", exact: true }),
+  ).toBeVisible();
+  const firstLot = page.getByRole("row").filter({ hasText: "fake-lot-1" });
+  await expect(firstLot).toContainText("15 Feb 2025");
+  await expect(firstLot).toContainText("01 Jan 2024");
+  await expect(firstLot).toContainText("$30");
+  await expect(firstLot).toContainText("+$15");
+  await expect(
+    page.getByRole("row").filter({ hasText: "fake-lot-2" }),
+  ).toContainText("01 Feb 2024");
+  await expect(
+    page.getByText("Not in latest snapshot", { exact: true }),
+  ).toHaveCount(0);
+
+  const client = await clientFor("e2e_sales");
+  const positions = await client.query(api.portfolio.positions, {});
+  expect(positions.current).toHaveLength(1);
+  expect(positions.exited).toEqual([]);
+  const [position] = positions.current;
+  if (!position) throw new Error("Missing partial-sale position");
+  const detail = await client.query(api.portfolio.holdingDetail, {
+    positionKey: position.id,
+  });
+  expect(detail?.holding).toMatchObject({
+    isCurrent: true,
+    quantity: "8",
+    currentValue: "96",
+  });
+  expect(
+    detail?.sales.map((sale) => ({
+      proceeds: sale.proceeds,
+      costBasis: sale.costBasis,
+      realizedPnl: sale.realizedPnl,
+    })),
+  ).toEqual([
+    { proceeds: "30", costBasis: "15", realizedPnl: "15" },
+    { proceeds: "10", costBasis: "7", realizedPnl: "3" },
+  ]);
+
+  async function importVestedReport(report: ReturnType<typeof vestedWorkbook>) {
+    await page.getByRole("link", { name: "Imports", exact: true }).click();
+    if (await importAnotherButton(page).isVisible()) {
+      await importAnotherButton(page).click();
+    }
+
+    await review(page, {
+      name: report.fileName,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from(report.content),
+    });
+    await apply(page);
+  }
+
+  const sales = [
+    [
+      "FAKE",
+      "2025-02-15",
+      "2024-01-01",
+      "1.5",
+      "30",
+      "15",
+      "15",
+      "fake-execution",
+      "fake-lot-1",
+    ],
+    [
+      "FAKE",
+      "2025-02-15",
+      "2024-02-01",
+      "0.5",
+      "10",
+      "7",
+      "3",
+      "fake-execution",
+      "fake-lot-2",
+    ],
+    [
+      "FAKE",
+      "2025-02-16",
+      "2024-06-01",
+      "8",
+      "120",
+      "80",
+      "40",
+      "fake-exit",
+      "fake-lot-exit",
+    ],
+  ];
+  const summary = [["FAKE", "10", "160", "102", "58"]];
+  await importVestedReport(vestedWorkbook({ holdings: [], sales, summary }));
+  const liquidated = await client.query(api.portfolio.positions, {});
+  expect(liquidated.current).toEqual([]);
+  expect(liquidated.exited).toMatchObject([{ id: position.id }]);
+  expect(
+    (await client.query(api.portfolio.overview, {})).summary.currentValue,
+  ).toBe(0);
+  const soldDetail = await client.query(api.portfolio.holdingDetail, {
+    positionKey: position.id,
+  });
+  expect(soldDetail?.holding.isCurrent).toBe(false);
+  expect(soldDetail?.sales).toHaveLength(3);
+  expect(soldDetail?.sales[2]).toMatchObject({
+    proceeds: "120",
+    costBasis: "80",
+    realizedPnl: "40",
+    acquisitionDate: "2024-06-01",
+  });
+  await page.goto(`/dashboard/holdings/${encodeURIComponent(position.id)}`);
+  await page.getByRole("button", { name: "e2e_sales", exact: true }).click();
+  await expect(
+    page.getByText("Not in latest snapshot", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row").filter({ hasText: "fake-lot-exit" }),
+  ).toContainText("01 Jun 2024");
+
+  // A distinct report with the same sale lots must retain multiplicity without
+  // double-counting overlapping periods or fabricating a current position.
+  await importVestedReport(
+    vestedWorkbook({ holdings: [["Total", 0, 0, 0, 0]], sales, summary }),
+  );
+  expect((await client.query(api.portfolio.positions, {})).current).toEqual([]);
+  expect(
+    (
+      await client.query(api.portfolio.holdingDetail, {
+        positionKey: position.id,
+      })
+    )?.sales,
+  ).toEqual(soldDetail?.sales);
+
+  await importVestedReport(
+    vestedWorkbook({
+      holdings: [["FAKE", "1", "10.0001", "12.0002", "2.0001"]],
+    }),
+  );
+  expect(
+    (
+      await client.query(api.portfolio.holdingDetail, {
+        positionKey: position.id,
+      })
+    )?.holding,
+  ).toMatchObject({ isCurrent: true, quantity: "1", currentValue: "12.0002" });
+  expect(
+    (
+      await client.query(api.portfolio.holdingDetail, {
+        positionKey: position.id,
+      })
+    )?.sales,
+  ).toEqual(soldDetail?.sales);
+
+  const empty = vestedWorkbook({ holdings: [] });
+  await importAnotherButton(page).click();
+  await review(page, {
+    name: empty.fileName,
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from(empty.content),
+  });
+  await expect(
+    page.getByText("Complete snapshot", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Upload date · Complete report. Missing holdings are marked exited.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await apply(page);
+  expect((await client.query(api.portfolio.positions, {})).current).toEqual([]);
+  expect(
+    (await client.query(api.portfolio.overview, {})).summary.currentValue,
+  ).toBe(0);
+  expect(
+    (
+      await client.query(api.portfolio.holdingDetail, {
+        positionKey: position.id,
+      })
+    )?.sales,
+  ).toEqual(soldDetail?.sales);
+  const independent = await clientFor("e2e_owner");
+  expect(
+    (await independent.query(api.portfolio.positions, {})).current,
+  ).toHaveLength(2);
 });

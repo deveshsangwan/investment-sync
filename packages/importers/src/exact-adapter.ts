@@ -1,6 +1,10 @@
 import {
   exactNormalizedImportRowSchema,
   type ExactNormalizedImportRow,
+  type ExactNormalizedHoldingRow,
+  type ExactNormalizedTransactionRow,
+  type ExactNormalizedValuationRow,
+  type ExactNormalizedSourceSnapshotRow,
   type ExactParseResult,
   type ImportSourceMetadata,
 } from "./exact-types";
@@ -9,6 +13,10 @@ import { legacySourceMetadata } from "./source";
 import {
   normalizedImportRowSchema,
   type NormalizedImportRow,
+  type NormalizedHoldingRow,
+  type NormalizedTransactionRow,
+  type NormalizedValuationRow,
+  type NormalizedSourceSnapshotRow,
   type ParseResult,
 } from "./types";
 
@@ -21,6 +29,26 @@ export const financialFields = [
   "pnlAmount",
 ] as const;
 
+export function adaptLegacyRow(
+  row: NormalizedHoldingRow,
+  source?: ImportSourceMetadata,
+): ExactNormalizedHoldingRow;
+export function adaptLegacyRow(
+  row: NormalizedTransactionRow,
+  source?: ImportSourceMetadata,
+): ExactNormalizedTransactionRow;
+export function adaptLegacyRow(
+  row: NormalizedValuationRow,
+  source?: ImportSourceMetadata,
+): ExactNormalizedValuationRow;
+export function adaptLegacyRow(
+  row: NormalizedSourceSnapshotRow,
+  source?: ImportSourceMetadata,
+): ExactNormalizedSourceSnapshotRow;
+export function adaptLegacyRow(
+  row: NormalizedImportRow,
+  source?: ImportSourceMetadata,
+): ExactNormalizedImportRow;
 export function adaptLegacyRow(
   row: NormalizedImportRow,
   source = legacySourceMetadata(row),

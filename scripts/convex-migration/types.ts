@@ -51,6 +51,7 @@ export interface PostgresInventory {
     importBatches: number;
     importRows: number;
     holdingSnapshots: number;
+    sourceSnapshots?: number;
     transactions: number;
     valuations: number;
     factRows: number;
@@ -78,6 +79,7 @@ export interface StorageInventory {
     databaseSizeUnverifiable: number;
     parseFailures: number;
     databaseRowCountMismatches: number;
+    parserVersionDifferences?: number;
     compressedBytes: CapacityRange;
     normalizedRows: CapacityRange;
     normalizedSerializedBytes: CapacityRange;

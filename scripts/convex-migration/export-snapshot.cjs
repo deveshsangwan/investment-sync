@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { parseArguments, assertAllowedArguments } = require("./runtime.cjs");
 const {
+  currentTables,
   legacyTables,
   requireDatabase,
   readEnvironment,
@@ -47,8 +48,17 @@ async function extractSnapshot({
           evaluationTime ?? new Date(clock.timestamp).toISOString();
         if (!Number.isFinite(Date.parse(frozenTime)))
           throw new Error("Invalid evaluation time");
+        const [layout] = await transaction.execute(
+          sql.raw(`select
+          to_regclass('public.source_snapshots') is not null as declarations,
+          exists(select 1 from information_schema.columns where table_schema='public' and table_name='import_batches' and column_name='source_sequence') as sequence`),
+        );
+        if (layout.declarations !== layout.sequence)
+          throw new Error("Source snapshot schema migration is incomplete");
+        const schemaVersion = layout.declarations ? 2 : 1;
+        const tableNames = schemaVersion === 2 ? currentTables : legacyTables;
         const tables = {};
-        for (const table of legacyTables) {
+        for (const table of tableNames) {
           const columns = await transaction.execute(
             sql`select column_name, data_type from information_schema.columns where table_schema='public' and table_name=${table} order by ordinal_position`,
           );
@@ -95,7 +105,7 @@ async function extractSnapshot({
           syntheticFiles,
         );
         return sealSnapshot({
-          schemaVersion: 1,
+          schemaVersion,
           sourceKind,
           evaluationTime: frozenTime,
           tables,
@@ -237,7 +247,7 @@ async function main() {
   });
   writeArtifact(runId, "snapshot.json", snapshot);
   console.log(
-    `Snapshot verified: ${legacyTables.length} tables, ${snapshot.tables.households.length} households, ${snapshot.sourceFiles.filter((file) => file.status === "available").length} available files`,
+    `Snapshot verified: ${snapshot.tableManifest.length} tables, ${snapshot.tables.households.length} households, ${snapshot.sourceFiles.filter((file) => file.status === "available").length} available files`,
   );
 }
 

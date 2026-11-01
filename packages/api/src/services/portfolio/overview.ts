@@ -2,6 +2,7 @@ import {
   cashFlowRows,
   holdingSnapshotTimelineRows,
   portfolioValuationRows,
+  sourceSnapshotDates,
 } from "./data";
 import {
   buildPortfolioHoldingsFromSnapshot,
@@ -10,7 +11,10 @@ import {
   buildPortfolioTimelineFromValuations,
 } from "./from-snapshot";
 import { cachedPortfolioData } from "./cache";
-import { latestCurrentHoldings } from "./latest-holdings";
+import {
+  latestCurrentHoldings,
+  latestSourceSnapshotDate,
+} from "./latest-holdings";
 import { getUsdInrRateIfNeeded } from "./utils";
 import type { PortfolioContext } from "./types";
 
@@ -39,11 +43,33 @@ async function buildPortfolioOverviewUncached(ctx: PortfolioContext) {
     latestHoldings,
     usdInrRate?.rate,
     usdInrRate ? [usdInrRate] : [],
+    await latestSourceSnapshotDate(ctx),
   );
-  const historicalTimeline =
+  let historicalTimeline =
     valuations.length > 0
       ? buildPortfolioTimelineFromValuations(valuations, usdInrRate?.rate)
       : await holdingSnapshotTimelineRows(ctx);
+  if (valuations.length && summary.asOfDate) {
+    const declarations = await sourceSnapshotDates(ctx);
+    const firstDeclarationDate = declarations
+      .map((declaration) => declaration.snapshotDate)
+      .sort()[0];
+    if (firstDeclarationDate) {
+      const sourcePoints = (
+        await holdingSnapshotTimelineRows(ctx, true)
+      ).filter((point) => point.snapshotDate >= firstDeclarationDate);
+      historicalTimeline = [
+        ...new Map(
+          [...sourcePoints, ...historicalTimeline].map((point) => [
+            point.snapshotDate,
+            point,
+          ]),
+        ).values(),
+      ].sort((left, right) =>
+        left.snapshotDate.localeCompare(right.snapshotDate),
+      );
+    }
+  }
   const lastTimelinePoint = historicalTimeline.at(-1);
   let timeline = historicalTimeline;
   if (
@@ -77,6 +103,7 @@ async function buildPortfolioOverviewUncached(ctx: PortfolioContext) {
       valuations,
       cashFlows,
       usdInrRate?.rate,
+      summary.asOfDate,
     ),
     timeline,
   };

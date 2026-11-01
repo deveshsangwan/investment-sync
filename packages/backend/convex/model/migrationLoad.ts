@@ -9,6 +9,7 @@ import {
   type PortfolioFact,
 } from "@investment-sync/portfolio-domain";
 import { z } from "zod";
+import { expectedMigratedSourceSnapshot } from "./migrationFactAudit";
 import { classifyQuoteAge, scheduleQuoteExpiry } from "./currencyRates";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -31,6 +32,8 @@ import {
   priceSchema,
   rateSchema,
   sourceFileManifestSchema,
+  sourceSnapshotSchema,
+  tableCountsSchema,
   transactionSchema,
   userSchema,
   valuationSchema,
@@ -203,6 +206,7 @@ export async function loadLegacyRecord(
       const id = await ctx.db.insert("importBatches", {
         legacyId: row.id,
         legacyStatus: row.status,
+        legacySourceSequence: row.source_sequence ?? undefined,
         legacyDeclaredRowCount: row.row_count,
         legacyErrors: row.errors,
         householdId: household._id,
@@ -333,6 +337,9 @@ export async function loadLegacyRecord(
       );
       return;
     }
+    case "source_snapshots":
+      await loadSourceSnapshot(ctx, run, value);
+      return;
     case "holding_snapshots":
     case "transactions":
     case "portfolio_valuations":
@@ -397,6 +404,13 @@ async function loadFact(
   legacyTable: "holding_snapshots" | "transactions" | "portfolio_valuations",
   value: unknown,
 ) {
+  const expectedCounts = tableCountsSchema.parse(
+    parseJson(run.expectedCountsJson),
+  );
+  const loadedCounts = tableCountsSchema.parse(parseJson(run.loadedCountsJson));
+  if (expectedCounts.source_snapshots !== loadedCounts.source_snapshots)
+    throw new Error("Source declarations must load before financial facts");
+
   const source =
     legacyTable === "holding_snapshots"
       ? holdingSchema.parse(value)
@@ -423,12 +437,34 @@ async function loadFact(
     : null;
   if (batch && batch.householdId !== household._id)
     throw new Error("Fact batch belongs to another household");
+  let ordinal = run.nextFactOrdinal + 1;
+  while (batchLegacyId) {
+    const reserved = await ctx.db
+      .query("migrationRecords")
+      .withIndex(
+        "by_runKey_and_legacyTable_and_batchLegacyId_and_rowNumber",
+        (q) =>
+          q
+            .eq("runKey", run.runKey)
+            .eq("legacyTable", "source_snapshots")
+            .eq("batchLegacyId", batchLegacyId)
+            .eq("rowNumber", ordinal),
+      )
+      .unique();
+    if (!reserved) break;
+
+    ordinal += 1;
+  }
+
   const provenance = {
     legacyId: source.id,
     batchId: batchLegacyId ?? `legacy:${source.id}`,
     parserVersion: batch?.parserVersion ?? "legacy-postgres",
     sequence: Date.parse(source.created_at),
-    rowNumber: run.nextFactOrdinal + 1,
+    ...(batch?.legacySourceSequence === undefined
+      ? {}
+      : { sourceSequence: batch.legacySourceSequence }),
+    rowNumber: ordinal,
     fallbackDate: new Date(batch?.createdAt ?? Date.parse(source.created_at))
       .toISOString()
       .slice(0, 10),
@@ -621,8 +657,12 @@ async function loadFact(
     rowNumber: provenance.rowNumber,
   });
   await ctx.db.patch("migrationRuns", run._id, {
-    nextFactOrdinal: run.nextFactOrdinal + 1,
-    maximumFactSequence: Math.max(run.maximumFactSequence, provenance.sequence),
+    nextFactOrdinal: ordinal,
+    maximumFactSequence: Math.max(
+      run.maximumFactSequence,
+      provenance.sequence,
+      provenance.sourceSequence ?? 0,
+    ),
   });
 }
 
@@ -697,6 +737,108 @@ function storedRow(
     ...defined,
     numericProvenance: Object.fromEntries(
       Object.keys(defined).map((key) => [key, "persisted_decimal"]),
+    ),
+  });
+}
+
+async function loadSourceSnapshot(
+  ctx: MutationCtx,
+  run: Doc<"migrationRuns">,
+  value: unknown,
+) {
+  if (run.nextFactOrdinal !== 0)
+    throw new Error("Source declarations must load before financial facts");
+
+  const source = sourceSnapshotSchema.parse(value);
+  const accountSource = accountSchema.parse(
+    parseJson(
+      (await migrationRecord(ctx, run.runKey, "accounts", source.account_id))
+        .sourceJson,
+    ),
+  );
+  const batchSource = batchSchema.parse(
+    parseJson(
+      (
+        await migrationRecord(
+          ctx,
+          run.runKey,
+          "import_batches",
+          source.import_batch_id,
+        )
+      ).sourceJson,
+    ),
+  );
+  const fact = expectedMigratedSourceSnapshot({
+    source,
+    account: accountSource,
+    batch: batchSource,
+  });
+  const [household, account, batch] = await Promise.all([
+    migrationTarget(
+      ctx,
+      run.runKey,
+      "households",
+      source.household_id,
+      "households",
+    ),
+    migrationTarget(ctx, run.runKey, "accounts", source.account_id, "accounts"),
+    migrationTarget(
+      ctx,
+      run.runKey,
+      "import_batches",
+      source.import_batch_id,
+      "importBatches",
+    ),
+  ]);
+  const identified = buildPortfolioPublication({ existingFacts: [fact] })
+    .identifiedFacts[0];
+  if (!identified || identified.identity.kind !== "source_snapshot")
+    throw new Error("Missing declaration identity");
+
+  const identity = identified.identity;
+  if (
+    account.householdId !== household._id ||
+    batch.householdId !== household._id ||
+    account.key !== identity.accountKey
+  )
+    throw new Error("Source declaration parent ownership mismatch");
+
+  const key = JSON.stringify([source.import_batch_id, source.row_number]);
+  const duplicate = await ctx.db
+    .query("sourceSnapshots")
+    .withIndex("by_householdId_and_key", (q) =>
+      q.eq("householdId", household._id).eq("key", key),
+    )
+    .unique();
+  if (duplicate) throw new Error("Legacy immutable provenance key collision");
+
+  const id = await ctx.db.insert("sourceSnapshots", {
+    legacyId: source.id,
+    householdId: household._id,
+    batchId: batch._id,
+    key,
+    accountKey: identity.accountKey,
+    sourceGroupKey: identity.sourceGroupKey,
+    date: identity.snapshotDate,
+    factJson: JSON.stringify(fact),
+  });
+  await mapTarget(
+    ctx,
+    run.runKey,
+    "source_snapshots",
+    source.id,
+    "sourceSnapshots",
+    id,
+  );
+  await archiveRecord(ctx, run, "source_snapshots", source, value, {
+    householdLegacyId: source.household_id,
+    batchLegacyId: source.import_batch_id,
+    rowNumber: source.row_number,
+  });
+  await ctx.db.patch("migrationRuns", run._id, {
+    maximumFactSequence: Math.max(
+      run.maximumFactSequence,
+      source.source_sequence,
     ),
   });
 }

@@ -18,6 +18,7 @@ const {
   findAccountId,
   findInstrumentId,
   transactionUniqueKey,
+  realizedSaleSqlIdentity,
 } = require("./reverse-replay-identities.cjs");
 
 function replayFacts({
@@ -35,6 +36,7 @@ function replayFacts({
 
   for (const [table, kind] of [
     ["holdingSnapshots", "holding"],
+    ["sourceSnapshots", "source_snapshot"],
     ["transactions", "transaction"],
     ["portfolioValuations", "valuation"],
   ]) {
@@ -88,6 +90,8 @@ function replayFacts({
       if (
         fact.provenance.rowNumber !== index + 1 ||
         fact.provenance.sequence !== batch.sequence ||
+        (fact.provenance.sourceSequence !== undefined &&
+          fact.provenance.sourceSequence !== batch.sequence) ||
         stableJson(fact.row) !== stableJson(expectedRows[index])
       )
         reject("committed_fact_input_mismatch");
@@ -144,6 +148,31 @@ function replayFacts({
     }
 
     const accountId = findAccountId(fact, maps, targetTables);
+    if (row.kind === "source_snapshot") {
+      const value = {
+        id: deterministicUuid("source_snapshots", fact.doc._id),
+        household_id: householdId,
+        account_id: accountId,
+        import_batch_id: batchId,
+        row_number: integer(fact.provenance.rowNumber),
+        source_type: row.sourceType,
+        snapshot_date: date(row.sourceDate ?? fact.provenance.fallbackDate),
+        asset_class: row.assetClass,
+        currency: row.currency,
+        source_group: row.sourceGroup,
+        completeness: row.completeness,
+        normalized_payload: row,
+        source_sequence: integer(
+          fact.provenance.sourceSequence ?? fact.provenance.sequence,
+        ),
+        parser_version: text(fact.provenance.parserVersion),
+        fallback_date: date(fact.provenance.fallbackDate),
+        created_at: createdAt,
+      };
+      rowsByTable.source_snapshots.set(value.id, value);
+      continue;
+    }
+
     const instrumentId = findInstrumentId(fact, maps, targetTables);
     if (row.kind === "holding") {
       const snapshotDate = date(row.sourceDate ?? fact.provenance.fallbackDate);
@@ -187,6 +216,7 @@ function replayFacts({
 
     const tradeDate = date(row.tradeDate);
     const amount = scaled(row.amount, 4);
+    const saleIdentity = realizedSaleSqlIdentity(fact);
     const previous = [...rowsByTable.transactions.values()].find(
       (candidate) =>
         candidate.household_id === householdId &&
@@ -194,8 +224,9 @@ function replayFacts({
         candidate.instrument_id === instrumentId &&
         candidate.trade_date === tradeDate &&
         candidate.type === row.type &&
-        candidate.amount === amount &&
-        candidate.currency === row.currency,
+        (saleIdentity || candidate.amount === amount) &&
+        candidate.currency === row.currency &&
+        (candidate.metadata.realizedSaleIdentity ?? "") === saleIdentity,
     );
     const value = {
       id: previous?.id ?? deterministicUuid("transactions", fact.doc._id),
@@ -210,7 +241,12 @@ function replayFacts({
       amount,
       currency: row.currency,
       notes: previous?.notes ?? null,
-      metadata: row.metadata,
+      metadata: saleIdentity
+        ? {
+            ...row.metadata,
+            realizedSaleIdentity: saleIdentity,
+          }
+        : row.metadata,
       created_at: previous?.created_at ?? createdAt,
     };
     rowsByTable.transactions.set(value.id, value);
@@ -414,11 +450,36 @@ function validateMigratedFact({
 }) {
   const legacyTable = {
     holdingSnapshots: "holding_snapshots",
+    sourceSnapshots: "source_snapshots",
     transactions: "transactions",
     portfolioValuations: "portfolio_valuations",
   }[table];
   const source = rowsByTable[legacyTable].get(mapped(maps[table], doc._id));
   const legacyBatchId = source?.import_batch_id ?? null;
+  if (kind === "source_snapshot") {
+    if (
+      !source ||
+      source.id !== doc.legacyId ||
+      fact.provenance.legacyId !== source.id ||
+      source.household_id !== mapped(maps.households, doc.householdId) ||
+      !batch ||
+      mapped(maps.importBatches, batch._id) !== source.import_batch_id ||
+      fact.provenance.batchId !== source.import_batch_id ||
+      fact.provenance.parserVersion !== source.parser_version ||
+      fact.provenance.sequence !== source.source_sequence ||
+      (fact.provenance.sourceSequence ?? fact.provenance.sequence) !==
+        source.source_sequence ||
+      fact.provenance.rowNumber !== source.row_number ||
+      fact.provenance.fallbackDate !== source.fallback_date ||
+      findAccountId({ ...fact, doc }, maps, targetTables) !==
+        source.account_id ||
+      stableJson(fact.row) !== stableJson(source.normalized_payload)
+    )
+      reject("invalid_migrated_source_snapshot");
+
+    return;
+  }
+
   if (
     !source ||
     source.id !== doc.legacyId ||

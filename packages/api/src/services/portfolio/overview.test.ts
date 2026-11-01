@@ -13,10 +13,12 @@ vi.mock("./data", () => ({
   cashFlowRows: vi.fn(),
   holdingSnapshotTimelineRows: vi.fn(),
   portfolioValuationRows: vi.fn(),
+  sourceSnapshotDates: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("./latest-holdings", () => ({
   latestCurrentHoldings: vi.fn(),
+  latestSourceSnapshotDate: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("./utils", async (importOriginal) => ({

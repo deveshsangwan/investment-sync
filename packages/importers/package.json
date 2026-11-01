@@ -27,6 +27,7 @@
     "./numeric": "./src/numeric.ts",
     "./source": "./src/source.ts",
     "./nps-details": "./src/nps-details.ts",
-    "./exact-adapter": "./src/exact-adapter.ts"
+    "./exact-adapter": "./src/exact-adapter.ts",
+    "./realized-sales": "./src/realized-sales.ts"
   }
 }

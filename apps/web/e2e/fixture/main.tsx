@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { ConvexAppProvider } from "../../src/app/convex-provider";
+import { HoldingDetailClient } from "../../src/app/dashboard/holdings/[id]/holding-detail-client";
 import { DashboardClient } from "../../src/app/dashboard/dashboard-client";
 import { UploadsRoute } from "../../src/app/uploads/uploads-client";
 import { SettingsClient } from "../../src/app/settings/settings-client";
@@ -19,7 +20,9 @@ function App() {
           <Link href="/dashboard">Dashboard</Link>{" "}
           <Link href="/settings">Accounts</Link>
         </nav>
-        {pathname === "/dashboard" ? (
+        {pathname.startsWith("/dashboard/holdings/") ? (
+          <HoldingDetailClient />
+        ) : pathname === "/dashboard" ? (
           <DashboardClient />
         ) : pathname === "/settings" ? (
           <SettingsClient />

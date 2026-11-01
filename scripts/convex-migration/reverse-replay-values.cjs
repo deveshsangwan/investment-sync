@@ -10,6 +10,7 @@ const TARGET_TABLES = [
   "sourceFiles",
   "importRowChunks",
   "holdingSnapshots",
+  "sourceSnapshots",
   "transactions",
   "portfolioValuations",
   "portfolioVersions",
@@ -53,7 +54,11 @@ function legacyNormalizedRow(row) {
 
 function validateExactRow(row) {
   object(row);
-  if (!["holding", "transaction", "valuation"].includes(row.kind))
+  if (
+    !["holding", "transaction", "valuation", "source_snapshot"].includes(
+      row.kind,
+    )
+  )
     reject("invalid_normalized_row_kind");
   if (
     ![
@@ -86,7 +91,7 @@ function validateExactRow(row) {
   if (row.kind !== "valuation") {
     text(row.provider);
     text(row.accountName);
-    text(row.instrumentName);
+    if (row.kind !== "source_snapshot") text(row.instrumentName);
     if (
       ![
         "indian_stock",
@@ -100,6 +105,41 @@ function validateExactRow(row) {
       ].includes(row.assetClass)
     )
       reject("invalid_asset_class");
+  }
+
+  if (row.kind === "source_snapshot") {
+    if (
+      typeof row.sourceGroup !== "string" ||
+      row.completeness !== "complete" ||
+      row.source.group !== row.sourceGroup ||
+      row.source.completeness !== "complete" ||
+      row.source.granularity !== "instrument" ||
+      Object.values(row.numericProvenance).some(
+        (value) =>
+          ![
+            "source_decimal",
+            "persisted_decimal",
+            "legacy_float64",
+            "xlsx_float64",
+            "derived_decimal",
+            "default",
+          ].includes(value),
+      )
+    )
+      reject("invalid_source_snapshot");
+    if (row.sourceDate !== undefined) date(row.sourceDate);
+    for (const field of [
+      "instrumentName",
+      "symbol",
+      "quantity",
+      "investedAmount",
+      "currentValue",
+      "amount",
+      "pnlAmount",
+    ])
+      if (row[field] !== undefined) reject("invalid_source_snapshot");
+
+    return;
   }
 
   const fields =

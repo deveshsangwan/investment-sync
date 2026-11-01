@@ -178,7 +178,12 @@ async function main() {
       parseFailures: available.filter((file) => file.parseStatus === "failed")
         .length,
       databaseRowCountMismatches: parsed.filter(
-        (file) => file.databaseRowCount !== file.normalizedRows,
+        (file) =>
+          file.databaseParserVersion === file.parserVersion &&
+          file.databaseRowCount !== file.normalizedRows,
+      ).length,
+      parserVersionDifferences: parsed.filter(
+        (file) => file.databaseParserVersion !== file.parserVersion,
       ).length,
       compressedBytes: range(available.map((file) => file.downloadedBytes)),
       normalizedRows: range(parsed.map((file) => file.normalizedRows)),

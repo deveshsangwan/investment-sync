@@ -46,7 +46,7 @@ const { createClient } = requireFromDatabase("@supabase/supabase-js") as {
   ) => ApiContext["supabase"];
 };
 const EVALUATION_TIME = "2026-06-20T12:00:00.000Z";
-const FIXTURE_VERSION = "phase6-generated-v2";
+const FIXTURE_VERSION = "phase6-generated-v3";
 const FIXED_DATE = new Date(EVALUATION_TIME);
 const FUTURE_EXPIRY = new Date("2026-07-20T12:00:00.000Z");
 const PAST_EXPIRY = new Date("2026-06-01T12:00:00.000Z");
@@ -59,6 +59,7 @@ const TABLES = [
   "import_batches",
   "import_rows",
   "holding_snapshots",
+  "source_snapshots",
   "transactions",
   "portfolio_valuations",
   "currency_rates",
@@ -601,13 +602,35 @@ function fixtureBatches(memberships: MembershipContext[]): FixtureBatch[] {
     commit: false,
   });
 
+  batches.push({
+    ...batch("empty-complete-source", []),
+    membership: primary,
+    rows: [
+      {
+        kind: "source_snapshot",
+        sourceType: "vested_drivewealth_xlsx",
+        sourceDate: "2026-06-19",
+        accountName: "Generated empty account",
+        provider: "Vested / DriveWealth",
+        assetClass: "us_stock",
+        currency: "USD",
+        sourceGroup: "",
+        completeness: "complete",
+        metadata: { fixture: "empty-complete-source" },
+      },
+    ],
+    sourceType: "vested_drivewealth_xlsx",
+    status: "committed",
+    commit: true,
+  });
+
   return batches;
 }
 
 function accountIdentity(
   row:
     | NormalizedHoldingRow
-    | Extract<NormalizedImportRow, { kind: "transaction" }>,
+    | Extract<NormalizedImportRow, { kind: "transaction" | "source_snapshot" }>,
 ) {
   return JSON.stringify([
     row.provider.trim().toLowerCase(),
@@ -650,6 +673,8 @@ async function seedCanonicalIdentities(db: Database, batches: FixtureBatch[]) {
         });
         accounts.add(accountKey);
       }
+
+      if (row.kind === "source_snapshot") continue;
 
       const instrumentKey = instrumentIdentity(row);
       if (!instruments.has(instrumentKey)) {
@@ -837,10 +862,20 @@ async function preservePersistedPrecision(client: postgres.Sql) {
 }
 
 async function normalizeGeneratedIdsAndTimestamps(client: postgres.Sql) {
+  const batches = await client<
+    { id: string }[]
+  >`select id from import_batches where source_sequence is not null order by uploaded_at, id`;
+  for (const [index, batch] of batches.entries()) {
+    const sequence = FIXED_DATE.getTime() + index;
+    await client`update import_batches set source_sequence = ${sequence} where id = ${batch.id}`;
+    await client`update source_snapshots set source_sequence = ${sequence} where import_batch_id = ${batch.id}`;
+  }
+
   for (const table of [
     "holding_snapshots",
     "transactions",
     "portfolio_valuations",
+    "source_snapshots",
   ] as const) {
     const rows = await client.unsafe<{ id: string; identity: string }[]>(
       `select id::text as id, (to_jsonb(t) - 'id' - 'created_at')::text as identity from ${table} t order by (to_jsonb(t) - 'id' - 'created_at')::text`,

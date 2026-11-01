@@ -28,7 +28,10 @@ import {
   sourceFileManifestSchema,
   userSchema,
 } from "./model/migrationValidators";
-import { auditMigratedFact } from "./model/migrationFactAudit";
+import {
+  auditMigratedFact,
+  auditMigratedSourceSnapshot,
+} from "./model/migrationFactAudit";
 import { auditPackedNormalizedRows } from "./model/migrationRowAudit";
 
 export const recordsPage = internalQuery({
@@ -532,6 +535,7 @@ async function auditRecord(
         [
           target.legacyId,
           target.legacyStatus,
+          target.legacySourceSequence ?? null,
           target.legacyDeclaredRowCount,
           target.legacyErrors,
           target.householdId,
@@ -548,6 +552,7 @@ async function auditRecord(
         [
           row.id,
           row.status,
+          row.source_sequence ?? null,
           row.row_count,
           row.errors,
           household._id,
@@ -644,6 +649,9 @@ async function auditRecord(
       );
       return;
     }
+    case "source_snapshots":
+      await auditMigratedSourceSnapshot(ctx, run, record);
+      return;
     case "holding_snapshots":
     case "transactions":
     case "portfolio_valuations": {

@@ -198,11 +198,16 @@ function portfolioOverview(
     ...projection.cashFlows.map((fact) => fact.row.currency),
     ...projection.valuations.map((row) => row.currency),
   ];
-  const timelineCurrencies = projection.hasExplicitValuations
-    ? []
-    : projection.timeline.flatMap((point) =>
-        point.totals.map((total) => total.currency),
-      );
+  const timelineCurrencies = projection.timeline.flatMap((point) =>
+    point.totals
+      .filter(
+        (total) =>
+          total.investedAmount !== "0" ||
+          total.currentValue !== "0" ||
+          total.pnlAmount !== "0",
+      )
+      .map((total) => total.currency),
+  );
   const rate = requiredRate([...currencies, ...timelineCurrencies], quote);
   const summary = summaryValues(projection, quote, currencies, rate);
   const performanceHoldings = current.map((position) =>
@@ -211,9 +216,9 @@ function portfolioOverview(
   const performance = {
     ...summarizePerformance({
       holdings: performanceHoldings,
-      cashFlows: projection.cashFlows.map((fact) =>
-        performanceCashFlow(fact, rate),
-      ),
+      cashFlows: projection.cashFlows
+        .filter((fact) => !fact.row.metadata.realizedSale)
+        .map((fact) => performanceCashFlow(fact, rate)),
       valuations: projection.valuations.map((row) => ({
         date: new Date(row.valuationDate),
         investedAmount: convert(row.investedAmount, row.currency, rate),
@@ -321,7 +326,14 @@ function assetClassDetail(
       ...position.history.map((fact) => fact.row.currency),
     ]),
     ...asset.timeline.flatMap((point) =>
-      point.totals.map((total) => total.currency),
+      point.totals
+        .filter(
+          (total) =>
+            total.investedAmount !== "0" ||
+            total.currentValue !== "0" ||
+            total.pnlAmount !== "0",
+        )
+        .map((total) => total.currency),
     ),
   ];
   const rate = requiredRate(currencies, quote);
@@ -432,6 +444,21 @@ function holdingDetail(
     }),
     npsDetails:
       npsDetailsSchema.safeParse(latest.row.metadata.npsDetails).data ?? null,
+    sales: position.transactions.flatMap((fact) => {
+      const sale = fact.row.metadata.realizedSale;
+      if (!sale) return [];
+
+      return [
+        {
+          id: fact.occurrenceKey,
+          saleDate: fact.row.tradeDate,
+          quantity: fact.row.quantity ?? null,
+          proceeds: fact.row.amount,
+          currency: fact.row.currency,
+          ...sale,
+        },
+      ];
+    }),
     transactions: position.transactions.map((fact) => ({
       id: fact.occurrenceKey,
       tradeDate: fact.row.tradeDate,
@@ -460,7 +487,9 @@ function positionXirr(
   const transactions = position.transactions;
 
   return resolveHoldingXirr({
-    cashFlows: transactions.map((fact) => performanceCashFlow(fact, rate)),
+    cashFlows: transactions
+      .filter((fact) => !fact.row.metadata.realizedSale)
+      .map((fact) => performanceCashFlow(fact, rate)),
     terminalValue: convert(
       position.holding.row.currentValue,
       position.holding.row.currency,

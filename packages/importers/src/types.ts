@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { canonicalDecimalSchema } from "./numeric";
 import { isValidCalendarDateParts } from "./calendar";
 
 export type ImportSourceType =
@@ -77,7 +78,10 @@ export interface NormalizedTransactionRow {
   quantity?: number;
   price?: number;
   amount: number;
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> & {
+    realizedSale?: RealizedSale;
+    realizedSaleIdentity?: string;
+  };
 }
 
 export interface NormalizedValuationRow {
@@ -91,10 +95,24 @@ export interface NormalizedValuationRow {
   metadata: Record<string, unknown>;
 }
 
+export interface NormalizedSourceSnapshotRow {
+  kind: "source_snapshot";
+  sourceType: ImportSourceType;
+  sourceDate?: string;
+  accountName: string;
+  provider: string;
+  assetClass: AssetClass;
+  currency: Currency;
+  sourceGroup: string;
+  completeness: "complete";
+  metadata: Record<string, unknown>;
+}
+
 export type NormalizedImportRow =
   | NormalizedHoldingRow
   | NormalizedTransactionRow
-  | NormalizedValuationRow;
+  | NormalizedValuationRow
+  | NormalizedSourceSnapshotRow;
 
 export interface ParseResult {
   sourceType: ImportSourceType;
@@ -150,6 +168,15 @@ export const isoDateSchema = z
     );
   }, "Invalid calendar date");
 
+export const realizedSaleSchema = z.object({
+  acquisitionDate: isoDateSchema.optional(),
+  costBasis: canonicalDecimalSchema,
+  realizedPnl: canonicalDecimalSchema,
+  executionId: z.string().min(1).optional(),
+  lotId: z.string().min(1).optional(),
+});
+export type RealizedSale = z.infer<typeof realizedSaleSchema>;
+
 export const normalizedHoldingRowSchema = z.object({
   kind: z.literal("holding"),
   sourceType: importSourceTypeSchema,
@@ -193,7 +220,14 @@ export const normalizedTransactionRowSchema = z.object({
   quantity: z.number().finite().optional(),
   price: z.number().finite().optional(),
   amount: z.number().finite(),
-  metadata: metadataSchema,
+  metadata: z
+    .object({
+      realizedSaleIdentity: z.string().optional(),
+      realizedSale: realizedSaleSchema
+        .extend({ acquisitionDate: isoDateSchema.optional() })
+        .optional(),
+    })
+    .catchall(z.unknown()),
 }) satisfies z.ZodType<NormalizedTransactionRow>;
 
 export const normalizedValuationRowSchema = z.object({
@@ -207,8 +241,22 @@ export const normalizedValuationRowSchema = z.object({
   metadata: metadataSchema,
 }) satisfies z.ZodType<NormalizedValuationRow>;
 
+export const normalizedSourceSnapshotRowSchema = z.object({
+  kind: z.literal("source_snapshot"),
+  sourceType: importSourceTypeSchema,
+  sourceDate: isoDateSchema.optional(),
+  accountName: z.string().trim().min(1),
+  provider: z.string().trim().min(1),
+  assetClass: assetClassSchema,
+  currency: currencySchema,
+  sourceGroup: z.string(),
+  completeness: z.literal("complete"),
+  metadata: metadataSchema,
+}) satisfies z.ZodType<NormalizedSourceSnapshotRow>;
+
 export const normalizedImportRowSchema = z.discriminatedUnion("kind", [
   normalizedHoldingRowSchema,
   normalizedTransactionRowSchema,
   normalizedValuationRowSchema,
+  normalizedSourceSnapshotRowSchema,
 ]) satisfies z.ZodType<NormalizedImportRow>;

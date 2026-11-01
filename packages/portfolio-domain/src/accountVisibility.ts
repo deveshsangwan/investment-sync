@@ -34,22 +34,34 @@ export function visibleAccountProjection(
       .flatMap((position) => position.history)
       .map((fact) => [fact.factKey, fact]),
   );
+  const declarations = projection.sourceSnapshots ?? [];
+  const visibleDeclarations = declarations.filter(isVisible);
   const eligible = eligibleSnapshots([...history.values()]);
-  const timeline = (holdings: typeof eligible) =>
-    timelineWithManualPolicies(
+  const timeline = (holdings: typeof eligible, assetClass?: string) => {
+    const sourceSnapshots = declarations.filter(
+      (fact) => !assetClass || fact.row.assetClass === assetClass,
+    );
+    return timelineWithManualPolicies(
       holdings,
-      snapshotTimeline(holdings.filter(isVisible)),
+      snapshotTimeline(
+        holdings.filter(isVisible),
+        sourceSnapshots.filter(isVisible),
+      ),
       false,
       archivedAccountKeys,
+      sourceSnapshots,
     );
+  };
 
   return {
     ...projection,
     positions,
     detailPositions,
     asOfDate:
-      current
-        .map((position) => position.holding.snapshotDate)
+      [
+        ...current.map((position) => position.holding.snapshotDate),
+        ...visibleDeclarations.map((fact) => fact.snapshotDate),
+      ]
         .sort()
         .at(-1) ?? null,
     totals: nativeTotals(current.map((position) => position.holding.row)),
@@ -64,6 +76,7 @@ export function visibleAccountProjection(
       ),
       timeline: timeline(
         eligible.filter((fact) => fact.row.assetClass === asset.assetClass),
+        asset.assetClass,
       ),
     })),
     timeline: timeline(eligible),
