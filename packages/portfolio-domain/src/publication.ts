@@ -450,6 +450,9 @@ function validateFact(fact: PortfolioFact) {
     !provenance.parserVersion ||
     !Number.isSafeInteger(provenance.sequence) ||
     provenance.sequence < 0 ||
+    (provenance.sourceSequence !== undefined &&
+      (!Number.isSafeInteger(provenance.sourceSequence) ||
+        provenance.sourceSequence < 0)) ||
     !Number.isSafeInteger(provenance.rowNumber) ||
     provenance.rowNumber < 1
   ) {
@@ -519,7 +522,8 @@ function optionalScaled(
 
 function compareFacts(left: PortfolioFact, right: PortfolioFact): number {
   return (
-    left.provenance.sequence - right.provenance.sequence ||
+    (left.provenance.sourceSequence ?? left.provenance.sequence) -
+      (right.provenance.sourceSequence ?? right.provenance.sequence) ||
     compareText(left.provenance.batchId, right.provenance.batchId) ||
     left.provenance.rowNumber - right.provenance.rowNumber
   );

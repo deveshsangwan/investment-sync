@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseExactImportFile } from "@investment-sync/importers";
+import {
+  adaptLegacyRow,
+  parseExactImportFile,
+} from "@investment-sync/importers";
 import { vestedWorkbook } from "../../importers/src/vested-fixtures";
 import {
   buildPortfolioPublication,
@@ -118,6 +121,146 @@ describe("complete source snapshot declarations", () => {
     });
     expect(withoutEvidence.projection.positions[0]?.status).toBe("current");
     expect(withoutEvidence.projection.totals[0]?.currentValue).toBe("120");
+  });
+
+  it("uses the winning same-date report in both current totals and charts", () => {
+    const first = report("2025-01-01");
+    const empty = report("2025-01-01", { holdings: [] }, first.facts, 2);
+    expect(empty.projection.totals).toEqual([]);
+    expect(empty.projection.timeline).toMatchObject([
+      { snapshotDate: "2025-01-01", totals: [{ currentValue: "0" }] },
+    ]);
+  });
+
+  it("carries an independent account across a source liquidation and preserves reentry and out-of-order boundaries", () => {
+    const first = report("2025-01-01");
+    const other = first.facts.map((fact) => ({
+      ...fact,
+      row:
+        fact.row.kind === "valuation"
+          ? fact.row
+          : { ...fact.row, provider: "Independent", accountName: "Other" },
+      provenance: { ...fact.provenance, batchId: "other" },
+    }));
+    const empty = report(
+      "2025-02-01",
+      { holdings: [] },
+      [...first.facts, ...other],
+      2,
+    );
+    expect(empty.projection.totals[0]?.currentValue).toBe("120");
+    expect(empty.projection.timeline.at(-1)?.totals[0]?.currentValue).toBe(
+      "120",
+    );
+    const old = report("2024-12-01", {}, empty.facts, 3);
+    expect(old.projection.totals[0]?.currentValue).toBe("120");
+    const reentry = report("2025-03-01", {}, old.facts, 4);
+    expect(reentry.projection.totals[0]?.currentValue).toBe("240");
+    expect(reentry.projection.timeline.at(-1)?.totals[0]?.currentValue).toBe(
+      "240",
+    );
+  });
+
+  it("does not admit holdings belonging to a rejected lower-priority complete report", () => {
+    const parsed = parseExactImportFile(vestedWorkbook());
+    const high = buildPortfolioPublication({
+      existingFacts: [],
+      batch: {
+        id: "high",
+        sequence: 1,
+        parserVersion: "test",
+        fallbackDate: "2025-01-01",
+        rows: parsed.rows.map((row) => {
+          const ranked = structuredClone(row);
+          ranked.source.priority = 100;
+          return ranked;
+        }),
+      },
+    });
+    const low = parseExactImportFile(
+      vestedWorkbook({ holdings: [["LOW", 1, 10, 12]] }),
+    );
+    const result = buildPortfolioPublication({
+      existingFacts: high.facts,
+      batch: {
+        id: "low",
+        sequence: 2,
+        parserVersion: "test",
+        fallbackDate: "2025-01-01",
+        rows: low.rows,
+      },
+    });
+    expect(result.projection.totals[0]?.currentValue).toBe("120");
+    expect(
+      result.projection.positions
+        .filter((position) => position.status === "current")
+        .map((position) => position.holding.row.symbol),
+    ).toEqual(["FAKE"]);
+    expect(result.projection.timeline.at(-1)?.totals[0]?.currentValue).toBe(
+      "120",
+    );
+  });
+
+  it("uses the observation order independently of retained SQL holding creation order", () => {
+    const first = report("2025-01-01");
+    const empty = report("2025-01-01", { holdings: [] }, first.facts, 2);
+    const corrected = first.facts.map((fact) => ({
+      ...fact,
+      provenance: {
+        ...fact.provenance,
+        batchId: "corrected",
+        sourceSequence: 3,
+      },
+    }));
+    const result = buildPortfolioPublication({
+      existingFacts: [...empty.facts, ...corrected],
+    });
+    expect(result.projection.totals[0]?.currentValue).toBe("120");
+  });
+
+  it("retains prior explicit valuation history and records later source boundaries without inventing valuation facts", () => {
+    const first = report("2025-01-01");
+    const prior: PortfolioFact = {
+      row: adaptLegacyRow({
+        kind: "valuation",
+        sourceType: "investment_portfolio_xlsx",
+        valuationDate: "2024-12-01",
+        investedAmount: 100,
+        currentValue: 120,
+        currency: "USD",
+        metadata: {},
+      }),
+      provenance: {
+        batchId: "valuation",
+        parserVersion: "test",
+        sequence: 0,
+        rowNumber: 1,
+        fallbackDate: "2024-12-01",
+      },
+    };
+    const empty = report(
+      "2025-02-01",
+      { holdings: [] },
+      [prior, ...first.facts],
+      2,
+    );
+    expect(
+      empty.projection.timeline.map((point) => point.snapshotDate),
+    ).toEqual(["2024-12-01", "2025-01-01", "2025-02-01"]);
+    expect(empty.projection.timeline.at(-1)?.totals[0]?.currentValue).toBe("0");
+    expect(empty.projection.valuations).toHaveLength(1);
+  });
+
+  it("preserves historical points before the first retained declaration", () => {
+    const legacy = report("2025-01-01").facts.filter(
+      (fact) => fact.row.kind !== "source_snapshot",
+    );
+    const empty = report("2025-02-01", { holdings: [] }, legacy, 2);
+    expect(
+      empty.projection.timeline.map((point) => point.snapshotDate),
+    ).toEqual(["2025-01-01", "2025-02-01"]);
+    expect(empty.projection.timeline[0]?.totals[0]?.currentValue).toBe("120");
+    expect(empty.projection.timeline[1]?.totals[0]?.currentValue).toBe("0");
   });
 
   it.each([

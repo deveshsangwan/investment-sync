@@ -39,7 +39,12 @@ export function selectPositions(
       date: fact.snapshotDate,
       priority,
       ...(fact.row.kind === "source_snapshot"
-        ? { declaration: { provenance: fact.provenance } }
+        ? {
+            declaration: {
+              provenance: fact.provenance,
+              sourcePriority: fact.row.source.priority,
+            },
+          }
         : {}),
     };
     if (isNewCompleteSnapshot(previous, next))
@@ -75,12 +80,13 @@ export function selectPositions(
 interface CompleteSnapshot {
   date: string;
   priority: number;
-  declaration?: { provenance: ImportProvenance };
+  declaration?: { provenance: ImportProvenance; sourcePriority: number };
 }
 
 function compareSourceOrder(left: ImportProvenance, right: ImportProvenance) {
   return (
-    left.sequence - right.sequence ||
+    (left.sourceSequence ?? left.sequence) -
+      (right.sourceSequence ?? right.sequence) ||
     compareText(left.batchId, right.batchId) ||
     left.rowNumber - right.rowNumber
   );
@@ -98,10 +104,14 @@ function isNewCompleteSnapshot(
         (next.priority === previous.priority &&
           next.declaration !== undefined &&
           (!previous.declaration ||
-            compareSourceOrder(
-              next.declaration.provenance,
-              previous.declaration.provenance,
-            ) > 0))))
+            next.declaration.sourcePriority >
+              previous.declaration.sourcePriority ||
+            (next.declaration.sourcePriority ===
+              previous.declaration.sourcePriority &&
+              compareSourceOrder(
+                next.declaration.provenance,
+                previous.declaration.provenance,
+              ) > 0)))))
   );
 }
 
@@ -110,8 +120,11 @@ function isCurrentAtSnapshot(fact: HoldingFact, complete: CompleteSnapshot) {
     return fact.snapshotDate > complete.date;
   const priority = selectionPriority(fact);
   if (priority !== complete.priority) return priority > complete.priority;
+  if (!complete.declaration) return true;
+  if (fact.row.source.priority !== complete.declaration.sourcePriority)
+    return fact.row.source.priority > complete.declaration.sourcePriority;
+
   return (
-    !complete.declaration ||
     fact.provenance.batchId === complete.declaration.provenance.batchId ||
     compareSourceOrder(fact.provenance, complete.declaration.provenance) > 0
   );
@@ -144,7 +157,9 @@ function selectionGroupKey(fact: HoldingFact | SourceSnapshotFact): string {
     row.sourceType === "investment_portfolio_xlsx" &&
     row.assetClass === "us_stock" &&
     row.currency === "USD" &&
-    row.metadata.sourceSheet === "US stocks";
+    (row.kind === "source_snapshot"
+      ? row.sourceGroup
+      : row.metadata.sourceSheet) === "US stocks";
 
   // The known importer representations share omission semantics while their
   // physical source groups remain separate for aggregates and history.
@@ -166,7 +181,9 @@ function isVestedSource(
     row.sourceType === "vested_drivewealth_xlsx" &&
     row.assetClass === "us_stock" &&
     row.currency === "USD" &&
-    (row.metadata.sourceSheet ?? "") === ""
+    (row.kind === "source_snapshot"
+      ? row.sourceGroup
+      : (row.metadata.sourceSheet ?? "")) === ""
   );
 }
 
@@ -205,25 +222,22 @@ export function snapshotTimeline(
   holdings: HoldingFact[],
   declarations: SourceSnapshotFact[] = [],
 ): NativeTimelinePoint[] {
+  if (declarations.length) {
+    return timelineWithManualPolicies(
+      holdings,
+      snapshotTimeline(holdings),
+      false,
+      new Set(),
+      declarations,
+    );
+  }
+
   const groups = groupBy(holdings, (fact) => fact.snapshotDate);
-  for (const declaration of declarations)
-    if (!groups.has(declaration.snapshotDate))
-      groups.set(declaration.snapshotDate, []);
   return [...groups]
     .sort(([left], [right]) => compareText(left, right))
     .map(([snapshotDate, facts]) => ({
       snapshotDate,
-      totals: nativeTotals([
-        ...facts.map((fact) => fact.row),
-        ...declarations
-          .filter((fact) => fact.snapshotDate === snapshotDate)
-          .map((fact) => ({
-            currency: fact.row.currency,
-            investedAmount: "0",
-            currentValue: "0",
-            pnlAmount: "0",
-          })),
-      ]),
+      totals: nativeTotals(facts.map((fact) => fact.row)),
       // Legacy charts convert each persisted row before summing. Exact native
       // totals remain authoritative; these ordered inputs preserve display math.
       displayAmounts: [...facts]
@@ -275,9 +289,32 @@ export function timelineWithManualPolicies(
     )
     .map((fact) => fact.snapshotDate)
     .sort();
-  const firstManualDate = manualDates[0];
+  const firstDeclarationDate = declarations
+    .map((fact) => fact.snapshotDate)
+    .sort()[0];
+  const firstSelectionDate = [manualDates[0], firstDeclarationDate]
+    .filter((date): date is string => date !== undefined)
+    .sort()[0];
 
-  if (!firstManualDate) return baseline;
+  if (!firstSelectionDate) return baseline;
+
+  // An explicit aggregate is authoritative on its reported date. Later complete
+  // account reports use the retained holding scopes, like the current summary.
+  // Their boundary is not a synthetic financial valuation.
+  if (hasExplicitValuations && firstDeclarationDate) {
+    const sourcePoints = snapshotTimeline(
+      holdings.filter((fact) => !fact.row.policyId),
+      declarations,
+    ).filter((point) => point.snapshotDate >= firstDeclarationDate);
+    baseline = [
+      ...new Map(
+        [...sourcePoints, ...baseline].map((point) => [
+          point.snapshotDate,
+          point,
+        ]),
+      ).values(),
+    ].sort((left, right) => compareText(left.snapshotDate, right.snapshotDate));
+  }
 
   // A manual entry updates one policy. Carry the other positions forward
   // instead of treating every entry date as a complete portfolio snapshot.
@@ -288,7 +325,7 @@ export function timelineWithManualPolicies(
       ...declarations.map((fact) => fact.snapshotDate),
     ]),
   ]
-    .filter((date) => date >= firstManualDate)
+    .filter((date) => date >= firstSelectionDate)
     .sort();
 
   const candidates = holdings
@@ -301,6 +338,7 @@ export function timelineWithManualPolicies(
     .sort((left, right) => compareText(left.snapshotDate, right.snapshotDate))
     .values();
   let nextDeclaration = declarationIterator.next();
+  const declaredCurrencies = new Set<NativeTotal["currency"]>();
   const reportedPoints = baseline.values();
   const selection: TimelineSelection = {
     groups: new Map(),
@@ -310,7 +348,7 @@ export function timelineWithManualPolicies(
     totals: new Map(),
   };
   const timeline = baseline.filter(
-    (point) => point.snapshotDate < firstManualDate,
+    (point) => point.snapshotDate < firstSelectionDate,
   );
   let nextCandidate = candidates.next();
   let nextReportedPoint = reportedPoints.next();
@@ -322,6 +360,8 @@ export function timelineWithManualPolicies(
       nextDeclaration.value.snapshotDate <= snapshotDate
     ) {
       retainTimelineBoundary(selection, nextDeclaration.value);
+      if (!archivedAccountKeys.has(nextDeclaration.value.accountKey))
+        declaredCurrencies.add(nextDeclaration.value.row.currency);
       nextDeclaration = declarationIterator.next();
     }
     while (
@@ -358,7 +398,15 @@ export function timelineWithManualPolicies(
       snapshotDate,
       totals: hasExplicitValuations
         ? nativeTotals([...reportedTotals, ...selectedTotals])
-        : selectedTotals,
+        : nativeTotals([
+            ...selectedTotals,
+            ...[...declaredCurrencies].map((currency) => ({
+              currency,
+              investedAmount: "0",
+              currentValue: "0",
+              pnlAmount: "0",
+            })),
+          ]),
     });
   }
 
@@ -436,7 +484,12 @@ function retainTimelineBoundary(
     date: fact.snapshotDate,
     priority: selectionPriority(fact),
     ...(fact.row.kind === "source_snapshot"
-      ? { declaration: { provenance: fact.provenance } }
+      ? {
+          declaration: {
+            provenance: fact.provenance,
+            sourcePriority: fact.row.source.priority,
+          },
+        }
       : {}),
   };
   if (

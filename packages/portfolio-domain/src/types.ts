@@ -32,6 +32,7 @@ export interface ImportProvenance {
   batchId: string;
   parserVersion: string;
   sequence: number;
+  sourceSequence?: number;
   rowNumber: number;
   fallbackDate: string;
   legacyId?: string;
