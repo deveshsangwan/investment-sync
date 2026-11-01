@@ -306,8 +306,9 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
           </Panel>
         )}
         <p className="px-1 text-xs leading-5 text-muted-foreground">
-          Enter the market-linked value shown today, not the guaranteed maturity
-          amount. Entries record values only, so XIRR is not calculated.
+          Enter the market-linked value on the selected date, not the guaranteed
+          maturity amount. Entries record values only, so XIRR is not
+          calculated.
         </p>
       </div>
       <Panel

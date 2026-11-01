@@ -292,6 +292,10 @@ export function UploadsClient() {
                 {publicImportLimits.rows.toLocaleString("en-IN")} rows, and{" "}
                 {publicImportLimits.normalizedBytes / 1024} KiB after parsing.
               </p>
+              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                Files uploaded for review are kept for 30 days, even if you do
+                not apply the import. Import history stays after file expiry.
+              </p>
               <Button
                 type="button"
                 variant="outline"

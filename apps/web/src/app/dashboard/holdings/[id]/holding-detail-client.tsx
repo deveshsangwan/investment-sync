@@ -422,7 +422,6 @@ function transactionEmptyState(
   }
   return {
     title: "No transactions yet",
-    description:
-      "Import transactions to calculate an exact XIRR and realized gains.",
+    description: "Import transactions to calculate an exact XIRR.",
   };
 }
