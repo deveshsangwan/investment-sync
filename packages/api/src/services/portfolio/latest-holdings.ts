@@ -142,6 +142,7 @@ async function latestCurrentHoldingRows(
   ctx: PortfolioContext,
   mode: LatestHoldingMode,
   assetClass?: AssetClass,
+  asOfDate?: string,
 ): Promise<CurrentHoldingRow[]> {
   const aggregateExpression = aggregateDetectionSql(
     sql.raw("hs.source_payload"),
@@ -252,6 +253,7 @@ async function latestCurrentHoldingRows(
       inner join instruments i on i.id = hs.instrument_id
       where hs.household_id = ${ctx.membership.householdId}
         ${assetClassFilter}
+        ${asOfDate ? sql`and hs.snapshot_date <= ${asOfDate}` : sql``}
     ),
     snapshot_groups_with_details as (
       select distinct "assetClass"
@@ -290,6 +292,7 @@ async function latestCurrentHoldingRows(
       from source_snapshots ss
       inner join accounts a on a.id = ss.account_id
       where ss.household_id = ${ctx.membership.householdId} ${declarationAssetClassFilter}
+        ${asOfDate ? sql`and ss.snapshot_date <= ${asOfDate}` : sql``}
     ),
     boundaries as (
       select "sourceGroup", "snapshotDate", "sourcePriority",
@@ -393,4 +396,12 @@ export function retainedAtDeclaredSnapshotSql() {
         floor(extract(epoch from ${holdingSnapshots.createdAt}) * 1000)::bigint)
         or (sa.provider = 'Vested / DriveWealth' and ${accounts.provider} = 'Manual Workbook'))
   )`;
+}
+
+export function holdingsAtSourceSnapshot(
+  ctx: PortfolioContext,
+  snapshotDate: string,
+  assetClass?: AssetClass,
+) {
+  return latestCurrentHoldingRows(ctx, "current", assetClass, snapshotDate);
 }

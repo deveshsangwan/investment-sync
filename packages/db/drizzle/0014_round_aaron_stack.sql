@@ -1,0 +1,1 @@
+CREATE INDEX "import_batches_source_sequence_idx" ON "import_batches" USING btree ("source_sequence");

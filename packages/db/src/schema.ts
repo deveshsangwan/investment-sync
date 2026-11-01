@@ -225,6 +225,9 @@ export const importBatches = pgTable(
   (table) => ({
     householdIdx: index("import_batches_household_idx").on(table.householdId),
     expiryIdx: index("import_batches_expiry_idx").on(table.expiresAt),
+    sourceSequenceIdx: index("import_batches_source_sequence_idx").on(
+      table.sourceSequence,
+    ),
     fileHashIdx: index("import_batches_file_hash_idx").on(table.fileHash),
     committedFileIdx: uniqueIndex("import_batches_committed_file_parser_idx")
       .on(table.householdId, table.fileHash, table.parserVersion)

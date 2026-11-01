@@ -21,6 +21,7 @@ import {
   holdingById,
   holdingHistory,
   latestCurrentHoldings,
+  holdingsAtSourceSnapshot,
 } from "./latest-holdings";
 import {
   buildPortfolioSummary,
@@ -272,18 +273,50 @@ export async function buildAssetClassDetail(
     usdInrRate?.rate,
   );
   const declarations = await sourceSnapshotDates(ctx, assetClass);
-  for (const declaration of declarations) {
-    if (
-      !assetClassValuations.some(
-        (point) =>
-          point.date.toISOString().slice(0, 10) === declaration.snapshotDate,
-      )
-    )
-      assetClassValuations.push({
-        date: new Date(declaration.snapshotDate),
-        investedAmount: 0,
-        currentValue: 0,
-      });
+  const firstDeclarationDate = declarations
+    .map((declaration) => declaration.snapshotDate)
+    .sort()[0];
+  const selectedDates = new Set([
+    ...assetClassValuations.map((point) =>
+      point.date.toISOString().slice(0, 10),
+    ),
+    ...declarations.map((declaration) => declaration.snapshotDate),
+  ]);
+  for (const snapshotDate of selectedDates) {
+    if (!firstDeclarationDate || snapshotDate < firstDeclarationDate) continue;
+    const current = await holdingsAtSourceSnapshot(
+      ctx,
+      snapshotDate,
+      assetClass,
+    );
+    const point = {
+      date: new Date(snapshotDate),
+      investedAmount: current.reduce(
+        (total, row) =>
+          total +
+          convertToInr(
+            Number(row.investedAmount),
+            row.currency,
+            usdInrRate?.rate,
+          ),
+        0,
+      ),
+      currentValue: current.reduce(
+        (total, row) =>
+          total +
+          convertToInr(
+            Number(row.currentValue),
+            row.currency,
+            usdInrRate?.rate,
+          ),
+        0,
+      ),
+    };
+    const index = assetClassValuations.findIndex(
+      (value) => value.date.toISOString().slice(0, 10) === snapshotDate,
+    );
+    if (index === -1) assetClassValuations.push(point);
+    else assetClassValuations[index] = point;
   }
   assetClassValuations.sort(
     (left, right) => left.date.getTime() - right.date.getTime(),

@@ -969,6 +969,152 @@ describeDb("Postgres portfolio publication parity", () => {
     await assertParity(fixture);
   });
 
+  it.each([false, true])(
+    "matches complete sole-position liquidation including sales=%s",
+    async (withSales) => {
+      const fixture = await createFixture(db, [
+        usHolding("FAKE", "2025-01-01"),
+      ]);
+      await commit(fixture);
+      const parsed = parseImportFile(
+        vestedWorkbook({
+          holdings: [],
+          ...(withSales
+            ? {
+                sales: [["FAKE", "2025-02-01", "2024-01-01", 10, 150, 100, 50]],
+              }
+            : {}),
+        }),
+      );
+      const rows = parsed.rows.map((row) =>
+        row.kind === "source_snapshot"
+          ? { ...row, sourceDate: "2025-02-01" }
+          : { ...row },
+      );
+      await commit(
+        fixture,
+        await createBatch(db, fixture.membership, rows, parsed.sourceType),
+      );
+      const result = await assertParity(fixture);
+      expect(result.actual.positions.current).toEqual([]);
+      expect(result.actual.overview.summary.currentValue).toBe(0);
+      expect(result.actual.holdingDetails[0]?.sales).toHaveLength(
+        withSales ? 1 : 0,
+      );
+    },
+  );
+
+  it("matches same-day omission and carries an independent account through later empty reports", async () => {
+    const fixture = await createFixture(db, [
+      usHolding("FAKE", "2025-01-01"),
+      holdingRow({
+        accountName: "Independent account",
+        sourceDate: "2025-01-01",
+        currentValue: 300,
+      }),
+    ]);
+    await commit(fixture);
+    const declaration = (sourceDate: string) => ({
+      kind: "source_snapshot",
+      sourceType: "vested_drivewealth_xlsx",
+      sourceDate,
+      accountName: "US Stocks",
+      provider: "Vested / DriveWealth",
+      assetClass: "us_stock",
+      currency: "USD",
+      sourceGroup: "",
+      completeness: "complete",
+      metadata: {},
+    });
+    await commit(
+      fixture,
+      await createBatch(db, fixture.membership, [declaration("2025-01-01")]),
+    );
+    expect(
+      (await assertParity(fixture)).actual.overview.timeline.at(-1)
+        ?.currentValue,
+    ).toBe(300);
+    await commit(
+      fixture,
+      await createBatch(db, fixture.membership, [declaration("2025-02-01")]),
+    );
+    expect(
+      (await assertParity(fixture)).actual.overview.timeline.at(-1)
+        ?.currentValue,
+    ).toBe(300);
+  });
+
+  it.each([false, true])(
+    "matches declared scopes followed by independent CSV dates and explicit valuations=%s",
+    async (withValuations) => {
+      const declaration = (sourceDate: string) => ({
+        kind: "source_snapshot",
+        sourceType: "vested_drivewealth_xlsx",
+        sourceDate,
+        accountName: "US Stocks",
+        provider: "Vested / DriveWealth",
+        assetClass: "us_stock",
+        currency: "USD",
+        sourceGroup: "",
+        completeness: "complete",
+        metadata: {},
+      });
+      const fixture = await createFixture(db, [
+        usHolding("FAKE", "2025-01-01"),
+        declaration("2025-01-01"),
+        ...(withValuations
+          ? [valuationRow({ valuationDate: "2025-01-01", currentValue: 1200 })]
+          : []),
+      ]);
+      await commit(fixture);
+      await commit(
+        fixture,
+        await createBatch(db, fixture.membership, [
+          holdingRow({
+            sourceDate: "2025-01-02",
+            accountName: "Independent",
+            currentValue: 300,
+          }),
+          ...(withValuations
+            ? [
+                valuationRow({
+                  valuationDate: "2025-01-02",
+                  currentValue: 1500,
+                }),
+              ]
+            : []),
+        ]),
+      );
+      await commit(
+        fixture,
+        await createBatch(db, fixture.membership, [
+          holdingRow({
+            sourceDate: "2025-01-03",
+            accountName: "Another",
+            currentValue: 400,
+          }),
+        ]),
+      );
+      const beforeExit = await assertParity(fixture);
+      const carried = beforeExit.actual.overview.timeline.find(
+        (point) => point.snapshotDate === "2025-01-03",
+      );
+      expect(carried?.currentValue).toBe(125 * 83.25 + 700);
+      await commit(
+        fixture,
+        await createBatch(db, fixture.membership, [declaration("2025-01-04")]),
+      );
+      const afterExit = await assertParity(fixture);
+      expect(afterExit.actual.overview.timeline.at(-1)?.currentValue).toBe(700);
+      if (withValuations)
+        expect(
+          afterExit.actual.overview.timeline.find(
+            (point) => point.snapshotDate === "2025-01-02",
+          )?.currentValue,
+        ).toBe(1500);
+    },
+  );
+
   it("preserves stored decimal authority beyond binary64 precision", async () => {
     const fixture = await createFixture(db);
     await commit(fixture);

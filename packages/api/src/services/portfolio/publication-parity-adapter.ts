@@ -100,7 +100,10 @@ export async function loadPostgresPublicationFacts(
         pnlAmount: decimal(holding.pnlAmount),
       });
 
-      return { row, provenance: provenance(holding, batch, index) };
+      return {
+        row,
+        provenance: provenance(holding, batch, index, declarations),
+      };
     }),
     ...trades.map(({ trade, account, instrument, batch }, index) => {
       if (!instrument) {
@@ -127,7 +130,12 @@ export async function loadPostgresPublicationFacts(
 
       return {
         row,
-        provenance: provenance(trade, batch, holdings.length + index),
+        provenance: provenance(
+          trade,
+          batch,
+          holdings.length + index,
+          declarations,
+        ),
       };
     }),
     ...valuations.map((valuation, index) => {
@@ -181,7 +189,15 @@ function provenance(
   record: { id: string; createdAt: Date },
   batch: typeof importBatches.$inferSelect | null,
   index: number,
+  declarations: Array<typeof sourceSnapshots.$inferSelect> = [],
 ) {
+  let rowNumber = index + 1;
+  for (const declaration of declarations
+    .filter((row) => row.importBatchId === batch?.id)
+    .sort((left, right) => left.rowNumber - right.rowNumber)) {
+    if (declaration.rowNumber <= rowNumber) rowNumber += 1;
+  }
+
   return {
     batchId: batch?.id ?? `legacy:${record.id}`,
     parserVersion: batch?.parserVersion ?? "legacy-postgres",
@@ -189,7 +205,7 @@ function provenance(
     ...(batch?.sourceSequence === null || batch?.sourceSequence === undefined
       ? {}
       : { sourceSequence: batch.sourceSequence }),
-    rowNumber: index + 1,
+    rowNumber,
     fallbackDate: (batch?.uploadedAt ?? record.createdAt)
       .toISOString()
       .slice(0, 10),

@@ -191,6 +191,8 @@ async function commitImportPromise(
       throw new ImportPersistenceError({ message: "Invalid source sequence" });
     }
 
+    assertSourceWritesAllowed();
+
     await db
       .update(importBatches)
       .set({ sourceSequence })
