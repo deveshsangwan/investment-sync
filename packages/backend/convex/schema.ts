@@ -133,6 +133,28 @@ export default defineSchema({
       "date",
     ])
     .index("by_batchId", ["batchId"]),
+  sourceSnapshots: defineTable({
+    ...legacyFields,
+    householdId: v.id("households"),
+    batchId: v.id("importBatches"),
+    key: v.string(),
+    accountKey: v.string(),
+    sourceGroupKey: v.string(),
+    date: v.string(),
+    factJson: v.string(),
+  })
+    .index("by_householdId_and_key", ["householdId", "key"])
+    .index("by_householdId_and_accountKey_and_date", [
+      "householdId",
+      "accountKey",
+      "date",
+    ])
+    .index("by_householdId_and_sourceGroupKey_and_date", [
+      "householdId",
+      "sourceGroupKey",
+      "date",
+    ])
+    .index("by_batchId", ["batchId"]),
   transactions: defineTable({
     ...legacyFields,
     householdId: v.id("households"),
@@ -220,6 +242,7 @@ export default defineSchema({
       v.literal("holding"),
       v.literal("transaction"),
       v.literal("valuation"),
+      v.literal("source_snapshot"),
     ),
     factJson: v.string(),
     assetClass: v.optional(assetClassValidator),
@@ -308,6 +331,7 @@ export default defineSchema({
     manualRequestId: v.optional(v.string()),
     manualInputHash: v.optional(v.string()),
     legacyStatus: v.optional(v.string()),
+    legacySourceSequence: v.optional(v.number()),
     legacyDeclaredRowCount: v.optional(v.number()),
     legacyErrors: v.optional(v.array(v.string())),
     migrationRowsFinalized: v.optional(v.boolean()),

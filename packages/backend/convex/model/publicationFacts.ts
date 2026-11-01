@@ -9,6 +9,10 @@ type AccountWrite = WithoutSystemFields<Doc<"accounts">>;
 type InstrumentWrite = WithoutSystemFields<Doc<"instruments">>;
 type ImmutableFactWrite =
   | {
+      table: "sourceSnapshots";
+      value: WithoutSystemFields<Doc<"sourceSnapshots">>;
+    }
+  | {
       table: "holdingSnapshots";
       value: WithoutSystemFields<Doc<"holdingSnapshots">>;
     }
@@ -142,6 +146,8 @@ export async function ensureImmutableFact(
   }
 
   switch (input.table) {
+    case "sourceSnapshots":
+      return ctx.db.insert(input.table, input.value);
     case "holdingSnapshots":
       return ctx.db.insert(input.table, input.value);
     case "transactions":
@@ -196,6 +202,9 @@ export async function persistIdentities(
         accountType: row.assetClass,
         currency: row.currency,
       });
+    if (identity.kind === "source_snapshot" || row.kind === "source_snapshot")
+      continue;
+
     if (!pendingInstruments.has(identity.instrumentKey))
       pendingInstruments.set(identity.instrumentKey, {
         householdId,
@@ -241,7 +250,17 @@ export async function persistFacts(
       factJson: checkedJson({ row: fact.row, provenance: fact.provenance }),
     };
     const identity = fact.identity;
-    if (identity.kind === "holding") {
+    if (identity.kind === "source_snapshot") {
+      await ensureImmutableFact(ctx, {
+        table: "sourceSnapshots",
+        value: {
+          ...common,
+          accountKey: identity.accountKey,
+          sourceGroupKey: identity.sourceGroupKey,
+          date: identity.snapshotDate,
+        },
+      });
+    } else if (identity.kind === "holding") {
       await ensureImmutableFact(ctx, {
         table: "holdingSnapshots",
         value: {

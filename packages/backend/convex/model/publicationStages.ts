@@ -62,7 +62,7 @@ const totalSchema = z.object({
 });
 export const historyRecordSchema = z.object({
   key: z.string(),
-  kind: z.enum(["holding", "transaction", "valuation"]),
+  kind: z.enum(["holding", "transaction", "valuation", "source_snapshot"]),
   factJson: z.string(),
   assetClass: assetClassSchema.optional(),
   positionKey: z.string().optional(),
@@ -134,6 +134,13 @@ export const identifiedFactSchema = z.object({
       occurrenceKey: z.string(),
     }),
     z.object({ kind: z.literal("valuation"), valuationKey: z.string() }),
+    z.object({
+      kind: z.literal("source_snapshot"),
+      accountKey: z.string(),
+      sourceGroupKey: z.string(),
+      snapshotKey: z.string(),
+      snapshotDate: z.string(),
+    }),
   ]),
 });
 

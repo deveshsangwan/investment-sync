@@ -5,6 +5,7 @@ export const provenanceSchema = z.object({
   batchId: z.string(),
   parserVersion: z.string(),
   sequence: z.number().int(),
+  sourceSequence: z.number().int().safe().optional(),
   rowNumber: z.number().int(),
   fallbackDate: z.string(),
   legacyId: z.string().optional(),

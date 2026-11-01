@@ -1204,7 +1204,9 @@ describe("Vested realized sale publication", () => {
     return parseExactImportFile(
       vestedWorkbook({ holdings, sales, summary }),
     ).rows.map((row) =>
-      row.kind === "holding" ? { ...row, sourceDate: date } : row,
+      row.kind === "holding" || row.kind === "source_snapshot"
+        ? { ...row, sourceDate: date }
+        : row,
     );
   }
 
@@ -1749,4 +1751,288 @@ it("keeps the full archived read model in publication asset-class order and repo
   expect(readModel.counts.timelinePoints).toBe(
     publication.projection.timeline.length,
   );
+});
+
+describe("durable complete source declarations", () => {
+  function report(
+    date: string,
+    options: Parameters<typeof vestedWorkbook>[0] = {},
+  ) {
+    return parseExactImportFile(vestedWorkbook(options)).rows.map((row) =>
+      row.kind === "holding" || row.kind === "source_snapshot"
+        ? { ...row, sourceDate: date }
+        : row,
+    );
+  }
+
+  it("publishes a sole-position full exit with exact sold lots, retains declarations through cleanup, and reenters", async () => {
+    const state = await setupPortfolio(report("2025-01-01"));
+    const key = state.publication.projection.positions[0]?.positionKey;
+    if (!key) throw new Error("Missing initial fake holding");
+    const empty = report("2025-02-02", {
+      holdings: [],
+      sales: [
+        [
+          "FAKE",
+          "2025-02-01",
+          "2024-01-01",
+          "10",
+          "150.00001",
+          "100.00001",
+          "50",
+        ],
+      ],
+      summary: [["FAKE", "10", "150.00001", "100.00001", "50"]],
+    });
+    const exited = await commitAdditionalPortfolio(
+      state,
+      empty,
+      state.publication.facts,
+      2,
+    );
+    expect(await state.owner.query(api.portfolio.positions)).toMatchObject({
+      current: [],
+      exited: [{ id: key }],
+    });
+    expect(
+      (await state.owner.query(api.portfolio.overview)).summary,
+    ).toMatchObject({ currentValue: 0, investedAmount: 0 });
+    const detail = await state.owner.query(api.portfolio.holdingDetail, {
+      positionKey: key,
+    });
+    expect(detail?.holding).toMatchObject({
+      isCurrent: false,
+      currentValue: "120",
+    });
+    expect(detail?.sales).toMatchObject([
+      { proceeds: "150.00001", costBasis: "100.00001", realizedPnl: "50" },
+    ]);
+    const before = await state.t.run(async (ctx) => ({
+      holdings: await ctx.db.query("holdingSnapshots").collect(),
+      declarations: await ctx.db.query("sourceSnapshots").collect(),
+      transactions: await ctx.db.query("transactions").collect(),
+    }));
+    expect(before.declarations).toHaveLength(2);
+    expect(before.holdings).toHaveLength(1);
+    vi.setSystemTime(new Date("2025-06-01T00:00:00Z"));
+    await state.t.mutation(internal.importCleanup.expireFiles);
+    await state.t.mutation(internal.publicationCleanup.sweep, { cursor: null });
+    await state.t.finishInProgressScheduledFunctions();
+    expect(
+      await state.t.run(async (ctx) => ({
+        holdings: await ctx.db.query("holdingSnapshots").collect(),
+        declarations: await ctx.db.query("sourceSnapshots").collect(),
+        transactions: await ctx.db.query("transactions").collect(),
+      })),
+    ).toEqual(before);
+    expect((await state.owner.query(api.portfolio.positions)).current).toEqual(
+      [],
+    );
+
+    await commitAdditionalPortfolio(
+      state,
+      report("2025-03-01", {
+        holdings: [["FAKE", "1", "10.0001", "12.0002", "2.0001"]],
+      }),
+      exited.facts,
+      3,
+    );
+    const reentered = await state.owner.query(api.portfolio.holdingDetail, {
+      positionKey: key,
+    });
+    expect(reentered?.holding).toMatchObject({
+      isCurrent: true,
+      currentValue: "12.0002",
+    });
+    expect(reentered?.history).toHaveLength(2);
+    expect(reentered?.sales).toEqual(detail?.sales);
+  });
+
+  it("accepts declaration-only reports with zero instruments and remains stable across duplicate commit and parser reprocessing", async () => {
+    const rows = report("2025-02-01", { holdings: [] });
+    const state = await setupPortfolio(rows);
+    expect(
+      (await state.owner.query(api.portfolio.overview)).summary,
+    ).toMatchObject({ currentValue: 0 });
+    expect(
+      await state.t.run(async (ctx) => ({
+        accounts: (await ctx.db.query("accounts").collect()).length,
+        instruments: (await ctx.db.query("instruments").collect()).length,
+        holdings: (await ctx.db.query("holdingSnapshots").collect()).length,
+        declarations: (await ctx.db.query("sourceSnapshots").collect()).length,
+      })),
+    ).toEqual({ accounts: 1, instruments: 0, holdings: 0, declarations: 1 });
+    const batchId = await state.t.run(async (ctx) => {
+      const declaration = await ctx.db.query("sourceSnapshots").first();
+      if (!declaration) throw new Error("Missing declaration");
+      return declaration.batchId;
+    });
+    const repeated = await state.owner.mutation(api.imports.commit, {
+      batchId,
+    });
+    expect(repeated.status).toBe("committed");
+    await commitAdditionalPortfolio(
+      state,
+      rows,
+      state.publication.facts,
+      2,
+      "reprocessed-v6-test",
+    );
+    expect((await state.owner.query(api.portfolio.positions)).current).toEqual(
+      [],
+    );
+    expect(
+      await state.t.run((ctx) => ctx.db.query("sourceSnapshots").collect()),
+    ).toHaveLength(2);
+    const [account] = await state.owner.query(api.accounts.list);
+    if (!account) throw new Error("Missing declaration account");
+    await state.owner.mutation(api.accounts.update, {
+      accountKey: account.id,
+      isArchived: true,
+    });
+    const archived = await state.owner.query(api.portfolio.assetClassDetail, {
+      assetClass: "us_stock",
+    });
+    expect(archived.holdings).toEqual([]);
+    await state.owner.mutation(api.accounts.update, {
+      accountKey: account.id,
+      isArchived: false,
+    });
+    expect(
+      (await state.owner.query(api.portfolio.overview)).summary.currentValue,
+    ).toBe(0);
+  });
+
+  it("keeps partial sales and sale-only imports current until an authoritative scope boundary arrives", async () => {
+    const state = await setupPortfolio(report("2025-01-01"));
+    const sale = [["FAKE", "2025-02-01", "2024-01-01", "2", "30", "20", "10"]];
+    const salesOnly = report("2025-02-02", {
+      holdings: [],
+      sales: sale,
+    }).filter((row) => row.kind === "transaction");
+    const observed = await commitAdditionalPortfolio(
+      state,
+      salesOnly,
+      state.publication.facts,
+      2,
+    );
+    expect(
+      (await state.owner.query(api.portfolio.positions)).current[0]
+        ?.currentValue,
+    ).toBe("120");
+    await commitAdditionalPortfolio(
+      state,
+      report("2025-02-02", {
+        holdings: [["FAKE", "8", "80", "96", "16"]],
+        sales: sale,
+      }),
+      observed.facts,
+      3,
+    );
+    expect(
+      (await state.owner.query(api.portfolio.positions)).current[0]
+        ?.currentValue,
+    ).toBe("96");
+  });
+
+  it("selects before account visibility, carries independent scopes, and rejects out-of-order resurrection", async () => {
+    const independent = holding({
+      accountName: "Independent",
+      provider: "Independent",
+      instrumentName: "OTHER",
+      symbol: "OTHER",
+      assetClass: "us_stock",
+      currency: "USD",
+      investedAmount: 250,
+      currentValue: 300,
+      pnlAmount: 50,
+      sourceDate: "2025-01-01",
+    });
+    const state = await setupPortfolio([...report("2025-01-01"), independent]);
+    const empty = await commitAdditionalPortfolio(
+      state,
+      report("2025-02-01", { holdings: [] }),
+      state.publication.facts,
+      2,
+    );
+    expect(
+      (await state.owner.query(api.portfolio.positions)).current,
+    ).toMatchObject([{ symbol: "OTHER", currentValue: "300" }]);
+    expect(
+      (await state.owner.query(api.portfolio.overview)).summary.currentValue,
+    ).toBe(24000);
+    const independentAccount = (
+      await state.owner.query(api.accounts.list)
+    ).find((account) => account.name === "Independent");
+    if (!independentAccount) throw new Error("Missing independent account");
+    await state.owner.mutation(api.accounts.update, {
+      accountKey: independentAccount.id,
+      isArchived: true,
+    });
+    expect((await state.owner.query(api.portfolio.positions)).current).toEqual(
+      [],
+    );
+    expect(
+      (await state.owner.query(api.portfolio.overview)).summary.currentValue,
+    ).toBe(0);
+    await state.owner.mutation(api.accounts.update, {
+      accountKey: independentAccount.id,
+      isArchived: false,
+    });
+    await commitAdditionalPortfolio(
+      state,
+      report("2025-01-15"),
+      empty.facts,
+      3,
+    );
+    expect(
+      (await state.owner.query(api.portfolio.positions)).current,
+    ).toMatchObject([{ symbol: "OTHER", currentValue: "300" }]);
+    const projection = await state.owner.run(async (ctx) => {
+      const active = await activePortfolio(ctx);
+      if (!active) throw new Error("Missing portfolio");
+      return completeProjection(ctx, active);
+    });
+    expect(
+      projection.projection.sourceSnapshots?.map((fact) => fact.snapshotDate),
+    ).toEqual(["2025-01-01", "2025-01-15", "2025-02-01"]);
+    expect(projection.projection.timeline.at(-1)?.totals).toMatchObject([
+      { currentValue: "300" },
+    ]);
+  });
+
+  it("publishes independent real concurrent household operations without applying a foreign liquidation", async () => {
+    const state = await setupPortfolio(report("2025-01-01"));
+    const other = state.t.withIdentity({
+      subject: "snapshot-other",
+      issuer: "https://fake.example",
+      tokenIdentifier: "fake|snapshot-other",
+    });
+    await other.mutation(api.users.ensureCurrent);
+    await Promise.all([
+      commitAdditionalPortfolio(
+        state,
+        report("2025-02-01", { holdings: [] }),
+        state.publication.facts,
+        2,
+      ),
+      commitAdditionalPortfolio(
+        { t: state.t, owner: other },
+        report("2025-02-01"),
+        [],
+        3,
+      ),
+    ]);
+    expect((await state.owner.query(api.portfolio.positions)).current).toEqual(
+      [],
+    );
+    expect((await other.query(api.portfolio.positions)).current).toMatchObject([
+      { symbol: "FAKE", currentValue: "120" },
+    ]);
+    const declarations = await state.t.run((ctx) =>
+      ctx.db.query("sourceSnapshots").collect(),
+    );
+    expect(declarations).toHaveLength(3);
+    expect(new Set(declarations.map((fact) => fact.householdId)).size).toBe(2);
+  });
 });

@@ -10,6 +10,7 @@ import { capacityError, portfolioLimits } from "./portfolioLimits";
 import { parseJson, timelineDisplayAmountsSchema } from "./publicationStages";
 import {
   decodePortfolioTransaction,
+  decodeSourceSnapshot,
   decodePortfolioValuation,
   decodePosition,
   decodePositionHeader,
@@ -264,7 +265,15 @@ export async function completeProjection(
     doc,
     position: decodePosition(doc, source),
   }));
-  const assetClasses = [...new Set(positions.map((doc) => doc.assetClass))]
+  const sourceSnapshots = facts
+    .filter((fact) => fact.kind === "source_snapshot")
+    .map(decodeSourceSnapshot);
+  const assetClasses = [
+    ...new Set([
+      ...positions.map((doc) => doc.assetClass),
+      ...sourceSnapshots.map((fact) => fact.row.assetClass),
+    ]),
+  ]
     .sort()
     .map((assetClass) => ({ assetClass, totals: [], timeline: [] }));
 
@@ -278,6 +287,7 @@ export async function completeProjection(
         .filter((entry) => entry.doc.status === "detail")
         .map((entry) => entry.position),
       assetClasses,
+      sourceSnapshots,
       timeline,
       cashFlows: facts
         .filter((fact) => fact.kind === "transaction")
@@ -318,6 +328,7 @@ function projection(input: {
   timeline?: NativeTimelinePoint[];
   valuations?: PortfolioProjection["valuations"];
   cashFlows?: PortfolioProjection["cashFlows"];
+  sourceSnapshots?: PortfolioProjection["sourceSnapshots"];
 }) {
   return {
     projectorVersion: "portfolio-v1",
@@ -330,6 +341,7 @@ function projection(input: {
     hasExplicitValuations: input.summary.hasExplicitValuations,
     valuations: input.valuations ?? [],
     cashFlows: input.cashFlows ?? [],
+    sourceSnapshots: input.sourceSnapshots,
   } satisfies PortfolioProjection;
 }
 

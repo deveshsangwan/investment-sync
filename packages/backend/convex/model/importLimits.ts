@@ -55,6 +55,8 @@ export function validateIdentityCapacity(rows: ReturnType<typeof parseRows>) {
         row.accountName.trim().toLowerCase(),
       ]),
     );
+    if (row.kind === "source_snapshot") continue;
+
     instruments.add(
       JSON.stringify([
         row.assetClass,

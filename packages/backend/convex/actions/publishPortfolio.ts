@@ -37,6 +37,7 @@ export const publishPortfolio = internalAction({
         "holdingSnapshots",
         "transactions",
         "portfolioValuations",
+        "sourceSnapshots",
       ] as const) {
         let cursor: string | null = null;
         do {
