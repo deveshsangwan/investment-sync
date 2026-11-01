@@ -10,7 +10,10 @@ import {
   buildPortfolioTimelineFromValuations,
 } from "./from-snapshot";
 import { cachedPortfolioData } from "./cache";
-import { latestCurrentHoldings } from "./latest-holdings";
+import {
+  latestCurrentHoldings,
+  latestSourceSnapshotDate,
+} from "./latest-holdings";
 import { getUsdInrRateIfNeeded } from "./utils";
 import type { PortfolioContext } from "./types";
 
@@ -39,6 +42,7 @@ async function buildPortfolioOverviewUncached(ctx: PortfolioContext) {
     latestHoldings,
     usdInrRate?.rate,
     usdInrRate ? [usdInrRate] : [],
+    await latestSourceSnapshotDate(ctx),
   );
   const historicalTimeline =
     valuations.length > 0

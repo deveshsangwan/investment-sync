@@ -3,9 +3,11 @@ import {
   holdingSnapshots,
   instruments,
   portfolioValuations,
+  sourceSnapshots,
   transactions,
 } from "@investment-sync/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { retainedAtDeclaredSnapshotSql } from "./latest-holdings";
 import { cachedPortfolioData } from "./cache";
 import {
   aggregateSnapshotTotalsByDate,
@@ -88,7 +90,12 @@ async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
     .from(holdingSnapshots)
     .innerJoin(accounts, eq(accounts.id, holdingSnapshots.accountId))
     .innerJoin(instruments, eq(instruments.id, holdingSnapshots.instrumentId))
-    .where(eq(holdingSnapshots.householdId, ctx.membership.householdId))
+    .where(
+      and(
+        eq(holdingSnapshots.householdId, ctx.membership.householdId),
+        retainedAtDeclaredSnapshotSql(),
+      ),
+    )
     .orderBy(
       holdingSnapshots.snapshotDate,
       holdingSnapshots.createdAt,
@@ -99,6 +106,17 @@ async function holdingSnapshotTimelineRowsUncached(ctx: PortfolioContext) {
     ctx.db,
   );
   const totalsByDate = aggregateSnapshotTotalsByDate(rows, usdInrRate?.rate);
+  const declarations = await ctx.db
+    .select({ snapshotDate: sourceSnapshots.snapshotDate })
+    .from(sourceSnapshots)
+    .where(eq(sourceSnapshots.householdId, ctx.membership.householdId));
+  for (const declaration of declarations) {
+    if (!totalsByDate.has(declaration.snapshotDate))
+      totalsByDate.set(declaration.snapshotDate, {
+        investedAmount: 0,
+        currentValue: 0,
+      });
+  }
 
   return [...totalsByDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
@@ -143,6 +161,7 @@ export async function assetClassSnapshotRows(
           and(
             eq(holdingSnapshots.householdId, ctx.membership.householdId),
             eq(instruments.assetClass, assetClass),
+            retainedAtDeclaredSnapshotSql(),
           ),
         )
         .orderBy(
@@ -231,4 +250,19 @@ export async function transactionsByHoldingPositions(
     grouped.set(key, [...(grouped.get(key) ?? []), row]);
   }
   return grouped;
+}
+
+export async function sourceSnapshotDates(
+  ctx: PortfolioContext,
+  assetClass?: AssetClass,
+) {
+  return ctx.db
+    .select({ snapshotDate: sourceSnapshots.snapshotDate })
+    .from(sourceSnapshots)
+    .where(
+      and(
+        eq(sourceSnapshots.householdId, ctx.membership.householdId),
+        assetClass ? eq(sourceSnapshots.assetClass, assetClass) : undefined,
+      ),
+    );
 }

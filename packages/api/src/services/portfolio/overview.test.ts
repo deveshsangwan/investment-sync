@@ -17,6 +17,7 @@ vi.mock("./data", () => ({
 
 vi.mock("./latest-holdings", () => ({
   latestCurrentHoldings: vi.fn(),
+  latestSourceSnapshotDate: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("./utils", async (importOriginal) => ({

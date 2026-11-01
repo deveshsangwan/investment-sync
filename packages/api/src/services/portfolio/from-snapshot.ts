@@ -35,6 +35,7 @@ export function buildPortfolioSummaryFromSnapshot(
   latestHoldings: CurrentHoldingRow[],
   usdInrRate?: number,
   exchangeRates: CurrencyRateQuote[] = [],
+  sourceSnapshotDate: string | null = null,
 ) {
   const summary = summarizePortfolio(
     latestHoldings.map((holding) => ({
@@ -56,7 +57,11 @@ export function buildPortfolioSummaryFromSnapshot(
     ...summary,
     currency: "INR" as const,
     exchangeRates,
-    asOfDate: latestHoldings[0]?.snapshotDate ?? null,
+    asOfDate:
+      [latestHoldings[0]?.snapshotDate, sourceSnapshotDate]
+        .filter((date): date is string => Boolean(date))
+        .sort()
+        .at(-1) ?? null,
   };
 }
 

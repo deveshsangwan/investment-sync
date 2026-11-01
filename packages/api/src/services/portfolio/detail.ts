@@ -12,6 +12,7 @@ import {
 } from "@investment-sync/importers";
 import {
   assetClassSnapshotRows,
+  sourceSnapshotDates,
   historyByHoldingPositions,
   transactionsByHoldingPositions,
 } from "./data";
@@ -269,6 +270,23 @@ export async function buildAssetClassDetail(
   const assetClassValuations = valuationsFromSnapshotRows(
     assetClassSnapshots,
     usdInrRate?.rate,
+  );
+  const declarations = await sourceSnapshotDates(ctx, assetClass);
+  for (const declaration of declarations) {
+    if (
+      !assetClassValuations.some(
+        (point) =>
+          point.date.toISOString().slice(0, 10) === declaration.snapshotDate,
+      )
+    )
+      assetClassValuations.push({
+        date: new Date(declaration.snapshotDate),
+        investedAmount: 0,
+        currentValue: 0,
+      });
+  }
+  assetClassValuations.sort(
+    (left, right) => left.date.getTime() - right.date.getTime(),
   );
   const [transactionsByHolding, historyByHolding] = await Promise.all([
     transactionsByHoldingPositions(ctx, assetHoldings),

@@ -43,7 +43,7 @@ export function testDatabase(): Database | undefined {
  */
 export async function resetDatabase(db: Database) {
   await db.execute(sql`
-    truncate table
+    truncate table source_snapshots,
       users, households, household_members, accounts, instruments,
       holding_snapshots, transactions, portfolio_valuations,
       import_batches, import_rows, currency_rates, prices

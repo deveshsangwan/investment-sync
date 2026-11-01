@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   date,
   index,
@@ -219,6 +220,7 @@ export const importBatches = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     committedAt: timestamp("committed_at", { withTimezone: true }),
+    sourceSequence: bigint("source_sequence", { mode: "number" }),
   },
   (table) => ({
     householdIdx: index("import_batches_household_idx").on(table.householdId),
@@ -441,6 +443,56 @@ export const currencyRates = pgTable(
       table.base,
       table.quote,
       table.provider,
+    ),
+  }),
+);
+
+/** Immutable, instrument-free evidence that a source report covers its whole scope. */
+export const sourceSnapshots = pgTable(
+  "source_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    importBatchId: uuid("import_batch_id")
+      .notNull()
+      .references(() => importBatches.id, { onDelete: "restrict" }),
+    rowNumber: integer("row_number").notNull(),
+    sourceType: importSourceEnum("source_type").notNull(),
+    snapshotDate: date("snapshot_date").notNull(),
+    assetClass: assetClassEnum("asset_class").notNull(),
+    currency: currencyEnum("currency").notNull(),
+    sourceGroup: text("source_group").notNull(),
+    completeness: text("completeness").$type<"complete">().notNull(),
+    normalizedPayload: jsonb("normalized_payload")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    sourceSequence: bigint("source_sequence", { mode: "number" }).notNull(),
+    parserVersion: text("parser_version").notNull(),
+    fallbackDate: date("fallback_date").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    batchRowIdx: uniqueIndex("source_snapshots_batch_row_idx").on(
+      table.importBatchId,
+      table.rowNumber,
+    ),
+    scopeDateIdx: index("source_snapshots_scope_date_idx").on(
+      table.householdId,
+      table.accountId,
+      table.assetClass,
+      table.currency,
+      table.sourceGroup,
+      table.snapshotDate,
+    ),
+    sequenceIdx: index("source_snapshots_sequence_idx").on(
+      table.sourceSequence,
     ),
   }),
 );

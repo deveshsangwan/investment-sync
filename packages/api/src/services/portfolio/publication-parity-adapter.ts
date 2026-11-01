@@ -4,6 +4,7 @@ import {
   importBatches,
   instruments,
   portfolioValuations,
+  sourceSnapshots,
   transactions,
   type Database,
 } from "@investment-sync/db";
@@ -24,7 +25,7 @@ export async function loadPostgresPublicationFacts(
   db: Database,
   householdId: string,
 ): Promise<PortfolioFact[]> {
-  const [holdings, trades, valuations] = await Promise.all([
+  const [holdings, trades, valuations, declarations] = await Promise.all([
     db
       .select({
         holding: holdingSnapshots,
@@ -59,9 +60,26 @@ export async function loadPostgresPublicationFacts(
       .from(portfolioValuations)
       .where(eq(portfolioValuations.householdId, householdId))
       .orderBy(portfolioValuations.createdAt, portfolioValuations.id),
+    db
+      .select()
+      .from(sourceSnapshots)
+      .where(eq(sourceSnapshots.householdId, householdId))
+      .orderBy(sourceSnapshots.sourceSequence, sourceSnapshots.rowNumber),
   ]);
 
   return [
+    ...declarations.map((declaration) => ({
+      row: exactNormalizedImportRowSchema.parse(declaration.normalizedPayload),
+      provenance: {
+        batchId: declaration.importBatchId,
+        parserVersion: declaration.parserVersion,
+        sequence: declaration.sourceSequence,
+        sourceSequence: declaration.sourceSequence,
+        rowNumber: declaration.rowNumber,
+        fallbackDate: declaration.fallbackDate,
+        legacyId: declaration.id,
+      },
+    })),
     ...holdings.map(({ holding, account, instrument, batch }, index) => {
       const legacy = normalizedImportRowSchema.parse({
         kind: "holding",
@@ -168,6 +186,9 @@ function provenance(
     batchId: batch?.id ?? `legacy:${record.id}`,
     parserVersion: batch?.parserVersion ?? "legacy-postgres",
     sequence: record.createdAt.getTime(),
+    ...(batch?.sourceSequence === null || batch?.sourceSequence === undefined
+      ? {}
+      : { sourceSequence: batch.sourceSequence }),
     rowNumber: index + 1,
     fallbackDate: (batch?.uploadedAt ?? record.createdAt)
       .toISOString()
