@@ -8,6 +8,7 @@ import type {
   Currency,
   ImportFile,
   NormalizedHoldingRow,
+  NormalizedSourceSnapshotRow,
   NormalizedImportRow,
   ParseResult,
   PortfolioImporter,
@@ -59,7 +60,7 @@ function workbookRows(
 
 export const vestedDrivewealthImporter: PortfolioImporter = {
   sourceType: "vested_drivewealth_xlsx",
-  parserVersion: "vested-drivewealth-v4",
+  parserVersion: "vested-drivewealth-v5",
   detect(file: ImportFile) {
     if (!file.fileName.toLowerCase().endsWith(".xlsx")) {
       return {
@@ -104,13 +105,25 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
     return {
       sourceType: "vested_drivewealth_xlsx",
       parserVersion: this.parserVersion,
-      rows: [...holdings, ...sales.transactions],
-      warnings: [
-        ...sales.warnings,
-        ...(holdings.length === 0
-          ? ["No Vested holdings were parsed from the workbook"]
-          : []),
+      rows: [
+        ...holdings,
+        ...sales.transactions,
+        withSourceDecimals<NormalizedSourceSnapshotRow>(
+          {
+            kind: "source_snapshot",
+            sourceType: "vested_drivewealth_xlsx",
+            accountName: "US Stocks",
+            provider: "Vested / DriveWealth",
+            assetClass: "us_stock",
+            currency: "USD",
+            sourceGroup: "",
+            completeness: "complete",
+            metadata: { evidenceSheet: "Unrealized P&L - Summary" },
+          },
+          {},
+        ),
       ],
+      warnings: [...sales.warnings],
     };
   },
 };

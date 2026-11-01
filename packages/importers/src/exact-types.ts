@@ -4,6 +4,7 @@ import {
   normalizedHoldingRowSchema,
   normalizedTransactionRowSchema,
   normalizedValuationRowSchema,
+  normalizedSourceSnapshotRowSchema,
   importSourceTypeSchema,
 } from "./types";
 
@@ -49,11 +50,36 @@ export const exactNormalizedValuationRowSchema =
     currentValue: canonicalDecimalSchema,
     pnlAmount: canonicalDecimalSchema.optional(),
   });
-export const exactNormalizedImportRowSchema = z.discriminatedUnion("kind", [
-  exactNormalizedHoldingRowSchema,
-  exactNormalizedTransactionRowSchema,
-  exactNormalizedValuationRowSchema,
-]);
+export const exactNormalizedSourceSnapshotRowSchema =
+  normalizedSourceSnapshotRowSchema.extend({
+    ...exactFields,
+    source: importSourceMetadataSchema.extend({
+      completeness: z.literal("complete"),
+      granularity: z.literal("instrument"),
+    }),
+  });
+export type ExactNormalizedSourceSnapshotRow = z.infer<
+  typeof exactNormalizedSourceSnapshotRowSchema
+>;
+export const exactNormalizedImportRowSchema = z
+  .discriminatedUnion("kind", [
+    exactNormalizedHoldingRowSchema,
+    exactNormalizedTransactionRowSchema,
+    exactNormalizedValuationRowSchema,
+    exactNormalizedSourceSnapshotRowSchema,
+  ])
+  .superRefine((row, context) => {
+    if (
+      row.kind === "source_snapshot" &&
+      row.source.group !== row.sourceGroup
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["source", "group"],
+        message: "Snapshot source group does not match its scope",
+      });
+    }
+  });
 export type ExactNormalizedHoldingRow = z.infer<
   typeof exactNormalizedHoldingRowSchema
 >;

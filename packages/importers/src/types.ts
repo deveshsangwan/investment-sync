@@ -95,10 +95,24 @@ export interface NormalizedValuationRow {
   metadata: Record<string, unknown>;
 }
 
+export interface NormalizedSourceSnapshotRow {
+  kind: "source_snapshot";
+  sourceType: ImportSourceType;
+  sourceDate?: string;
+  accountName: string;
+  provider: string;
+  assetClass: AssetClass;
+  currency: Currency;
+  sourceGroup: string;
+  completeness: "complete";
+  metadata: Record<string, unknown>;
+}
+
 export type NormalizedImportRow =
   | NormalizedHoldingRow
   | NormalizedTransactionRow
-  | NormalizedValuationRow;
+  | NormalizedValuationRow
+  | NormalizedSourceSnapshotRow;
 
 export interface ParseResult {
   sourceType: ImportSourceType;
@@ -227,8 +241,22 @@ export const normalizedValuationRowSchema = z.object({
   metadata: metadataSchema,
 }) satisfies z.ZodType<NormalizedValuationRow>;
 
+export const normalizedSourceSnapshotRowSchema = z.object({
+  kind: z.literal("source_snapshot"),
+  sourceType: importSourceTypeSchema,
+  sourceDate: isoDateSchema.optional(),
+  accountName: z.string().trim().min(1),
+  provider: z.string().trim().min(1),
+  assetClass: assetClassSchema,
+  currency: currencySchema,
+  sourceGroup: z.string(),
+  completeness: z.literal("complete"),
+  metadata: metadataSchema,
+}) satisfies z.ZodType<NormalizedSourceSnapshotRow>;
+
 export const normalizedImportRowSchema = z.discriminatedUnion("kind", [
   normalizedHoldingRowSchema,
   normalizedTransactionRowSchema,
   normalizedValuationRowSchema,
+  normalizedSourceSnapshotRowSchema,
 ]) satisfies z.ZodType<NormalizedImportRow>;

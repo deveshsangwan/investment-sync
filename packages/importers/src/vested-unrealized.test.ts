@@ -41,7 +41,7 @@ describe.each([
       validRow,
     ]);
 
-    expect(parse(file).rows).toHaveLength(1);
+    expect(parse(file).rows).toHaveLength(2);
   });
 
   it("reports physical sheet row numbers after leading blank rows", () => {
@@ -156,7 +156,7 @@ describe.each([
       ]),
     );
 
-    expect(result.rows).toHaveLength(1);
+    expect(result.rows).toHaveLength(2);
     expect(result.rows[0]).toMatchObject({ symbol: "ALPHA", metadata: {} });
     expect(result.rows[0]).not.toHaveProperty("quantity", expect.anything());
     expect(result.rows[0]).not.toHaveProperty("pnlAmount", expect.anything());
@@ -177,7 +177,7 @@ describe("Vested unrealized valid values", () => {
       const file = vestedFile([requiredHeaders, ["ALPHA", 0, zero, zero]]);
       const exact = parseExactImportFile(file);
 
-      expect(exact.parserVersion).toBe("vested-drivewealth-v4-decimal-v1");
+      expect(exact.parserVersion).toBe("vested-drivewealth-v5-decimal-v1");
       expect(exact.rows[0]).toMatchObject({
         investedAmount: "0",
         currentValue: "0",
@@ -190,8 +190,11 @@ describe("Vested unrealized valid values", () => {
         },
       });
       expect(parseImportFile(file)).toMatchObject({
-        parserVersion: "vested-drivewealth-v4",
-        rows: [{ investedAmount: 0, currentValue: 0, quantity: 0 }],
+        parserVersion: "vested-drivewealth-v5",
+        rows: [
+          { investedAmount: 0, currentValue: 0, quantity: 0 },
+          { kind: "source_snapshot", completeness: "complete" },
+        ],
         warnings: [],
       });
     },
@@ -223,6 +226,7 @@ describe("Vested unrealized valid values", () => {
             currentValue: "source_decimal",
           },
         },
+        { kind: "source_snapshot", completeness: "complete" },
       ],
       warnings: [],
     });
