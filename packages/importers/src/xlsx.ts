@@ -33,9 +33,16 @@ interface WorkbookContext {
   rowsBySheet: Map<string, unknown[][]>;
 }
 
-function createWorkbookContext(file: ImportFile): WorkbookContext {
+function createWorkbookContext(
+  file: ImportFile,
+  preserveFormulaStubs = false,
+): WorkbookContext {
   return {
-    workbook: XLSX.read(file.content, { type: "buffer", cellDates: true }),
+    workbook: XLSX.read(file.content, {
+      type: "buffer",
+      cellDates: true,
+      sheetStubs: preserveFormulaStubs,
+    }),
     rowsBySheet: new Map(),
   };
 }
@@ -87,7 +94,7 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
     };
   },
   parse(file: ImportFile): ParseResult {
-    const workbook = createWorkbookContext(file);
+    const workbook = createWorkbookContext(file, true);
     const vestedSheet = (name: string) => {
       const matches = workbook.workbook.SheetNames.filter(
         (sheet) => sheet.trim() === name,

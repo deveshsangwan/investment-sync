@@ -24,6 +24,20 @@ export function parseVestedUnrealizedSheet(
   if (sheet) {
     for (const [address, value] of Object.entries(sheet)) {
       const cell: unknown = value;
+      if (typeof cell !== "object" || cell === null) continue;
+      if (
+        "f" in cell &&
+        typeof cell.f === "string" &&
+        (("t" in cell && cell.t === "z") ||
+          !("v" in cell) ||
+          cell.v === undefined ||
+          cell.v === null)
+      ) {
+        throw new Error(
+          `${sectionName} cell ${address}: unresolved spreadsheet formula cannot establish complete evidence`,
+        );
+      }
+
       if (
         !address.startsWith("!") &&
         typeof cell === "object" &&

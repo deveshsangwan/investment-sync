@@ -95,6 +95,43 @@ describe("instrument-free complete Vested snapshots", () => {
     ).toThrow(/spreadsheet error/);
   });
 
+  it.each(["A2", "B2", "C2", "D2"])(
+    "rejects uncached formulas in %s before they disappear into blank cells",
+    (address) => {
+      const workbook = XLSX.read(vestedWorkbook({ holdings: [] }).content);
+      const sheet = workbook.Sheets["Unrealized P&L - Summary "];
+      if (!sheet) throw new Error("Missing fixture sheet");
+      sheet[address] = { t: "n", f: "1/0" };
+      sheet["!ref"] = "A1:E2";
+      expect(() =>
+        parseExactImportFile({
+          fileName: "uncached.xlsx",
+          content: writeWorkbook(workbook),
+        }),
+      ).toThrow(/unresolved spreadsheet formula/);
+    },
+  );
+
+  it("preserves valid cached formula zeroes", () => {
+    const workbook = XLSX.read(
+      vestedWorkbook({ holdings: [["FAKE", 0, 0, 0, 0]] }).content,
+    );
+    const sheet = workbook.Sheets["Unrealized P&L - Summary "];
+    if (!sheet) throw new Error("Missing fixture sheet");
+    for (const address of ["B2", "C2", "D2"])
+      sheet[address] = { t: "n", f: "1-1", v: 0 };
+    expect(
+      parseExactImportFile({
+        fileName: "cached-zero.xlsx",
+        content: writeWorkbook(workbook),
+      }).rows[0],
+    ).toMatchObject({
+      kind: "holding",
+      investedAmount: "0",
+      currentValue: "0",
+    });
+  });
+
   it("rejects ambiguous trimmed evidence sheets", () => {
     const workbook = XLSX.read(vestedWorkbook().content);
     const empty = XLSX.read(vestedWorkbook({ holdings: [] }).content).Sheets[
