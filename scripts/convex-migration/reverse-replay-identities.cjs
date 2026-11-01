@@ -179,6 +179,11 @@ function replayParents({ tables, maps, rowsByTable }) {
         };
     if (row.household_id !== mapped(maps.households, account.householdId))
       reject("changed_account_ownership");
+    if (account.isArchived !== undefined) {
+      if (typeof account.isArchived !== "boolean")
+        reject("invalid_account_archive_state");
+      row.is_archived = account.isArchived;
+    }
 
     maps.accounts.set(account._id, id);
     rowsByTable.accounts.set(id, row);

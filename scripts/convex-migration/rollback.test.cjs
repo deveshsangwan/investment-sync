@@ -1290,3 +1290,81 @@ test("current declarations cannot override committed observation sequence", () =
     code: "committed_fact_input_mismatch",
   });
 });
+
+for (const granularity of ["portfolio", "asset_class"]) {
+  test(`rejects complete declaration granularity ${granularity} before reverse replay`, () => {
+    const fixture = createRollbackFixture();
+    const row = sourceDeclaration();
+    row.source.granularity = granularity;
+    appendCommittedBatch(
+      fixture.targetSnapshot,
+      "invalid-declaration",
+      "household-old",
+      "user-old",
+      3,
+      [row],
+      Date.parse("2026-01-04T00:00:00Z"),
+    );
+    assert.throws(() => buildReverseReplayPlan(fixture), {
+      code: "invalid_source_snapshot",
+    });
+  });
+}
+
+test("rejects invalid numeric provenance on a complete declaration before reverse replay", () => {
+  const fixture = createRollbackFixture();
+  const row = sourceDeclaration();
+  row.numericProvenance = { unknown: "invalid-tag" };
+  appendCommittedBatch(
+    fixture.targetSnapshot,
+    "invalid-declaration",
+    "household-old",
+    "user-old",
+    3,
+    [row],
+    Date.parse("2026-01-04T00:00:00Z"),
+  );
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "invalid_source_snapshot",
+  });
+});
+
+test("reverse replay preserves current archive and restore flags for new and migrated accounts", () => {
+  for (const isArchived of [true, false]) {
+    const fixture = createRollbackFixture();
+    for (const account of fixture.targetSnapshot.tables.accounts)
+      account.isArchived = isArchived;
+    const plan = buildReverseReplayPlan(fixture);
+    assert.deepEqual(
+      plan.tables.accounts.map((account) => account.is_archived),
+      [isArchived, isArchived],
+    );
+  }
+});
+
+test("historical account exports without an archive flag retain the frozen SQL state", () => {
+  const fixture = createRollbackFixture();
+  fixture.sourceSnapshot.tables.accounts[0].is_archived = true;
+  const mapping = fixture.targetSnapshot.mappings.find(
+    (entry) => entry.legacyTable === "accounts",
+  );
+  assert.ok(mapping);
+  mapping.sourceJson = JSON.stringify(
+    fixture.sourceSnapshot.tables.accounts[0],
+  );
+  const plan = buildReverseReplayPlan(fixture);
+  assert.equal(
+    plan.tables.accounts.find(
+      (account) => account.id === fixture.sourceSnapshot.tables.accounts[0].id,
+    ).is_archived,
+    true,
+  );
+});
+
+test("reverse replay rejects malformed account archive flags", () => {
+  const fixture = createRollbackFixture();
+  fixture.targetSnapshot.tables.accounts[0].isArchived = "false";
+  assert.throws(() => buildReverseReplayPlan(fixture), {
+    code: "invalid_account_archive_state",
+  });
+});

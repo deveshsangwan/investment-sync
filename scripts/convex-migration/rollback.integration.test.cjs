@@ -38,6 +38,8 @@ test(
     parsed.pathname = "/postgres";
     const admin = postgres(parsed.toString(), { max: 1, onnotice: () => {} });
     const fixture = createRollbackFixture();
+    for (const account of fixture.targetSnapshot.tables.accounts)
+      account.isArchived = true;
     appendCommittedBatch(
       fixture.targetSnapshot,
       "complete-empty-source",
@@ -244,6 +246,10 @@ test(
         CREATED_AT,
       );
       assert.equal(actual.transactions[0].amount, "2.125");
+      assert.equal(actual.accounts.length, 2);
+      assert.ok(
+        actual.accounts.every((account) => account.is_archived === true),
+      );
       assert.equal(actual.transactions[0].quantity, "0.125");
       assert.ok(
         actual.import_batches.every(
@@ -382,6 +388,16 @@ function prepareCliArtifacts(fixture, databaseUrl) {
     initialTarget.tables[table] = initialTarget.tables[table].filter((row) =>
       row._id.endsWith("-old"),
     );
+  for (const account of initialTarget.tables.accounts) {
+    const mapping = initialTarget.mappings.find(
+      (entry) =>
+        entry.legacyTable === "accounts" && entry.targetId === account._id,
+    );
+    const source = fixture.sourceSnapshot.tables.accounts.find(
+      (row) => row.id === mapping?.legacyId,
+    );
+    if (source) account.isArchived = source.is_archived;
+  }
   for (const table of ["sourceFiles", "importRowChunks"])
     initialTarget.tables[table] = initialTarget.tables[table].filter(
       (row) => row.batchId === "batch-expired",

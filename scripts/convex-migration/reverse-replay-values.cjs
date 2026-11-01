@@ -112,7 +112,19 @@ function validateExactRow(row) {
       typeof row.sourceGroup !== "string" ||
       row.completeness !== "complete" ||
       row.source.group !== row.sourceGroup ||
-      row.source.completeness !== "complete"
+      row.source.completeness !== "complete" ||
+      row.source.granularity !== "instrument" ||
+      Object.values(row.numericProvenance).some(
+        (value) =>
+          ![
+            "source_decimal",
+            "persisted_decimal",
+            "legacy_float64",
+            "xlsx_float64",
+            "derived_decimal",
+            "default",
+          ].includes(value),
+      )
     )
       reject("invalid_source_snapshot");
     if (row.sourceDate !== undefined) date(row.sourceDate);
