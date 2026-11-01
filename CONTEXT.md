@@ -17,8 +17,12 @@ The original portfolio export supplied by a user. Its retention and availability
 _Avoid_: Import
 
 **Normalized Row**:
-A validated holding, transaction, or valuation produced from a Source File by a versioned parser.
+A validated holding, transaction, valuation, or Complete Source Snapshot produced from a Source File by a versioned parser.
 _Avoid_: Raw row
+
+**Complete Source Snapshot**:
+Evidence that a report covers all holdings in one Account and source scope on a date, including a report with no remaining holdings.
+_Avoid_: Sale, zero holding
 
 **Commit**:
 The atomic application of every Normalized Row in a parsed Import Batch to Household portfolio data.
