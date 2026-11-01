@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { describe, expect, it } from "vitest";
 import {
   adaptExactParseResultToLegacy,
@@ -67,6 +68,36 @@ describe("instrument-free complete Vested snapshots", () => {
         }),
       ).rows,
     ).toHaveLength(2);
+  });
+
+  it("rejects spreadsheet errors before blank-row filtering", () => {
+    const workbook = XLSX.read(vestedWorkbook({ holdings: [] }).content);
+    const sheet = workbook.Sheets["Unrealized P&L - Summary "];
+    if (!sheet) throw new Error("Missing fixture sheet");
+    for (const address of ["A2", "B2", "C2", "D2"])
+      sheet[address] = { t: "e", v: 23 };
+    sheet["!ref"] = "A1:E2";
+    expect(() =>
+      parseExactImportFile({
+        fileName: "errors.xlsx",
+        content: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+      }),
+    ).toThrow(/spreadsheet error/);
+  });
+
+  it("rejects ambiguous trimmed evidence sheets", () => {
+    const workbook = XLSX.read(vestedWorkbook().content);
+    const empty = XLSX.read(vestedWorkbook({ holdings: [] }).content).Sheets[
+      "Unrealized P&L - Summary "
+    ];
+    if (!empty) throw new Error("Missing fixture sheet");
+    XLSX.utils.book_append_sheet(workbook, empty, "Unrealized P&L - Summary");
+    expect(() =>
+      parseExactImportFile({
+        fileName: "ambiguous.xlsx",
+        content: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+      }),
+    ).toThrow(/ambiguous/);
   });
 
   it("validates declaration scope and rejects partial completeness at the exact boundary", () => {

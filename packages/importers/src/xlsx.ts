@@ -88,9 +88,15 @@ export const vestedDrivewealthImporter: PortfolioImporter = {
   },
   parse(file: ImportFile): ParseResult {
     const workbook = createWorkbookContext(file);
-    const vestedSheet = (name: string) =>
-      workbook.workbook.SheetNames.find((sheet) => sheet.trim() === name) ??
-      name;
+    const vestedSheet = (name: string) => {
+      const matches = workbook.workbook.SheetNames.filter(
+        (sheet) => sheet.trim() === name,
+      );
+      if (matches.length > 1)
+        throw new Error(`Vested report has ambiguous ${name} sheets`);
+
+      return matches[0] ?? name;
+    };
     const vestedRows = (name: string) =>
       workbookRows(workbook, vestedSheet(name));
     const holdings = parseVestedUnrealizedSheet(

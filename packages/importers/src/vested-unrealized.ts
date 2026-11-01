@@ -21,6 +21,16 @@ const requiredColumns = {
 export function parseVestedUnrealizedSheet(
   sheet: XLSX.WorkSheet | undefined,
 ): NormalizedHoldingRow[] {
+  if (sheet) {
+    for (const [address, cell] of Object.entries(sheet)) {
+      if (!address.startsWith("!") && cell?.t === "e") {
+        throw new Error(
+          `${sectionName} cell ${address}: spreadsheet error cannot establish complete evidence`,
+        );
+      }
+    }
+  }
+
   // Reading from row 1 keeps validation locations aligned with the worksheet.
   const rows = sheet
     ? XLSX.utils.sheet_to_json<unknown[]>(sheet, {
