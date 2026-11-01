@@ -93,6 +93,14 @@ describe("complete source snapshot declarations", () => {
     expect(second.projection.hasExplicitValuations).toBe(false);
   });
 
+  it("values a genuinely empty first statement without requiring FX for synthetic zeroes", () => {
+    const empty = report("2025-01-01", { holdings: [] });
+    const views = valuePortfolioPublication(empty.projection);
+    expect(views.overview.summary.currentValue).toBe(0);
+    expect(views.overview.timeline.at(-1)?.currentValue).toBe(0);
+    expect(views.assetClassDetails[0]?.summary.currentValue).toBe(0);
+  });
+
   it("keeps a partial-sale remainder current and never treats sales alone as completeness evidence", () => {
     const first = report("2025-01-01");
     const partial = report(

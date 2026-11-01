@@ -199,7 +199,14 @@ function portfolioOverview(
     ...projection.valuations.map((row) => row.currency),
   ];
   const timelineCurrencies = projection.timeline.flatMap((point) =>
-    point.totals.map((total) => total.currency),
+    point.totals
+      .filter(
+        (total) =>
+          total.investedAmount !== "0" ||
+          total.currentValue !== "0" ||
+          total.pnlAmount !== "0",
+      )
+      .map((total) => total.currency),
   );
   const rate = requiredRate([...currencies, ...timelineCurrencies], quote);
   const summary = summaryValues(projection, quote, currencies, rate);
@@ -319,7 +326,14 @@ function assetClassDetail(
       ...position.history.map((fact) => fact.row.currency),
     ]),
     ...asset.timeline.flatMap((point) =>
-      point.totals.map((total) => total.currency),
+      point.totals
+        .filter(
+          (total) =>
+            total.investedAmount !== "0" ||
+            total.currentValue !== "0" ||
+            total.pnlAmount !== "0",
+        )
+        .map((total) => total.currency),
     ),
   ];
   const rate = requiredRate(currencies, quote);
