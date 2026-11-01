@@ -14,6 +14,20 @@ export type ValuationRow = Extract<
   { kind: "valuation" }
 >;
 
+export type SourceSnapshotRow = Extract<
+  ExactNormalizedImportRow,
+  { kind: "source_snapshot" }
+>;
+
+export interface SourceSnapshotFact {
+  row: SourceSnapshotRow;
+  provenance: ImportProvenance;
+  accountKey: string;
+  sourceGroupKey: string;
+  snapshotDate: string;
+  factKey: string;
+}
+
 export interface ImportProvenance {
   batchId: string;
   parserVersion: string;
@@ -46,7 +60,14 @@ export type FactIdentity =
       positionKey: string;
       occurrenceKey: string;
     }
-  | { kind: "valuation"; valuationKey: string };
+  | { kind: "valuation"; valuationKey: string }
+  | {
+      kind: "source_snapshot";
+      accountKey: string;
+      sourceGroupKey: string;
+      snapshotKey: string;
+      snapshotDate: string;
+    };
 
 export interface IdentifiedFact extends PortfolioFact {
   identity: FactIdentity;
@@ -116,6 +137,7 @@ export interface PortfolioProjection {
   asOfDate: string | null;
   positions: PositionProjection[];
   detailPositions?: PositionProjection[];
+  sourceSnapshots?: SourceSnapshotFact[];
   totals: NativeTotal[];
   assetClasses: Array<{
     assetClass: AssetClass;
@@ -138,6 +160,7 @@ export interface PortfolioPublication {
     holdingCount: number;
     transactionCount: number;
     valuationCount: number;
+    sourceSnapshotCount?: number;
     currentCount: number;
     exitedCount: number;
     nativeTotals: NativeTotal[];

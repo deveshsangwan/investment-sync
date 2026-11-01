@@ -35,7 +35,12 @@ export function instrumentKey(
   ]);
 }
 
-export function sourceGroupKey(row: HoldingRow): string {
+export function sourceGroupKey(
+  row: Pick<
+    HoldingRow,
+    "provider" | "accountName" | "assetClass" | "currency" | "source"
+  >,
+): string {
   return JSON.stringify([
     accountKey(row),
     row.assetClass,

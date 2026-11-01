@@ -24,6 +24,7 @@ import {
 } from "./sourceSnapshots";
 import type {
   HoldingFact,
+  SourceSnapshotFact,
   HoldingRow,
   IdentifiedFact,
   PortfolioFact,
@@ -76,10 +77,15 @@ export function buildPortfolioPublication(
   }
 
   const facts = [...factsByKey.values()].sort(compareFacts);
-  const { holdings, transactions, valuations, identifiedFacts } =
-    resolveFacts(facts);
+  const {
+    holdings,
+    transactions,
+    valuations,
+    sourceSnapshots,
+    identifiedFacts,
+  } = resolveFacts(facts);
   const eligible = eligibleSnapshots(holdings);
-  const selected = selectPositions(eligible);
+  const selected = selectPositions(eligible, sourceSnapshots);
   const currentFacts = new Set(selected.current);
   const datedHoldings = [...holdings].sort(bySnapshotDate);
   const historyByPosition = groupBy(datedHoldings, (fact) => fact.positionKey);
@@ -122,7 +128,11 @@ export function buildPortfolioPublication(
     .filter((holding) => !visiblePositionKeys.has(holding.positionKey))
     .map(projectPosition);
   const totals = nativeTotals(selected.current.map((fact) => fact.row));
-  const assetClasses = [...new Set(eligible.map((fact) => fact.row.assetClass))]
+  const assetClasses = [
+    ...new Set(
+      [...eligible, ...sourceSnapshots].map((fact) => fact.row.assetClass),
+    ),
+  ]
     .sort()
     .map((assetClass) => ({
       assetClass,
@@ -135,12 +145,21 @@ export function buildPortfolioPublication(
         eligible.filter((fact) => fact.row.assetClass === assetClass),
         snapshotTimeline(
           eligible.filter((fact) => fact.row.assetClass === assetClass),
+          sourceSnapshots.filter((fact) => fact.row.assetClass === assetClass),
         ),
+        false,
+        new Set(),
+        sourceSnapshots.filter((fact) => fact.row.assetClass === assetClass),
       ),
     }));
   const projection = {
     projectorVersion: "portfolio-v1" as const,
-    asOfDate: selected.current[0]?.snapshotDate ?? null,
+    asOfDate:
+      [...selected.current, ...sourceSnapshots]
+        .map((fact) => fact.snapshotDate)
+        .sort()
+        .at(-1) ?? null,
+    sourceSnapshots,
     positions,
     detailPositions,
     totals,
@@ -149,8 +168,10 @@ export function buildPortfolioPublication(
       eligible,
       valuations.length
         ? valuationTimeline(valuations)
-        : snapshotTimeline(eligible),
+        : snapshotTimeline(eligible, sourceSnapshots),
       valuations.length > 0,
+      new Set(),
+      sourceSnapshots,
     ),
     hasExplicitValuations: valuations.length > 0,
     valuations,
@@ -161,6 +182,9 @@ export function buildPortfolioPublication(
     holdingCount: holdings.length,
     transactionCount: transactions.length,
     valuationCount: valuations.length,
+    ...(sourceSnapshots.length
+      ? { sourceSnapshotCount: sourceSnapshots.length }
+      : {}),
     currentCount: selected.current.length,
     exitedCount: selected.exited.length,
     nativeTotals: totals,
@@ -193,6 +217,7 @@ export function buildPortfolioPublication(
 
 function resolveFacts(facts: PortfolioFact[]) {
   const holdings = new Map<string, HoldingFact>();
+  const sourceSnapshots = new Map<string, SourceSnapshotFact>();
   const transactions = new Map<string, TransactionFact>();
   const valuations = new Map<string, ValuationRow>();
   const occurrences = new Map<string, number>();
@@ -230,6 +255,35 @@ function resolveFacts(facts: PortfolioFact[]) {
           4,
         ),
       });
+      continue;
+    }
+
+    if (fact.row.kind === "source_snapshot") {
+      const row = fact.row;
+      const snapshotDate = row.sourceDate ?? provenance.fallbackDate;
+      const group = sourceGroupKey(row);
+      const key = JSON.stringify([group, snapshotDate]);
+      identifiedFacts.push({
+        ...fact,
+        identity: {
+          kind: "source_snapshot",
+          accountKey: accountKey(row),
+          sourceGroupKey: group,
+          snapshotKey: key,
+          snapshotDate,
+        },
+      });
+      const previous = sourceSnapshots.get(key);
+      if (!previous || previous.row.source.priority <= row.source.priority) {
+        sourceSnapshots.set(key, {
+          row,
+          provenance,
+          snapshotDate,
+          accountKey: accountKey(row),
+          sourceGroupKey: group,
+          factKey: key,
+        });
+      }
       continue;
     }
 
@@ -366,6 +420,7 @@ function resolveFacts(facts: PortfolioFact[]) {
 
   return {
     identifiedFacts,
+    sourceSnapshots: [...sourceSnapshots.values()],
     // Names follow the latest submitted correction, while financial values
     // follow snapshot dates. Immutable source facts retain their original names.
     holdings: [...holdings.values()].map((holding) => {
@@ -402,7 +457,7 @@ function validateFact(fact: PortfolioFact) {
   }
 
   const date =
-    row.kind === "holding"
+    row.kind === "holding" || row.kind === "source_snapshot"
       ? (row.sourceDate ?? provenance.fallbackDate)
       : row.kind === "valuation"
         ? row.valuationDate
@@ -419,21 +474,23 @@ function validateFact(fact: PortfolioFact) {
     row.kind !== "valuation" &&
     (!row.accountName.trim() ||
       !row.provider.trim() ||
-      !row.instrumentName.trim())
+      (row.kind !== "source_snapshot" && !row.instrumentName.trim()))
   )
     throw new Error("Empty portfolio identity");
   if (!Number.isFinite(row.source.priority))
     throw new Error("Invalid source priority");
 
   const values =
-    row.kind === "transaction"
-      ? [row.amount, row.quantity, row.price]
-      : [
-          row.investedAmount,
-          row.currentValue,
-          row.pnlAmount,
-          ...(row.kind === "holding" ? [row.quantity] : []),
-        ];
+    row.kind === "source_snapshot"
+      ? []
+      : row.kind === "transaction"
+        ? [row.amount, row.quantity, row.price]
+        : [
+            row.investedAmount,
+            row.currentValue,
+            row.pnlAmount,
+            ...(row.kind === "holding" ? [row.quantity] : []),
+          ];
   for (const value of values) {
     if (value !== undefined) canonicalDecimal(value);
   }

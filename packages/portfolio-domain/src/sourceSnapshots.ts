@@ -1,5 +1,7 @@
 import type {
   HoldingFact,
+  SourceSnapshotFact,
+  ImportProvenance,
   NativeTimelinePoint,
   NativeTotal,
   ValuationRow,
@@ -22,27 +24,26 @@ export function eligibleSnapshots(holdings: HoldingFact[]): HoldingFact[] {
   );
 }
 
-export function selectPositions(holdings: HoldingFact[]) {
-  const latestCompleteSnapshots = new Map<
-    string,
-    { date: string; priority: number }
-  >();
-  for (const fact of holdings) {
+export function selectPositions(
+  holdings: HoldingFact[],
+  declarations: SourceSnapshotFact[] = [],
+) {
+  const latestCompleteSnapshots = new Map<string, CompleteSnapshot>();
+  for (const fact of [...holdings, ...declarations]) {
     if (fact.row.source.completeness !== "complete") continue;
 
     const groupKey = selectionGroupKey(fact);
     const priority = selectionPriority(fact);
     const previous = latestCompleteSnapshots.get(groupKey);
-    if (
-      !previous ||
-      fact.snapshotDate > previous.date ||
-      (fact.snapshotDate === previous.date && priority > previous.priority)
-    ) {
-      latestCompleteSnapshots.set(groupKey, {
-        date: fact.snapshotDate,
-        priority,
-      });
-    }
+    const next: CompleteSnapshot = {
+      date: fact.snapshotDate,
+      priority,
+      ...(fact.row.kind === "source_snapshot"
+        ? { declaration: { provenance: fact.provenance } }
+        : {}),
+    };
+    if (isNewCompleteSnapshot(previous, next))
+      latestCompleteSnapshots.set(groupKey, next);
   }
 
   const current = new Map<string, HoldingFact>();
@@ -52,11 +53,7 @@ export function selectPositions(holdings: HoldingFact[]) {
       latest.set(fact.canonicalPositionKey, fact);
 
     const complete = latestCompleteSnapshots.get(selectionGroupKey(fact));
-    const isCurrent =
-      !complete ||
-      fact.snapshotDate > complete.date ||
-      (fact.snapshotDate === complete.date &&
-        selectionPriority(fact) >= complete.priority);
+    const isCurrent = !complete || isCurrentAtSnapshot(fact, complete);
     if (isCurrent && !current.has(fact.canonicalPositionKey)) {
       current.set(fact.canonicalPositionKey, fact);
     }
@@ -66,18 +63,58 @@ export function selectPositions(holdings: HoldingFact[]) {
   // group can still be current while another group records an omission.
   const exited = [...latest.values()].filter((fact) => {
     const complete = latestCompleteSnapshots.get(selectionGroupKey(fact));
-    return (
-      complete !== undefined &&
-      (fact.snapshotDate < complete.date ||
-        (fact.snapshotDate === complete.date &&
-          selectionPriority(fact) < complete.priority))
-    );
+    return complete !== undefined && !isCurrentAtSnapshot(fact, complete);
   });
 
   return {
     current: [...current.values()].sort(compareHoldings),
     exited: exited.sort(compareHoldings),
   };
+}
+
+interface CompleteSnapshot {
+  date: string;
+  priority: number;
+  declaration?: { provenance: ImportProvenance };
+}
+
+function compareSourceOrder(left: ImportProvenance, right: ImportProvenance) {
+  return (
+    left.sequence - right.sequence ||
+    compareText(left.batchId, right.batchId) ||
+    left.rowNumber - right.rowNumber
+  );
+}
+
+function isNewCompleteSnapshot(
+  previous: CompleteSnapshot | undefined,
+  next: CompleteSnapshot,
+) {
+  return (
+    !previous ||
+    next.date > previous.date ||
+    (next.date === previous.date &&
+      (next.priority > previous.priority ||
+        (next.priority === previous.priority &&
+          next.declaration !== undefined &&
+          (!previous.declaration ||
+            compareSourceOrder(
+              next.declaration.provenance,
+              previous.declaration.provenance,
+            ) > 0))))
+  );
+}
+
+function isCurrentAtSnapshot(fact: HoldingFact, complete: CompleteSnapshot) {
+  if (fact.snapshotDate !== complete.date)
+    return fact.snapshotDate > complete.date;
+  const priority = selectionPriority(fact);
+  if (priority !== complete.priority) return priority > complete.priority;
+  return (
+    !complete.declaration ||
+    fact.provenance.batchId === complete.declaration.provenance.batchId ||
+    compareSourceOrder(fact.provenance, complete.declaration.provenance) > 0
+  );
 }
 
 function comparePositionRank(left: HoldingFact, right: HoldingFact): number {
@@ -99,7 +136,7 @@ function compareHoldings(left: HoldingFact, right: HoldingFact): number {
   );
 }
 
-function selectionGroupKey(fact: HoldingFact): string {
+function selectionGroupKey(fact: HoldingFact | SourceSnapshotFact): string {
   const { row } = fact;
   const isWorkbookSource =
     row.accountName === "US Stocks" &&
@@ -116,11 +153,13 @@ function selectionGroupKey(fact: HoldingFact): string {
     : fact.sourceGroupKey;
 }
 
-function selectionPriority(fact: HoldingFact): number {
+function selectionPriority(fact: HoldingFact | SourceSnapshotFact): number {
   return isVestedSource(fact.row) ? 1 : 0;
 }
 
-function isVestedSource(row: HoldingFact["row"]): boolean {
+function isVestedSource(
+  row: HoldingFact["row"] | SourceSnapshotFact["row"],
+): boolean {
   return (
     row.accountName === "US Stocks" &&
     row.provider === "Vested / DriveWealth" &&
@@ -164,12 +203,27 @@ export function nativeTotals(
 
 export function snapshotTimeline(
   holdings: HoldingFact[],
+  declarations: SourceSnapshotFact[] = [],
 ): NativeTimelinePoint[] {
-  return [...groupBy(holdings, (fact) => fact.snapshotDate)]
+  const groups = groupBy(holdings, (fact) => fact.snapshotDate);
+  for (const declaration of declarations)
+    if (!groups.has(declaration.snapshotDate))
+      groups.set(declaration.snapshotDate, []);
+  return [...groups]
     .sort(([left], [right]) => compareText(left, right))
     .map(([snapshotDate, facts]) => ({
       snapshotDate,
-      totals: nativeTotals(facts.map((fact) => fact.row)),
+      totals: nativeTotals([
+        ...facts.map((fact) => fact.row),
+        ...declarations
+          .filter((fact) => fact.snapshotDate === snapshotDate)
+          .map((fact) => ({
+            currency: fact.row.currency,
+            investedAmount: "0",
+            currentValue: "0",
+            pnlAmount: "0",
+          })),
+      ]),
       // Legacy charts convert each persisted row before summing. Exact native
       // totals remain authoritative; these ordered inputs preserve display math.
       displayAmounts: [...facts]
@@ -213,6 +267,7 @@ export function timelineWithManualPolicies(
   baseline: NativeTimelinePoint[],
   hasExplicitValuations = false,
   archivedAccountKeys: ReadonlySet<string> = new Set(),
+  declarations: SourceSnapshotFact[] = [],
 ): NativeTimelinePoint[] {
   const manualDates = holdings
     .filter(
@@ -230,6 +285,7 @@ export function timelineWithManualPolicies(
     ...new Set([
       ...holdings.map((fact) => fact.snapshotDate),
       ...baseline.map((point) => point.snapshotDate),
+      ...declarations.map((fact) => fact.snapshotDate),
     ]),
   ]
     .filter((date) => date >= firstManualDate)
@@ -241,6 +297,10 @@ export function timelineWithManualPolicies(
       compareText(left.fact.snapshotDate, right.fact.snapshotDate),
     )
     .values();
+  const declarationIterator = [...declarations]
+    .sort((left, right) => compareText(left.snapshotDate, right.snapshotDate))
+    .values();
+  let nextDeclaration = declarationIterator.next();
   const reportedPoints = baseline.values();
   const selection: TimelineSelection = {
     groups: new Map(),
@@ -257,6 +317,13 @@ export function timelineWithManualPolicies(
   let reportedTotals: NativeTotal[] = [];
 
   for (const snapshotDate of dates) {
+    while (
+      !nextDeclaration.done &&
+      nextDeclaration.value.snapshotDate <= snapshotDate
+    ) {
+      retainTimelineBoundary(selection, nextDeclaration.value);
+      nextDeclaration = declarationIterator.next();
+    }
     while (
       !nextCandidate.done &&
       nextCandidate.value.fact.snapshotDate <= snapshotDate
@@ -304,7 +371,7 @@ interface TimelineCandidate {
 }
 
 interface TimelineSelectionGroup {
-  completeSnapshot?: { date: string; priority: number };
+  completeSnapshot?: CompleteSnapshot;
   candidates: Map<string, TimelineCandidate>;
 }
 
@@ -331,48 +398,12 @@ function retainTimelineCandidate(
 ) {
   const { fact } = candidate;
   const groupKey = selectionGroupKey(fact);
-  let group = selection.groups.get(groupKey);
-
-  if (!group) {
-    group = { candidates: new Map() };
-    selection.groups.set(groupKey, group);
-  }
-
-  const priority = selectionPriority(fact);
-  const complete = group.completeSnapshot;
-
-  if (
-    fact.row.source.completeness === "complete" &&
-    (!complete ||
-      fact.snapshotDate > complete.date ||
-      (fact.snapshotDate === complete.date && priority > complete.priority))
-  ) {
-    group.completeSnapshot = { date: fact.snapshotDate, priority };
-
-    for (const [key, previous] of group.candidates) {
-      if (
-        previous.fact.snapshotDate < fact.snapshotDate ||
-        (previous.fact.snapshotDate === fact.snapshotDate &&
-          selectionPriority(previous.fact) < priority)
-      ) {
-        group.candidates.delete(key);
-        const alternatives = selection.candidatesByPosition.get(key);
-        alternatives?.delete(groupKey);
-        if (alternatives?.size === 0)
-          selection.candidatesByPosition.delete(key);
-
-        selection.changedPositionKeys.add(key);
-      }
-    }
-  }
-
+  const group = retainTimelineBoundary(selection, fact);
   if (
     group.completeSnapshot &&
-    fact.snapshotDate === group.completeSnapshot.date &&
-    priority < group.completeSnapshot.priority
-  ) {
+    !isCurrentAtSnapshot(fact, group.completeSnapshot)
+  )
     return;
-  }
 
   // Later complete snapshots only remove candidates. Keeping the best row
   // per position in each group retains alternatives from other source groups.
@@ -388,6 +419,43 @@ function retainTimelineCandidate(
     selection.candidatesByPosition.set(key, alternatives);
     selection.changedPositionKeys.add(key);
   }
+}
+
+function retainTimelineBoundary(
+  selection: TimelineSelection,
+  fact: HoldingFact | SourceSnapshotFact,
+) {
+  const groupKey = selectionGroupKey(fact);
+  let group = selection.groups.get(groupKey);
+  if (!group) {
+    group = { candidates: new Map() };
+    selection.groups.set(groupKey, group);
+  }
+
+  const next: CompleteSnapshot = {
+    date: fact.snapshotDate,
+    priority: selectionPriority(fact),
+    ...(fact.row.kind === "source_snapshot"
+      ? { declaration: { provenance: fact.provenance } }
+      : {}),
+  };
+  if (
+    fact.row.source.completeness === "complete" &&
+    isNewCompleteSnapshot(group.completeSnapshot, next)
+  ) {
+    group.completeSnapshot = next;
+    for (const [key, previous] of group.candidates) {
+      if (isCurrentAtSnapshot(previous.fact, next)) continue;
+
+      group.candidates.delete(key);
+      const alternatives = selection.candidatesByPosition.get(key);
+      alternatives?.delete(groupKey);
+      if (alternatives?.size === 0) selection.candidatesByPosition.delete(key);
+      selection.changedPositionKeys.add(key);
+    }
+  }
+
+  return group;
 }
 
 function updateTimelineSelection(
