@@ -86,6 +86,7 @@ export const factsPage = internalQuery({
       v.literal("holdingSnapshots"),
       v.literal("transactions"),
       v.literal("portfolioValuations"),
+      v.literal("sourceSnapshots"),
     ),
     paginationOpts: paginationOptsValidator,
   },

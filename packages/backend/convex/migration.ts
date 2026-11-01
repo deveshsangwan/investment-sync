@@ -84,7 +84,9 @@ export const begin = internalMutation({
         existing.inputDigest !== args.inputDigest ||
         existing.sourceKind !== args.sourceKind ||
         existing.evaluationTime !== args.evaluationTime ||
-        existing.expectedCountsJson !== expectedCountsJson ||
+        canonicalJson(
+          tableCountsSchema.parse(parseJson(existing.expectedCountsJson)),
+        ) !== expectedCountsJson ||
         existing.sourceFilesJson !== sourceFilesJson
       )
         throw new Error("Conflicting migration input for existing run");
