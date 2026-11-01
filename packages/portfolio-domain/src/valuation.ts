@@ -198,11 +198,9 @@ function portfolioOverview(
     ...projection.cashFlows.map((fact) => fact.row.currency),
     ...projection.valuations.map((row) => row.currency),
   ];
-  const timelineCurrencies = projection.hasExplicitValuations
-    ? []
-    : projection.timeline.flatMap((point) =>
-        point.totals.map((total) => total.currency),
-      );
+  const timelineCurrencies = projection.timeline.flatMap((point) =>
+    point.totals.map((total) => total.currency),
+  );
   const rate = requiredRate([...currencies, ...timelineCurrencies], quote);
   const summary = summaryValues(projection, quote, currencies, rate);
   const performanceHoldings = current.map((position) =>
