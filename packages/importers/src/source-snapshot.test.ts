@@ -8,6 +8,16 @@ import {
 } from "./index";
 import { vestedWorkbook } from "./vested-fixtures";
 
+function writeWorkbook(workbook: XLSX.WorkBook) {
+  const content: unknown = XLSX.write(workbook, {
+    type: "buffer",
+    bookType: "xlsx",
+  });
+  if (!Buffer.isBuffer(content)) throw new Error("Expected workbook bytes");
+
+  return content;
+}
+
 describe("instrument-free complete Vested snapshots", () => {
   it.each([
     { holdings: [] },
@@ -80,7 +90,7 @@ describe("instrument-free complete Vested snapshots", () => {
     expect(() =>
       parseExactImportFile({
         fileName: "errors.xlsx",
-        content: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+        content: writeWorkbook(workbook),
       }),
     ).toThrow(/spreadsheet error/);
   });
@@ -95,7 +105,7 @@ describe("instrument-free complete Vested snapshots", () => {
     expect(() =>
       parseExactImportFile({
         fileName: "ambiguous.xlsx",
-        content: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+        content: writeWorkbook(workbook),
       }),
     ).toThrow(/ambiguous/);
   });

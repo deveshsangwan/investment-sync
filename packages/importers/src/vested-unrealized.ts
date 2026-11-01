@@ -22,8 +22,15 @@ export function parseVestedUnrealizedSheet(
   sheet: XLSX.WorkSheet | undefined,
 ): NormalizedHoldingRow[] {
   if (sheet) {
-    for (const [address, cell] of Object.entries(sheet)) {
-      if (!address.startsWith("!") && cell?.t === "e") {
+    for (const [address, value] of Object.entries(sheet)) {
+      const cell: unknown = value;
+      if (
+        !address.startsWith("!") &&
+        typeof cell === "object" &&
+        cell !== null &&
+        "t" in cell &&
+        cell.t === "e"
+      ) {
         throw new Error(
           `${sectionName} cell ${address}: spreadsheet error cannot establish complete evidence`,
         );
@@ -142,7 +149,7 @@ export function parseVestedUnrealizedSheet(
         (value, holding) =>
           value.plus(
             parseSourceDecimal(
-              String(
+              toStringValue(
                 getSourceDecimals(holding)?.[property] ?? holding[property],
               ),
             ) ?? "0",
