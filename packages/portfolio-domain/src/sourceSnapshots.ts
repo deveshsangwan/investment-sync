@@ -96,31 +96,39 @@ function isNewCompleteSnapshot(
   previous: CompleteSnapshot | undefined,
   next: CompleteSnapshot,
 ) {
+  if (!previous) return true;
+
+  if (next.date !== previous.date) return next.date > previous.date;
+
+  if (next.priority !== previous.priority)
+    return next.priority > previous.priority;
+
+  if (!next.declaration) return false;
+
+  if (!previous.declaration) return true;
+
+  if (next.declaration.sourcePriority !== previous.declaration.sourcePriority)
+    return (
+      next.declaration.sourcePriority > previous.declaration.sourcePriority
+    );
+
   return (
-    !previous ||
-    next.date > previous.date ||
-    (next.date === previous.date &&
-      (next.priority > previous.priority ||
-        (next.priority === previous.priority &&
-          next.declaration !== undefined &&
-          (!previous.declaration ||
-            next.declaration.sourcePriority >
-              previous.declaration.sourcePriority ||
-            (next.declaration.sourcePriority ===
-              previous.declaration.sourcePriority &&
-              compareSourceOrder(
-                next.declaration.provenance,
-                previous.declaration.provenance,
-              ) > 0)))))
+    compareSourceOrder(
+      next.declaration.provenance,
+      previous.declaration.provenance,
+    ) > 0
   );
 }
 
 function isCurrentAtSnapshot(fact: HoldingFact, complete: CompleteSnapshot) {
   if (fact.snapshotDate !== complete.date)
     return fact.snapshotDate > complete.date;
+
   const priority = selectionPriority(fact);
   if (priority !== complete.priority) return priority > complete.priority;
+
   if (!complete.declaration) return true;
+
   if (fact.row.source.priority !== complete.declaration.sourcePriority)
     return fact.row.source.priority > complete.declaration.sourcePriority;
 

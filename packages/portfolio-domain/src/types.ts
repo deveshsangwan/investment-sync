@@ -32,6 +32,7 @@ export interface ImportProvenance {
   batchId: string;
   parserVersion: string;
   sequence: number;
+  // SQL corrections keep row creation order in sequence; observation order can advance.
   sourceSequence?: number;
   rowNumber: number;
   fallbackDate: string;
