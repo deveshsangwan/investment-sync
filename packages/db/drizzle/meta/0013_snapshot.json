@@ -125,12 +125,8 @@
           "name": "accounts_household_id_households_id_fk",
           "tableFrom": "accounts",
           "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["household_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -461,12 +457,8 @@
           "name": "holding_snapshots_household_id_households_id_fk",
           "tableFrom": "holding_snapshots",
           "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["household_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -474,12 +466,8 @@
           "name": "holding_snapshots_account_id_accounts_id_fk",
           "tableFrom": "holding_snapshots",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -487,12 +475,8 @@
           "name": "holding_snapshots_instrument_id_instruments_id_fk",
           "tableFrom": "holding_snapshots",
           "tableTo": "instruments",
-          "columnsFrom": [
-            "instrument_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["instrument_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -500,12 +484,8 @@
           "name": "holding_snapshots_import_batch_id_import_batches_id_fk",
           "tableFrom": "holding_snapshots",
           "tableTo": "import_batches",
-          "columnsFrom": [
-            "import_batch_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["import_batch_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -582,12 +562,8 @@
           "name": "household_members_household_id_households_id_fk",
           "tableFrom": "household_members",
           "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["household_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -595,12 +571,8 @@
           "name": "household_members_user_id_users_id_fk",
           "tableFrom": "household_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -671,12 +643,8 @@
           "name": "households_owner_user_id_users_id_fk",
           "tableFrom": "households",
           "tableTo": "users",
-          "columnsFrom": [
-            "owner_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["owner_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -883,12 +851,8 @@
           "name": "import_batches_household_id_households_id_fk",
           "tableFrom": "import_batches",
           "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["household_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -896,12 +860,8 @@
           "name": "import_batches_uploaded_by_user_id_users_id_fk",
           "tableFrom": "import_batches",
           "tableTo": "users",
-          "columnsFrom": [
-            "uploaded_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["uploaded_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -985,12 +945,8 @@
           "name": "import_rows_import_batch_id_import_batches_id_fk",
           "tableFrom": "import_rows",
           "tableTo": "import_batches",
-          "columnsFrom": [
-            "import_batch_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["import_batch_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1237,12 +1193,8 @@
           "name": "portfolio_valuations_household_id_households_id_fk",
           "tableFrom": "portfolio_valuations",
           "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["household_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1337,12 +1289,8 @@
           "name": "prices_instrument_id_instruments_id_fk",
           "tableFrom": "prices",
           "tableTo": "instruments",
-          "columnsFrom": [
-            "instrument_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["instrument_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1547,12 +1495,8 @@
           "name": "source_snapshots_household_id_households_id_fk",
           "tableFrom": "source_snapshots",
           "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["household_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1560,12 +1504,8 @@
           "name": "source_snapshots_account_id_accounts_id_fk",
           "tableFrom": "source_snapshots",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1573,12 +1513,8 @@
           "name": "source_snapshots_import_batch_id_import_batches_id_fk",
           "tableFrom": "source_snapshots",
           "tableTo": "import_batches",
-          "columnsFrom": [
-            "import_batch_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["import_batch_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1820,12 +1756,8 @@
           "name": "transactions_household_id_households_id_fk",
           "tableFrom": "transactions",
           "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["household_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1833,12 +1765,8 @@
           "name": "transactions_account_id_accounts_id_fk",
           "tableFrom": "transactions",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1846,12 +1774,8 @@
           "name": "transactions_instrument_id_instruments_id_fk",
           "tableFrom": "transactions",
           "tableTo": "instruments",
-          "columnsFrom": [
-            "instrument_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["instrument_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1859,12 +1783,8 @@
           "name": "transactions_import_batch_id_import_batches_id_fk",
           "tableFrom": "transactions",
           "tableTo": "import_batches",
-          "columnsFrom": [
-            "import_batch_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["import_batch_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1956,13 +1876,7 @@
     "public.currency": {
       "name": "currency",
       "schema": "public",
-      "values": [
-        "INR",
-        "USD",
-        "BTC",
-        "ETH",
-        "OTHER"
-      ]
+      "values": ["INR", "USD", "BTC", "ETH", "OTHER"]
     },
     "public.import_source": {
       "name": "import_source",

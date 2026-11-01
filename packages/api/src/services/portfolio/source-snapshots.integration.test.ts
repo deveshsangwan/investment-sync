@@ -29,14 +29,12 @@ import {
 import { holdingSnapshotTimelineRows } from "./data";
 
 vi.mock("../currency-rates", () => ({
-  getUsdInrRate: vi
-    .fn()
-    .mockResolvedValue({
-      rate: 1,
-      status: "fresh",
-      fetchedAt: "2026-11-01T00:00:00Z",
-      provider: "frankfurter",
-    }),
+  getUsdInrRate: vi.fn().mockResolvedValue({
+    rate: 1,
+    status: "fresh",
+    fetchedAt: "2026-11-01T00:00:00Z",
+    provider: "frankfurter",
+  }),
 }));
 requireTestDatabaseUrlInCi();
 
