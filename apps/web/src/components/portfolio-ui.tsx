@@ -172,7 +172,7 @@ export function EmptyState({
 }: {
   icon: LucideIcon;
   title: string;
-  description: string;
+  description?: string;
   action?: React.ReactNode;
   className?: string;
 }) {
@@ -189,9 +189,11 @@ export function EmptyState({
         </div>
         <div>
           <p className="font-semibold tracking-[-0.01em]">{title}</p>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
+          {description ? (
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              {description}
+            </p>
+          ) : null}
         </div>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

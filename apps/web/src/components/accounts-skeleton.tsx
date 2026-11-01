@@ -29,19 +29,13 @@ export function ProfileSkeleton({ title }: { title: string }) {
           </div>
         ))}
       </div>
-      {title === "Household" && (
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">
-          Every account and holding in Investment Sync belongs to this
-          household.
-        </p>
-      )}
     </Panel>
   );
 }
 
 export function AccountsSkeleton() {
   return (
-    <div role="status" aria-label="Loading connected accounts">
+    <div role="status" aria-label="Loading accounts">
       <div className="hidden grid-cols-[2fr_1fr_1fr_1fr] gap-4 border-b py-3 text-xs text-muted-foreground md:grid">
         {["Name", "Provider", "Type", "Currency"].map((label) => (
           <span key={label}>{label}</span>
@@ -71,9 +65,6 @@ export function AccountsPageSkeleton() {
       </section>
       <section className="mt-8">
         <h2 className="text-[0.82rem] font-semibold">Portfolio accounts</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Accounts available to organize your imported holdings.
-        </p>
         <div className="mt-3">
           <AccountsSkeleton />
         </div>
@@ -91,22 +82,21 @@ export function AccountsFileInformation() {
         <div className="grid gap-1 py-3.5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-4">
           <dt className="font-medium">Original source files</dt>
           <dd className="text-muted-foreground">
-            Kept for 30 days by default, then removed from private storage
-            during scheduled cleanup.
+            Kept for 30 days by default, then deleted during cleanup.
           </dd>
         </div>
         <div className="grid gap-1 py-3.5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-4">
-          <dt className="font-medium">Normalized portfolio data</dt>
+          <dt className="font-medium">Imported data</dt>
           <dd className="text-muted-foreground">
-            Holdings, transactions, and valuations stay after the file expires,
-            so the portfolio keeps working.
+            Holdings, transactions, and valuations stay after the file is
+            deleted.
           </dd>
         </div>
         <div className="grid gap-1 py-3.5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-4">
           <dt className="font-medium">Access</dt>
           <dd className="text-muted-foreground">
-            Clerk handles authentication. Portfolio requests are restricted to
-            your signed-in household.{" "}
+            Sign-in is handled by Clerk. Only your signed-in household can view
+            this portfolio.{" "}
             <Link href="/privacy" className="underline underline-offset-4">
               Privacy details
             </Link>

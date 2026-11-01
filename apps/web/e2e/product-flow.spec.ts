@@ -33,17 +33,19 @@ async function review(page: Page, file = fixture("tickertape stock")) {
   await page.locator('input[type="file"]').setInputFiles(file);
   await page.getByRole("button", { name: "Review file", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Review detected data" }),
+    page.getByRole("heading", { name: "Review import" }),
   ).toBeVisible();
+}
+// Rendered only by the done step, never by applying, failed or history states.
+function importAnotherButton(page: Page) {
+  return page.getByRole("button", { name: "Import another", exact: true });
 }
 async function apply(page: Page) {
   await page
     .getByRole("button", { name: "Apply import", exact: true })
     .first()
     .click();
-  await expect(
-    page.getByRole("heading", { name: "Import applied", exact: true }),
-  ).toBeVisible();
+  await expect(importAnotherButton(page)).toBeVisible();
 }
 async function clientFor(subject: string) {
   const token = await fetch(`http://127.0.0.1:3220/token/${subject}`).then(
@@ -135,18 +137,16 @@ test("duplicate file commits from independent browser sessions cannot double the
     await Promise.all(
       [firstPage, secondPage].map((page) =>
         expect(
-          page.getByRole("heading", {
-            name: /^(Import applied|This import could not be applied)$/,
-          }),
+          importAnotherButton(page).or(
+            page.getByRole("heading", {
+              name: "This import could not be applied",
+            }),
+          ),
         ).toBeVisible(),
       ),
     );
     const appliedCounts = await Promise.all(
-      [firstPage, secondPage].map((page) =>
-        page
-          .getByRole("heading", { name: "Import applied", exact: true })
-          .count(),
-      ),
+      [firstPage, secondPage].map((page) => importAnotherButton(page).count()),
     );
     expect(appliedCounts.sort()).toEqual([0, 1]);
 
@@ -277,7 +277,7 @@ test("storage transport failure is visible and a second real upload recovers", a
   ).toBeVisible();
   await page.getByRole("button", { name: "Review file", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Review detected data" }),
+    page.getByRole("heading", { name: "Review import" }),
   ).toBeVisible();
 });
 

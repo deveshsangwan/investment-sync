@@ -198,9 +198,10 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
           <p className="mt-3 text-sm text-muted-foreground">
             {holding.isCurrent
               ? "Current value"
-              : "Last observed snapshot value"}{" "}
-            in {holding.currency}
-            {holding.currency === "USD" ? ", converted to INR elsewhere" : ""}
+              : "Last observed snapshot value"}
+            {holding.currency === "USD"
+              ? " in USD, converted to INR elsewhere"
+              : ""}
           </p>
         </div>
 
@@ -239,10 +240,7 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
       </section>
 
       <section className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Panel
-          title="Value history"
-          description="Current value and invested amount in INR across dated updates."
-        >
+        <Panel title="Value history" description="In INR">
           {data.history.length < 2 ? (
             <EmptyState
               icon={LineChart}
@@ -379,7 +377,7 @@ function HoldingContent({ data }: { data: NonNullable<HoldingDetail> }) {
         <p className="mt-1 text-xs text-muted-foreground">
           {holding.manualPolicyId
             ? "Manual values do not include individual payments."
-            : "Imported cash flows. Realized sale reports provide partial activity and are excluded from XIRR calculations."}
+            : "Imported cash flows. Partial sale reports are excluded from XIRR."}
         </p>
 
         {data.transactions.length === 0 ? (
@@ -492,21 +490,20 @@ function transactionEmptyState(
 
   if (hasNpsDetails && dataQuality === "source_provided") {
     return {
-      title: "No normalized transactions",
+      title: "No transactions recorded",
       description:
-        "Statement activity is partial, so it is not used as complete cash-flow history. The portal-provided XIRR remains the return source.",
+        "The statement shows partial activity, so returns use the XIRR from the NPS portal.",
     };
   }
   if (hasNpsDetails) {
     return {
-      title: "No normalized transactions",
+      title: "No transactions recorded",
       description:
-        "Statement activity is partial and is not used as complete cash-flow history.",
+        "The statement shows only partial activity, so it is not used for return calculations.",
     };
   }
   return {
     title: "No transactions yet",
-    description:
-      "Complete dated cash flows are needed to calculate XIRR for this position.",
+    description: "Complete dated cash flows are needed to calculate XIRR.",
   };
 }
