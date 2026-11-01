@@ -26,7 +26,6 @@ export function SettingsClient() {
     <PageShell>
       <PageHeader
         title="Accounts"
-        description="Your household, portfolio accounts, and what happens to your files."
         action={
           <Button asChild>
             <Link href="/uploads">
@@ -72,10 +71,6 @@ function SettingsData() {
                   value={current.email ?? "Not recorded"}
                 />
               </dl>
-              <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                Every account and holding in Investment Sync belongs to this
-                household.
-              </p>
             </Panel>
 
             <Panel title="What you can do">
@@ -114,7 +109,7 @@ function SettingsData() {
             <EmptyState
               icon={Database}
               title="No portfolio accounts yet"
-              description="Accounts appear here after you review and apply a supported portfolio import."
+              description="Accounts appear here after you apply an import."
               action={
                 <Button asChild size="sm">
                   <Link href="/uploads">Import statement</Link>

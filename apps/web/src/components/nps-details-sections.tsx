@@ -35,7 +35,7 @@ export function NpsDetailsSections({
     <>
       <SectionCard
         title="NPS allocation"
-        description="Current Tier I allocation across the schemes reported by the NPS portal."
+        description="Tier I schemes as reported by the NPS portal."
         className="mt-4"
       >
         <div className="hidden md:block">
@@ -105,15 +105,12 @@ export function NpsDetailsSections({
       </SectionCard>
 
       <section className="mt-4 grid gap-4 xl:grid-cols-2">
-        <SectionCard
-          title="Contribution / redemption breakdown"
-          description="Employee and employer amounts included in this statement."
-        >
+        <SectionCard title="Contributions and redemptions">
           {details.contributionEvents.length === 0 ? (
             <EmptyState
               icon={FileSpreadsheet}
-              title="No contribution or redemption rows"
-              description="This statement did not include contribution or redemption details for the selected period."
+              title="No contributions or redemptions"
+              description="None appear in this statement."
             />
           ) : (
             <div className="divide-y">
@@ -153,14 +150,10 @@ export function NpsDetailsSections({
 
         <SectionCard
           title="Statement activity"
-          description="Activity included in this statement. It may not represent complete account history."
+          description="May not be the complete account history."
         >
           {details.activities.length === 0 ? (
-            <EmptyState
-              icon={ReceiptText}
-              title="No statement activity"
-              description="No scheme activity rows were included in this statement."
-            />
+            <EmptyState icon={ReceiptText} title="No statement activity" />
           ) : (
             <div className="divide-y">
               {details.activities.map((activity, index) => (

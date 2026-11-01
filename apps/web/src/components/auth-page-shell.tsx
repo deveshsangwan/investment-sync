@@ -53,15 +53,13 @@ export const authAppearance = {
 };
 
 export function AuthPageShell({
-  eyebrow,
   title,
   description,
   securityDescription,
   children,
 }: {
-  eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   securityDescription: string;
   children: React.ReactNode;
 }) {
@@ -86,15 +84,14 @@ export function AuthPageShell({
       >
         <aside className="flex flex-col rounded-t-xl border border-b-0 bg-background p-5 sm:p-10 lg:rounded-l-xl lg:rounded-tr-none lg:border-b lg:border-r-0 lg:p-10">
           <div>
-            <p className="text-xs font-semibold tracking-normal text-primary">
-              {eyebrow}
-            </p>
-            <h1 className="mt-3 max-w-lg text-2xl font-semibold leading-[1.02] tracking-[-0.04em] sm:text-4xl">
+            <h1 className="max-w-lg text-2xl font-semibold leading-[1.02] tracking-[-0.04em] sm:text-4xl">
               {title}
             </h1>
-            <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
-              {description}
-            </p>
+            {description ? (
+              <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
           </div>
 
           <div className="hidden lg:block">
@@ -104,12 +101,11 @@ export function AuthPageShell({
             <TrustItem
               icon={ShieldCheck}
               title="A private household portfolio"
-              description="Your portfolio is only available to your household."
             />
             <TrustItem
               icon={FileClock}
               title="30-day file retention"
-              description="Original upload files expire after 30 days by default."
+              description="Original files expire after 30 days by default."
             />
             <TrustItem
               icon={LockKeyhole}
@@ -158,7 +154,7 @@ function TrustItem({
 }: {
   icon: typeof ShieldCheck;
   title: string;
-  description: string;
+  description?: string;
 }) {
   return (
     <div className="flex items-start gap-3.5">
@@ -167,9 +163,11 @@ function TrustItem({
       </div>
       <div>
         <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
+        {description ? (
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
     </div>
   );

@@ -141,31 +141,21 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
       </section>
 
       <section className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Panel
-          title="Value history"
-          description="Value and invested amount in INR across dated imports."
-        >
+        <Panel title="Value history" description="In INR">
           {data.timeline.length < 2 ? (
             <EmptyState
               icon={LineChart}
               title="History needs a second dated import"
-              description="Import another statement from a different date to see how this allocation moved."
+              description="Import a statement from another date to see the trend."
             />
           ) : (
             <PortfolioTimelineChart data={data.timeline} />
           )}
         </Panel>
 
-        <Panel
-          title="Concentration"
-          description="Largest positions inside this allocation."
-        >
+        <Panel title="Largest positions">
           {data.holdings.length === 0 ? (
-            <EmptyState
-              icon={Rows3}
-              title="No current positions"
-              description="No positions from this asset class appear in the latest snapshot."
-            />
+            <EmptyState icon={Rows3} title="No current positions" />
           ) : (
             <ul className="space-y-3">
               {data.holdings.slice(0, 5).map((holding) => (
@@ -203,11 +193,7 @@ function AssetClassContent({ data }: { data: AssetClassDetail }) {
         </Panel>
       </section>
 
-      <PositionsSection
-        title="Current positions"
-        description="Latest positions ordered by value."
-        holdings={data.holdings}
-      />
+      <PositionsSection title="Current positions" holdings={data.holdings} />
       <PositionsSection
         title="Exited positions"
         description="Present in earlier imports but absent from the latest snapshot."
@@ -225,25 +211,22 @@ function PositionsSection({
   exited = false,
 }: {
   title: string;
-  description: string;
+  description?: string;
   holdings: AssetPosition[];
   exited?: boolean;
 }) {
   return (
     <section className="mt-8">
       <h2 className="text-[0.82rem] font-semibold">{title}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      {description ? (
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      ) : null}
 
       {holdings.length === 0 ? (
         <EmptyState
           className="mt-3"
           icon={Rows3}
           title={exited ? "No exited positions" : "No current positions"}
-          description={
-            exited
-              ? "Nothing has left this allocation between imports."
-              : "No positions were found for this asset class."
-          }
         />
       ) : (
         <>

@@ -60,13 +60,7 @@ export default async function HomePage() {
         >
           <BrandMark className="size-11" />
         </Link>
-        <nav aria-label="Public navigation" className="flex items-center gap-5">
-          <Link
-            href="#sources"
-            className="hidden text-sm text-muted-foreground sm:block"
-          >
-            Supported imports
-          </Link>
+        <nav aria-label="Public navigation">
           <Button asChild variant="outline" size="sm">
             <Link href="/sign-in">Sign in</Link>
           </Button>
@@ -107,13 +101,10 @@ export default async function HomePage() {
         </div>
 
         <HomeMotion className="home-preview mt-14 overflow-hidden rounded-[20px] border bg-card">
-          <div className="flex items-center justify-between gap-4 border-b px-5 py-3.5 text-xs text-muted-foreground">
-            <span className="flex items-center gap-2">
-              <WalletCards className="size-3.5" />
-              Your portfolio
-            </span>
-            <span>Illustrative portfolio and marks</span>
-          </div>
+          <p className="flex items-center gap-2 border-b px-5 py-3.5 text-xs text-muted-foreground">
+            <WalletCards aria-hidden="true" className="size-3.5" />
+            Illustrative portfolio and marks
+          </p>
           <div className="grid">
             <div className="min-w-0 p-5 sm:p-8">
               <div className="flex flex-wrap items-end justify-between gap-5">
@@ -130,9 +121,6 @@ export default async function HomePage() {
                   <p className="flex items-center gap-1 text-positive">
                     <ArrowUpRight className="size-4" />
                     ₹2,69,000 total gain
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    From imported statements
                   </p>
                 </div>
               </div>
@@ -161,10 +149,6 @@ export default async function HomePage() {
                       vectorEffect="non-scaling-stroke"
                     />
                   </svg>
-                  <div className="mt-3 flex justify-between text-[10px] text-muted-foreground">
-                    <span>January</span>
-                    <span>September</span>
-                  </div>
                 </div>
                 <div className="space-y-4 text-xs">
                   <div className="flex justify-between">
@@ -213,13 +197,16 @@ export default async function HomePage() {
         className="mx-auto grid max-w-6xl gap-10 border-t px-5 py-16 sm:px-8 md:grid-cols-[0.85fr_1.15fr]"
       >
         <div>
-          <FolderOpen className="size-6 text-muted-foreground" />
+          <FolderOpen
+            aria-hidden="true"
+            className="size-6 text-muted-foreground"
+          />
           <h2 className="mt-5 text-2xl font-semibold tracking-tight">
             Start with your statements.
           </h2>
           <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-            Upload an export you already have. Review the detected holdings and
-            warnings before adding anything to your portfolio.
+            Upload an export, then review the detected holdings and warnings
+            before anything is added.
           </p>
           <Link
             href="/sign-up"
@@ -257,22 +244,27 @@ export default async function HomePage() {
                   {detail}
                 </p>
               </div>
-              <Check className="size-4 text-muted-foreground" />
+              <Check
+                aria-hidden="true"
+                className="size-4 text-muted-foreground"
+              />
             </div>
           ))}
         </div>
       </section>
 
       <section className="mx-auto flex max-w-6xl flex-col gap-6 border-t px-5 py-12 sm:flex-row sm:items-start sm:px-8">
-        <LockKeyhole className="size-5 shrink-0 text-muted-foreground" />
+        <LockKeyhole
+          aria-hidden="true"
+          className="size-5 shrink-0 text-muted-foreground"
+        />
         <div className="flex-1">
           <h2 className="text-base font-semibold">
             Your records stay in your household.
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Signed-in access protects your portfolio. Original files expire
-            after 30 days by default; imported records remain available.
-            Investment Sync organizes your records and does not provide
+            Original files expire after 30 days by default. Imported records
+            stay. Investment Sync organizes your records and does not give
             investment advice.
           </p>
         </div>

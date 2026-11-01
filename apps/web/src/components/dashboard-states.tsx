@@ -28,7 +28,7 @@ export function EmptyPortfolio() {
         action={
           <Button variant="secondary" asChild>
             <Link href="/uploads">
-              Go to uploads
+              Import statement
               <ArrowRight className="size-4" />
             </Link>
           </Button>

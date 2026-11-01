@@ -130,14 +130,8 @@ export function ManualPolicyForm({
               required
               aria-labelledby="currentValue-label"
               aria-invalid={Boolean(errors.currentValue)}
-              aria-describedby="currentValue-help currentValue-error"
+              aria-describedby="currentValue-error"
             />
-            <span
-              id="currentValue-help"
-              className="text-xs leading-5 text-muted-foreground"
-            >
-              Current fund value shown by your insurer.
-            </span>
             <FieldError field="currentValue" message={errors.currentValue} />
           </label>
         </div>
@@ -322,9 +316,6 @@ function PolicyNameField({
               Cancel
             </Button>
           </div>
-          <p className="text-xs leading-5 text-muted-foreground">
-            Saved with your policy update.
-          </p>
         </>
       ) : null}
     </div>

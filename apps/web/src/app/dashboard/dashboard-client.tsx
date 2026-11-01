@@ -105,10 +105,10 @@ function DashboardData() {
               className="text-4xl font-semibold tracking-tight sm:text-5xl"
             />
             <p className="mt-3 text-sm text-muted-foreground">
-              Total value · holdings dated{" "}
+              Total value
               {latestSnapshotDate
-                ? formatDate(latestSnapshotDate)
-                : "date unavailable"}
+                ? ` as of ${formatDate(latestSnapshotDate)}`
+                : ", date unavailable"}
             </p>
           </div>
           <StatRail>
@@ -136,12 +136,7 @@ function DashboardData() {
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 rounded-2xl border bg-card p-5">
-            <div className="mb-6 flex items-center justify-between gap-3">
-              <h2 className="mono-section-title">Value history</h2>
-              <span className="rounded-md border px-2.5 py-1 text-xs text-muted-foreground">
-                All snapshots
-              </span>
-            </div>
+            <h2 className="mono-section-title mb-6">Value history</h2>
             {timeline.length < 2 ? (
               <EmptyState
                 icon={TrendingUp}
@@ -152,8 +147,7 @@ function DashboardData() {
               <PortfolioTimelineChart data={timeline} />
             )}
             <p className="mt-3 text-xs text-muted-foreground">
-              Value changes include deposits and withdrawals. Line color
-              compares the latest value with invested capital.
+              Value changes include deposits and withdrawals.
             </p>
           </div>
           <div className="min-w-0 rounded-2xl border bg-card p-5">
@@ -163,12 +157,7 @@ function DashboardData() {
         </section>
 
         <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="mono-section-title">Your investments</h2>
-            <span className="text-xs text-muted-foreground">
-              {summary.allocationByAssetClass.length} asset classes
-            </span>
-          </div>
+          <h2 className="mono-section-title mb-4">Your investments</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {summary.allocationByAssetClass.map((item) => {
               const positions = holdings.filter(
@@ -287,10 +276,7 @@ function DashboardData() {
           </summary>
           <div className="pt-5">
             <section className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-              <SectionCard
-                title="Data health"
-                description="How much confidence to place in the return calculations."
-              >
+              <SectionCard title="Data health">
                 <div
                   className={cn(
                     "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between",
@@ -328,12 +314,12 @@ function DashboardData() {
                 <dl className="mt-5 divide-y divide-border/70">
                   <HealthMetric
                     label="Portfolio XIRR"
-                    explanation="Money-weighted annual return that accounts for when money entered and left the portfolio."
+                    explanation="Annual return that accounts for when money entered and left the portfolio."
                     value={<RateValue value={performance.xirr} />}
                   />
                   <HealthMetric
                     label="Source return coverage"
-                    explanation="Share of current portfolio value with a return supplied directly by its source file."
+                    explanation="Share of portfolio value with a return supplied by its source file."
                     value={
                       <span className="number font-semibold">
                         {formatPercent(performance.sourceXirrCoveragePercent)}
@@ -342,7 +328,7 @@ function DashboardData() {
                   />
                   <HealthMetric
                     label="Dated cash flows"
-                    explanation="Deposits, withdrawals, purchases, and sales available for an exact money-weighted return."
+                    explanation="Deposits, withdrawals, purchases, and sales available for an exact XIRR."
                     value={
                       <span className="number font-semibold">
                         {performance.cashFlowCount.toLocaleString("en-IN")}
@@ -352,10 +338,7 @@ function DashboardData() {
                 </dl>
               </SectionCard>
 
-              <SectionCard
-                title="Performance by asset class"
-                description="Return quality can differ between sources."
-              >
+              <SectionCard title="Performance by asset class">
                 {performance.byAssetClass.length === 0 ? (
                   <EmptyState
                     icon={Activity}
@@ -377,9 +360,6 @@ function DashboardData() {
                             >
                               {labelize(item.assetClass)}
                             </Link>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              Current value
-                            </p>
                           </div>
                           <p className="number text-sm font-semibold">
                             {formatInr(item.currentValue)}
@@ -490,7 +470,7 @@ function ImportSummary({
       />
       <div className="min-w-0">
         <p className="text-xs font-medium text-muted-foreground">
-          Latest committed import
+          Latest import
         </p>
         {isLoading ? (
           <p className="mt-1 text-sm font-semibold">Checking import history</p>
@@ -526,9 +506,7 @@ function ImportSummary({
             ) : null}
           </>
         ) : (
-          <p className="mt-1 text-sm font-semibold">
-            No committed import recorded
-          </p>
+          <p className="mt-1 text-sm font-semibold">No imports yet</p>
         )}
       </div>
     </div>
