@@ -24,6 +24,7 @@ const MAPPING_TARGETS = {
   import_batches: ["importBatches", "sourceFiles"],
   import_rows: ["migrationRecords"],
   holding_snapshots: ["holdingSnapshots"],
+  source_snapshots: ["sourceSnapshots"],
   transactions: ["transactions"],
   portfolio_valuations: ["portfolioValuations"],
   currency_rates: ["currencyRates"],

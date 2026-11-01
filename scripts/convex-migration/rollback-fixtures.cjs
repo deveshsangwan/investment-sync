@@ -343,7 +343,7 @@ function appendCommittedBatch(
   const publishedFacts = [];
   for (const [index, row] of rows.entries()) {
     const date =
-      row.kind === "holding"
+      row.kind === "holding" || row.kind === "source_snapshot"
         ? row.sourceDate
         : row.kind === "transaction"
           ? row.tradeDate
@@ -371,7 +371,9 @@ function appendCommittedBatch(
         ? "holdingSnapshots"
         : row.kind === "transaction"
           ? "transactions"
-          : "portfolioValuations";
+          : row.kind === "source_snapshot"
+            ? "sourceSnapshots"
+            : "portfolioValuations";
     if (row.kind === "transaction")
       doc.occurrenceKey =
         occurrenceKeys[index] ??

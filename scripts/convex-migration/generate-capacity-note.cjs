@@ -97,7 +97,7 @@ ${tableRows}
 
 ${profile ? `Source: ${profile.sourceType}. ${profile.normalizedRows} rows, ${profile.normalizedSerializedBytes} normalized UTF-8 JSON bytes, ${profile.distinctAccounts} distinct accounts, and ${profile.distinctInstruments} distinct instruments. Row kinds: ${formatGroups(profile.rowKindCounts)}. Currencies: ${formatGroups(profile.currencyCounts)}. Projected fact writes are at least ${profile.projectedFactWritesLowerBound}; projected read-model writes are at least ${profile.projectedReadModelWritesLowerBound}. These are lower bounds until the full publication module exists.` : "Unavailable."}
 
-Largest-Household state: ${household ? `${household.accounts} accounts, ${household.instruments} instruments, ${household.importBatches} Import Batches, ${household.importRows} normalized rows, ${household.holdingSnapshots} holding snapshots, ${household.transactions} transactions, ${household.valuations} valuations, and ${household.factRows} total persisted fact rows.` : "Unavailable."}
+Largest-Household state: ${household ? `${household.accounts} accounts, ${household.instruments} instruments, ${household.importBatches} Import Batches, ${household.importRows} normalized rows, ${household.holdingSnapshots} holding snapshots, ${household.sourceSnapshots ?? 0} complete source declarations, ${household.transactions} transactions, ${household.valuations} valuations, and ${household.factRows} total persisted fact rows.` : "Unavailable."}
 
 Storage correlation: ${storageSummary}
 

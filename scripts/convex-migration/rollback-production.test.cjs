@@ -24,7 +24,7 @@ function productionFixture(scope = "before-writes") {
   const now = Date.now();
   const at = (offset) => new Date(now + offset * 1000).toISOString();
   const sourceSnapshot = sealSnapshot({
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceKind: "production",
     evaluationTime: "2026-01-04T00:00:00Z",
     tables: Object.fromEntries(
@@ -63,7 +63,7 @@ function productionFixture(scope = "before-writes") {
     inputSealed: true,
   });
   const targetSnapshot = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceKind: "production",
     evaluationTime: sourceSnapshot.evaluationTime,
     inputDigest: sourceSnapshot.inputDigest,

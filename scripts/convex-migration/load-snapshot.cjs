@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { parseArguments, assertAllowedArguments } = require("./runtime.cjs");
 const {
-  legacyTables,
+  snapshotTableNames,
   readSnapshot,
   readEnvironment,
   convexConnection,
@@ -36,7 +36,7 @@ async function loadSnapshot(snapshot, snapshotPath, connection, runKey) {
     ),
   });
 
-  for (const legacyTable of legacyTables) {
+  for (const legacyTable of snapshotTableNames(snapshot.schemaVersion)) {
     for (const row of snapshot.tables[legacyTable]) {
       await connection.invoke("migration:loadRecord", {
         runKey,

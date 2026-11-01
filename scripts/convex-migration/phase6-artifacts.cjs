@@ -143,8 +143,19 @@ function writeFileBytes(runId, bytes) {
   };
 }
 
+const currentTables = legacyTables.flatMap((table) =>
+  table === "import_rows" ? [table, "source_snapshots"] : [table],
+);
+function snapshotTableNames(schemaVersion) {
+  if (schemaVersion === 1) return legacyTables;
+  if (schemaVersion === 2) return currentTables;
+
+  throw new Error("Invalid snapshot schema version");
+}
+
 function sealSnapshot(body) {
-  const tableManifest = legacyTables.map((table) => ({
+  const tables = snapshotTableNames(body.schemaVersion);
+  const tableManifest = tables.map((table) => ({
     table,
     count: body.tables[table].length,
     digest: digest(body.tables[table]),
@@ -160,7 +171,7 @@ function sealSnapshot(body) {
         .map((row) => row.instrument_id),
     );
     const counts = Object.fromEntries(
-      legacyTables
+      tables
         .filter(
           (table) =>
             ![
@@ -200,7 +211,7 @@ function sealSnapshot(body) {
 function readSnapshot(file) {
   const snapshot = JSON.parse(fs.readFileSync(protectedPath(file), "utf8"));
   if (
-    snapshot.schemaVersion !== 1 ||
+    ![1, 2].includes(snapshot.schemaVersion) ||
     !["synthetic", "production"].includes(snapshot.sourceKind) ||
     !Number.isFinite(Date.parse(snapshot.evaluationTime))
   )
@@ -208,11 +219,11 @@ function readSnapshot(file) {
   if (
     !snapshot.tables ||
     Object.keys(snapshot.tables).sort().join() !==
-      [...legacyTables].sort().join()
+      [...snapshotTableNames(snapshot.schemaVersion)].sort().join()
   )
     throw new Error("Snapshot table manifest is incomplete");
 
-  for (const table of legacyTables) {
+  for (const table of snapshotTableNames(snapshot.schemaVersion)) {
     if (!Array.isArray(snapshot.tables[table]))
       throw new Error("Snapshot table is not an array");
     const ids = new Set();
@@ -367,6 +378,8 @@ function writeFailure(runId, stage, error) {
 module.exports = {
   writeFailure,
   legacyTables,
+  currentTables,
+  snapshotTableNames,
   requireDatabase,
   requireBackend,
   canonicalJson,

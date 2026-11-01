@@ -7,6 +7,7 @@ const { randomUUID } = require("node:crypto");
 const test = require("node:test");
 const {
   createRollbackFixture,
+  appendCommittedBatch,
   CREATED_AT,
 } = require("./rollback-fixtures.cjs");
 const { buildReverseReplayPlan } = require("./reverse-replay.cjs");
@@ -37,6 +38,35 @@ test(
     parsed.pathname = "/postgres";
     const admin = postgres(parsed.toString(), { max: 1, onnotice: () => {} });
     const fixture = createRollbackFixture();
+    appendCommittedBatch(
+      fixture.targetSnapshot,
+      "complete-empty-source",
+      "household-old",
+      "user-old",
+      30,
+      [
+        {
+          kind: "source_snapshot",
+          sourceType: "manual_snapshot",
+          sourceDate: "2026-01-04",
+          accountName: "Synthetic broker",
+          provider: "Synthetic",
+          assetClass: "us_stock",
+          currency: "USD",
+          sourceGroup: "",
+          completeness: "complete",
+          metadata: { evidence: "generated-complete-report" },
+          source: {
+            group: "",
+            completeness: "complete",
+            granularity: "instrument",
+            priority: 0,
+          },
+          numericProvenance: {},
+        },
+      ],
+      Date.parse("2026-01-04T00:00:00Z"),
+    );
     let sql;
 
     try {
@@ -195,6 +225,7 @@ test(
         0o600,
       );
 
+      assert.equal(plan.tables.source_snapshots.length, 1);
       const applied = await applyReverseReplay(
         sql,
         { ...plan, sourceKind: "production" },
@@ -202,8 +233,9 @@ test(
       );
       assert.equal(applied.applied, true);
       assert.equal(applied.counts.households, 2);
-      assert.equal(applied.counts.import_batches, 3);
-      assert.equal(applied.counts.import_rows, 4);
+      assert.equal(applied.counts.import_batches, 4);
+      assert.equal(applied.counts.import_rows, 5);
+      assert.equal(applied.counts.source_snapshots, 1);
       const actual = await readSqlTables(sql);
       assert.equal(digest(actual), plan.replayDigest);
       assert.equal(
@@ -232,7 +264,7 @@ test(
         fs.readFileSync(cli.receiptPath("after-writes"), "utf8"),
       );
       assert.equal(afterReceipt.verification.alreadyApplied, true);
-      assert.equal(afterReceipt.newCommittedBatches, 3);
+      assert.equal(afterReceipt.newCommittedBatches, 4);
       await assert.rejects(
         verifyBeforeWrites(sql, fixture.sourceSnapshot.tables),
         /differs from the frozen source/,
@@ -363,6 +395,7 @@ function prepareCliArtifacts(fixture, databaseUrl) {
   delete initialTarget.tables.importBatches[0].committedVersionId;
   for (const table of [
     "holdingSnapshots",
+    "sourceSnapshots",
     "transactions",
     "portfolioValuations",
     "portfolioVersions",
@@ -408,3 +441,68 @@ function prepareCliArtifacts(fixture, databaseUrl) {
       path.join(root, `${prefix}-${mode}`, "rollback-receipt.json"),
   };
 }
+
+test(
+  "real SQL exports preserve the old layout, require complete current declarations, and reject a partial migration",
+  { skip: !databaseUrl },
+  async () => {
+    const parsed = new URL(databaseUrl);
+    assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname));
+    const postgres = createRequire(
+      path.resolve(process.cwd(), "packages/db/package.json"),
+    )("postgres");
+    parsed.pathname = "/postgres";
+    const admin = postgres(parsed.toString(), { max: 1, onnotice: () => {} });
+    const databaseName = `investment_sync_migration_layout_${process.pid}`;
+    let sql;
+    try {
+      await admin.unsafe(`create database "${databaseName}"`);
+      parsed.pathname = `/${databaseName}`;
+      sql = postgres(parsed.toString(), { max: 1, onnotice: () => {} });
+      const { extractSnapshot } = require("./export-snapshot.cjs");
+      const extract = () =>
+        extractSnapshot({
+          environment: { DATABASE_URL: parsed.toString() },
+          sourceKind: "synthetic",
+          runId: `layout-${process.pid}`,
+          evaluationTime: "2026-11-01T00:00:00Z",
+          collectViews: async () => [],
+          syntheticFiles: new Map(),
+        });
+      const migrationDirectory = path.resolve("packages/db/drizzle");
+      for (const file of fs
+        .readdirSync(migrationDirectory)
+        .filter((name) => /^\d.*\.sql$/.test(name))
+        .sort()) {
+        if (file.startsWith("0013_")) {
+          const historical = await extract();
+          assert.equal(historical.schemaVersion, 1);
+          assert.equal(historical.tableManifest.length, 12);
+          assert.equal(
+            Object.hasOwn(historical.tables, "source_snapshots"),
+            false,
+          );
+        }
+        const statements = fs
+          .readFileSync(path.join(migrationDirectory, file), "utf8")
+          .split("--> statement-breakpoint");
+        await sql.begin(async (transaction) => {
+          for (const statement of statements)
+            if (statement.trim()) await transaction.unsafe(statement);
+        });
+      }
+      const current = await extract();
+      assert.equal(current.schemaVersion, 2);
+      assert.equal(current.tableManifest.length, 13);
+      assert.deepEqual(current.tables.source_snapshots, []);
+      await sql.unsafe("drop table source_snapshots");
+      await assert.rejects(extract(), /migration is incomplete/);
+    } finally {
+      if (sql) await sql.end();
+      await admin.unsafe(
+        `drop database if exists "${databaseName}" with (force)`,
+      );
+      await admin.end();
+    }
+  },
+);

@@ -110,8 +110,18 @@ function requireProductionRecovery({
       requireTime(baselineSnapshot.exportedAt) > exportedAt ||
       requireTime(baselineSnapshot.exportedAt) <
         requireTime(sourceSnapshot.evaluationTime) ||
-      stableJson(normalizeTargetTables(baselineSnapshot.tables)) !==
-        stableJson(normalizeTargetTables(targetSnapshot.tables)) ||
+      stableJson(
+        normalizeTargetTables(
+          baselineSnapshot.tables,
+          baselineSnapshot.schemaVersion,
+        ),
+      ) !==
+        stableJson(
+          normalizeTargetTables(
+            targetSnapshot.tables,
+            targetSnapshot.schemaVersion,
+          ),
+        ) ||
       stableJson(baselineSnapshot.mappings) !==
         stableJson(targetSnapshot.mappings)
     )
@@ -375,14 +385,14 @@ function requireConvexTarget(argumentsMap, environment, convex) {
 }
 
 function requireProductionTarget(target, source, convex) {
-  normalizeTargetTables(target?.tables);
+  normalizeTargetTables(target?.tables, target?.schemaVersion);
   const runs = target.tables.migrationRuns;
   const matchingRuns = Array.isArray(runs)
     ? runs.filter((run) => run.runKey === convex.migrationRunKey)
     : [];
   const run = matchingRuns[0];
   if (
-    target?.schemaVersion !== 1 ||
+    ![1, 2].includes(target?.schemaVersion) ||
     target.projectorVersion !== "portfolio-v1" ||
     target.sourceKind !== "production" ||
     target.inputDigest !== source.inputDigest ||
@@ -488,9 +498,14 @@ function requireFields(value, fields, description) {
     throw new Error(`Production recovery has malformed ${description}`);
 }
 
-function normalizeTargetTables(tables) {
+function normalizeTargetTables(tables, schemaVersion) {
+  // Validate the historical export layout before adding the absent new table.
+  const hasHistoricalLayout =
+    schemaVersion === 1 && tables?.sourceSnapshots === undefined;
   const expectedTables = [
-    ...TARGET_TABLES,
+    ...TARGET_TABLES.filter(
+      (table) => !hasHistoricalLayout || table !== "sourceSnapshots",
+    ),
     "importDedupeKeys",
     "portfolioPositions",
     "portfolioHistoryFacts",
@@ -510,7 +525,9 @@ function normalizeTargetTables(tables) {
     throw new Error("Production recovery requires a complete target export");
 
   return Object.fromEntries(
-    Object.entries(tables).map(([table, rows]) => {
+    Object.entries(
+      hasHistoricalLayout ? { ...tables, sourceSnapshots: [] } : tables,
+    ).map(([table, rows]) => {
       if (
         !Array.isArray(rows) ||
         rows.some(

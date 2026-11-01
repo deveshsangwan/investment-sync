@@ -22,6 +22,8 @@ for (const row of parsed.rows) {
   currencyCounts.set(row.currency, (currencyCounts.get(row.currency) ?? 0) + 1);
   if (row.kind !== "valuation") {
     accountKeys.add(`${normalize(row.provider)}|${normalize(row.accountName)}`);
+  }
+  if (row.kind === "holding" || row.kind === "transaction") {
     instrumentKeys.add(
       `${row.assetClass}|${row.currency}|${row.symbol ? `symbol:${row.symbol.trim().toUpperCase()}` : `name:${normalize(row.instrumentName)}`}`,
     );
@@ -33,7 +35,7 @@ for (const row of parsed.rows) {
     assetClasses.add(row.assetClass);
   }
   const date =
-    row.kind === "holding"
+    row.kind === "holding" || row.kind === "source_snapshot"
       ? row.sourceDate
       : row.kind === "transaction"
         ? row.tradeDate

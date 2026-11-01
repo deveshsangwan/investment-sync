@@ -27,10 +27,13 @@ const TABLE_NAMES = [
   "import_rows",
   "transactions",
   "holding_snapshots",
+  "source_snapshots",
   "prices",
   "portfolio_valuations",
   "currency_rates",
 ];
+
+let hasSourceSnapshots = false;
 
 const argumentsMap = parseArguments(process.argv.slice(2));
 assertAllowedArguments(argumentsMap, ["target", "env-file", "run-id"]);
@@ -69,6 +72,13 @@ async function main() {
       "select current_setting('transaction_read_only') as value",
     );
     if (readOnly?.value !== "on") fail("Database transaction is not read-only");
+
+    const [layout] = await client.unsafe(
+      "select to_regclass('public.source_snapshots') is not null as declarations, exists(select 1 from information_schema.columns where table_schema='public' and table_name='import_batches' and column_name='source_sequence') as sequence",
+    );
+    if (layout.declarations !== layout.sequence)
+      fail("Source snapshot schema migration is incomplete");
+    hasSourceSnapshots = layout.declarations;
 
     const inventory = {
       schemaVersion: 1,
@@ -120,6 +130,8 @@ async function tableCounts() {
   const counts = [];
 
   for (const table of TABLE_NAMES) {
+    if (table === "source_snapshots" && !hasSourceSnapshots) continue;
+
     const [row] = await client.unsafe(
       `select count(*)::bigint as count from ${table}`,
     );
@@ -137,6 +149,11 @@ async function currencyCounts() {
     instruments: await groupedCounts(
       "select currency::text as key, count(*)::bigint as count from instruments group by currency order by currency",
     ),
+    sourceSnapshots: hasSourceSnapshots
+      ? await groupedCounts(
+          "select currency::text as key, count(*)::bigint as count from source_snapshots group by currency order by currency",
+        )
+      : [],
     holdingSnapshots: await groupedCounts(
       "select currency::text as key, count(*)::bigint as count from holding_snapshots group by currency order by currency",
     ),
@@ -260,6 +277,12 @@ async function integrityChecks() {
       `select 1 as item from holding_snapshots f left join households h on h.id=f.household_id left join accounts a on a.id=f.account_id left join instruments i on i.id=f.instrument_id left join import_batches b on b.id=f.import_batch_id where h.id is null or a.id is null or i.id is null or a.household_id <> f.household_id or (b.id is not null and b.household_id <> f.household_id)`,
     ],
     [
+      "source_snapshot_reference_or_scope",
+      hasSourceSnapshots
+        ? `select 1 as item from source_snapshots f left join households h on h.id=f.household_id left join accounts a on a.id=f.account_id left join import_batches b on b.id=f.import_batch_id where h.id is null or a.id is null or b.id is null or a.household_id <> f.household_id or b.household_id <> f.household_id or f.completeness <> 'complete' or f.row_number < 1 or f.source_sequence < 0`
+        : "select 1 as item where false",
+    ],
+    [
       "transaction_reference_or_scope",
       `select 1 as item from transactions f left join households h on h.id=f.household_id left join accounts a on a.id=f.account_id left join instruments i on i.id=f.instrument_id left join import_batches b on b.id=f.import_batch_id where h.id is null or a.id is null or a.household_id <> f.household_id or (f.instrument_id is not null and i.id is null) or (b.id is not null and b.household_id <> f.household_id)`,
     ],
@@ -327,7 +350,7 @@ async function largestBatchSummary() {
         coalesce(max(octet_length(r.normalized_payload::text)), 0)::bigint as maximum_row_bytes,
         count(distinct (lower(trim(r.normalized_payload->>'provider')), lower(trim(r.normalized_payload->>'accountName')))) filter (where r.normalized_payload ? 'accountName')::bigint as accounts,
         count(distinct (r.normalized_payload->>'assetClass', r.normalized_payload->>'currency', coalesce('symbol:' || upper(trim(r.normalized_payload->>'symbol')), 'name:' || lower(trim(r.normalized_payload->>'instrumentName'))))) filter (where r.normalized_payload ? 'instrumentName')::bigint as instruments,
-        count(*) filter (where r.normalized_payload->>'kind' in ('holding', 'transaction', 'valuation'))::bigint as fact_writes,
+        count(*) filter (where r.normalized_payload->>'kind' in ('holding', 'transaction', 'valuation', 'source_snapshot'))::bigint as fact_writes,
         count(distinct case when r.normalized_payload->>'kind' = 'holding' then concat_ws('|', r.normalized_payload->>'provider', r.normalized_payload->>'accountName', r.normalized_payload->>'assetClass', r.normalized_payload->>'currency', coalesce(r.normalized_payload->>'symbol', r.normalized_payload->>'instrumentName')) end)::bigint as positions,
         count(distinct r.normalized_payload->>'assetClass') filter (where r.normalized_payload->>'kind' = 'holding')::bigint as asset_classes,
         count(distinct coalesce(r.normalized_payload->>'sourceDate', r.normalized_payload->>'valuationDate', r.normalized_payload->>'tradeDate'))::bigint as timeline_points
@@ -338,7 +361,7 @@ async function largestBatchSummary() {
   `);
   if (!row) return null;
   const rowKindCounts = await client`
-    select case when normalized_payload->>'kind' in ('holding', 'transaction', 'valuation')
+    select case when normalized_payload->>'kind' in ('holding', 'transaction', 'valuation', 'source_snapshot')
       then normalized_payload->>'kind' else 'other' end as key,
       count(*)::bigint as count
     from import_rows where import_batch_id = ${row.id}
@@ -378,6 +401,9 @@ async function largestBatchSummary() {
 }
 
 async function largestHouseholdSummary() {
+  const declarationCount = hasSourceSnapshots
+    ? "(select count(*) from source_snapshots f where f.household_id=h.id)"
+    : "0";
   const [row] = await client.unsafe(`
     with household_metrics as (
       select h.id,
@@ -385,6 +411,7 @@ async function largestHouseholdSummary() {
         (select count(*) from import_batches b where b.household_id=h.id)::bigint as import_batches,
         (select count(*) from import_rows r join import_batches b on b.id=r.import_batch_id where b.household_id=h.id)::bigint as import_rows,
         (select count(*) from holding_snapshots f where f.household_id=h.id)::bigint as holding_snapshots,
+        ${declarationCount}::bigint as source_snapshots,
         (select count(*) from transactions f where f.household_id=h.id)::bigint as transactions,
         (select count(*) from portfolio_valuations f where f.household_id=h.id)::bigint as valuations,
         (select count(distinct instrument_id) from (
@@ -392,12 +419,13 @@ async function largestHouseholdSummary() {
           union all
           select instrument_id from transactions f where f.household_id=h.id and instrument_id is not null
         ) owned_instruments)::bigint as instruments,
-        ((select count(*) from holding_snapshots f where f.household_id=h.id) +
+        (${declarationCount} +
+         (select count(*) from holding_snapshots f where f.household_id=h.id) +
          (select count(*) from transactions f where f.household_id=h.id) +
          (select count(*) from portfolio_valuations f where f.household_id=h.id))::bigint as fact_rows
       from households h
     )
-    select accounts, instruments, import_batches, import_rows, holding_snapshots,
+    select accounts, instruments, import_batches, import_rows, holding_snapshots, source_snapshots,
       transactions, valuations, fact_rows
     from household_metrics order by import_rows desc, fact_rows desc limit 1
   `);
@@ -408,6 +436,7 @@ async function largestHouseholdSummary() {
         importBatches: count(row.import_batches),
         importRows: count(row.import_rows),
         holdingSnapshots: count(row.holding_snapshots),
+        sourceSnapshots: count(row.source_snapshots),
         transactions: count(row.transactions),
         valuations: count(row.valuations),
         factRows: count(row.fact_rows),
