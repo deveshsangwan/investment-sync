@@ -117,7 +117,7 @@ export function expectedMigratedFact(input: {
       sequence: Date.parse(source.created_at),
       ...(batch?.source_sequence == null
         ? {}
-        : { sourceSequence: batch.source_sequence }),
+        : { sourceSequence: Number(batch.source_sequence) }),
       rowNumber: ordinal,
       fallbackDate: new Date(batch ? batch.uploaded_at : source.created_at)
         .toISOString()
