@@ -22,9 +22,43 @@ export function parseVestedUnrealizedSheet(
   sheet: XLSX.WorkSheet | undefined,
 ): NormalizedHoldingRow[] {
   if (sheet) {
+    const reference: unknown = sheet["!ref"];
+    if (
+      typeof reference !== "string" ||
+      !/^[A-Z]+[1-9]\d*(?::[A-Z]+[1-9]\d*)?$/.test(reference)
+    )
+      throw new Error(`${sectionName}: invalid worksheet dimensions`);
+
+    const range = XLSX.utils.decode_range(reference);
     for (const [address, value] of Object.entries(sheet)) {
       const cell: unknown = value;
-      if (typeof cell !== "object" || cell === null) continue;
+      if (
+        typeof cell !== "object" ||
+        cell === null ||
+        !/^[A-Z]+[1-9]\d*$/.test(address)
+      )
+        continue;
+
+      const hasFormula =
+        "f" in cell && typeof cell.f === "string" && cell.f.trim() !== "";
+      const hasValue =
+        "v" in cell &&
+        cell.v !== undefined &&
+        cell.v !== null &&
+        (typeof cell.v !== "string" || cell.v.trim() !== "");
+      if (hasFormula || hasValue) {
+        const position = XLSX.utils.decode_cell(address);
+        if (
+          position.r < range.s.r ||
+          position.r > range.e.r ||
+          position.c < range.s.c ||
+          position.c > range.e.c
+        )
+          throw new Error(
+            `${sectionName} cell ${address}: populated cell lies outside worksheet dimensions`,
+          );
+      }
+
       if (
         "f" in cell &&
         typeof cell.f === "string" &&

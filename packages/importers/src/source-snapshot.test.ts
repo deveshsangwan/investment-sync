@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import {
   adaptExactParseResultToLegacy,
@@ -131,6 +132,53 @@ describe("instrument-free complete Vested snapshots", () => {
       currentValue: "0",
     });
   });
+
+  it.each(["A1:E1", "A2:E2", "A1:B2"])(
+    "rejects XLSX dimensions %s that hide retained worksheet cells",
+    (dimension) => {
+      const file = vestedWorkbook();
+      // XLSX exposes the ZIP helper as untyped; validate its external contract.
+      const library: unknown = XLSX.CFB;
+      const cfb = z
+        .object({
+          read: z
+            .function()
+            .args(z.unknown(), z.unknown())
+            .returns(z.unknown()),
+          find: z.function().args(z.unknown(), z.string()).returns(z.unknown()),
+          write: z
+            .function()
+            .args(z.unknown(), z.unknown())
+            .returns(z.unknown()),
+        })
+        .parse(library);
+      const archive = cfb.read(file.content, { type: "buffer" });
+      const entry = cfb.find(archive, "/xl/worksheets/sheet1.xml");
+      if (
+        typeof entry !== "object" ||
+        entry === null ||
+        !("content" in entry) ||
+        !(entry.content instanceof Uint8Array)
+      )
+        throw new Error("Missing generated worksheet XML");
+
+      const xml = Buffer.from(entry.content).toString("utf8");
+      expect(xml).toContain('<dimension ref="A1:E2"');
+      entry.content = Buffer.from(
+        xml.replace('<dimension ref="A1:E2"', `<dimension ref="${dimension}"`),
+      );
+      const content = cfb.write(archive, {
+        fileType: "zip",
+        type: "buffer",
+      });
+      if (!Buffer.isBuffer(content))
+        throw new Error("Expected modified workbook bytes");
+
+      expect(() =>
+        parseExactImportFile({ fileName: "truncated-dimension.xlsx", content }),
+      ).toThrow(/outside worksheet dimensions/);
+    },
+  );
 
   it("rejects ambiguous trimmed evidence sheets", () => {
     const workbook = XLSX.read(vestedWorkbook().content);
