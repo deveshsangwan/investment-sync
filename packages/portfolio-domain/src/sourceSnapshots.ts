@@ -446,7 +446,13 @@ export function timelineWithManualPolicies(
                 ),
                 pnlAmount: subtractDecimals(
                   fact.row.pnlAmount ?? "0",
-                  previous?.pnlAmount ?? "0",
+                  previous
+                    ? (previous.pnlAmount ??
+                        subtractDecimals(
+                          previous.currentValue,
+                          previous.investedAmount,
+                        ))
+                    : "0",
                 ),
               };
             }),

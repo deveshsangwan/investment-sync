@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { manualPolicyInputSchema } from "@investment-sync/backend/manual-entry";
+import {
+  manualPolicyInputSchema,
+  importedPolicyUpdateInputSchema,
+} from "@investment-sync/backend/manual-entry";
 import { Button } from "@/components/ui/button";
 import { useAmountFormatters } from "@/components/amounts";
 import { LoaderCircle, Pencil } from "lucide-react";
@@ -34,7 +37,10 @@ export function ManualPolicyForm({
 }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { formatInr } = useAmountFormatters();
-  const parsed = manualPolicyInputSchema.safeParse(values);
+  const inputSchema = canEditNames
+    ? manualPolicyInputSchema
+    : importedPolicyUpdateInputSchema;
+  const parsed = inputSchema.safeParse(values);
   const gain = parsed.success
     ? Number(parsed.data.currentValue) - Number(parsed.data.investedAmount)
     : null;
@@ -49,7 +55,7 @@ export function ManualPolicyForm({
 
     if (isBusy) return;
 
-    const result = manualPolicyInputSchema.safeParse(values);
+    const result = inputSchema.safeParse(values);
 
     if (!result.success) {
       setErrors(

@@ -903,3 +903,23 @@ it("keeps incremental exact totals equal to select-then-hide reference across ac
     }
   }
 });
+
+it("applies only the P&L difference when an imported policy omits P&L", () => {
+  const original = holding({ assetClass: "ulip", pnlAmount: undefined });
+  const update = holding({
+    assetClass: "ulip",
+    sourceType: "manual_snapshot",
+    sourceDate: "2025-01-02",
+    currentValue: "130",
+    pnlAmount: "30",
+    metadata: { manualPolicyUpdate: true },
+  });
+  const timeline = timelineWithManualPolicies(
+    [original, update],
+    [{ snapshotDate: "2025-01-01", totals: nativeTotals([original.row]) }],
+    true,
+  );
+  expect(timeline.at(-1)?.totals).toMatchObject([
+    { investedAmount: "100", currentValue: "130", pnlAmount: "30" },
+  ]);
+});

@@ -49,15 +49,81 @@ async function setup() {
     });
   }
 
-  return { t, owner, publish };
+  async function importWorkbook(rows: ExactNormalizedImportRow[]) {
+    const current = await owner.query(api.users.current);
+    const rowsJson = JSON.stringify(rows);
+    const batchId = await t.run(async (ctx) => {
+      const batchId = await ctx.db.insert("importBatches", {
+        householdId: current.householdId,
+        uploaderId: current.id,
+        fileName: "portfolio.xlsx",
+        sizeBytes: 1,
+        status: "parsed",
+        attempt: 1,
+        createdAt: Date.now(),
+        rowCount: rows.length,
+        normalizedBytes: utf8Bytes(rowsJson),
+        previewRowsJson: rowsJson,
+        warnings: [],
+        sourceType: "investment_portfolio_xlsx",
+        parserVersion: "test-v1",
+        contentHash: digest(rowsJson),
+        manifest: [
+          {
+            index: 0,
+            count: rows.length,
+            bytes: utf8Bytes(rowsJson),
+            digest: digest(rowsJson),
+          },
+        ],
+      });
+      await ctx.db.insert("sourceFiles", {
+        batchId,
+        householdId: current.householdId,
+        uploaderId: current.id,
+        status: "deleted",
+        expiresAt: 0,
+      });
+      await ctx.db.insert("importRowChunks", {
+        batchId,
+        attempt: 1,
+        index: 0,
+        count: rows.length,
+        bytes: utf8Bytes(rowsJson),
+        digest: digest(rowsJson),
+        rowsJson,
+      });
+      return batchId;
+    });
+    await owner.mutation(api.imports.commit, { batchId });
+    await publish(batchId);
+    return batchId;
+  }
+
+  return { t, owner, publish, importWorkbook };
+}
+
+function importedHolding(name: string, sourceDate = "2026-05-15") {
+  return adaptLegacyRow({
+    kind: "holding",
+    sourceType: "investment_portfolio_xlsx",
+    accountName: "ULIPs",
+    provider: "Manual Workbook",
+    instrumentName: name,
+    assetClass: "ulip",
+    currency: "INR",
+    sourceDate,
+    investedAmount: 100,
+    currentValue: 120,
+    metadata: { sourceSheet: "ULIPS" },
+  });
 }
 
 describe("manual ULIP policies", () => {
   it.each([false, true])(
     "lists workbook ULIPs and preserves identity and history with reported totals: %s",
     async (hasReportedTotals) => {
-      const { t, owner, publish } = await setup();
-      const current = await owner.query(api.users.current);
+      const { t, owner, publish, importWorkbook } = await setup();
       const rows: ExactNormalizedImportRow[] = [
         "Bajaj Allianz Goal Assure",
         "HDFC Click2 Invest",
@@ -90,52 +156,7 @@ describe("manual ULIP policies", () => {
             metadata: {},
           }),
         );
-      const rowsJson = JSON.stringify(rows);
-      const batchId = await t.run(async (ctx) => {
-        const batchId = await ctx.db.insert("importBatches", {
-          householdId: current.householdId,
-          uploaderId: current.id,
-          fileName: "portfolio.xlsx",
-          sizeBytes: 1,
-          status: "parsed",
-          attempt: 1,
-          createdAt: Date.now(),
-          rowCount: rows.length,
-          normalizedBytes: utf8Bytes(rowsJson),
-          previewRowsJson: rowsJson,
-          warnings: [],
-          sourceType: "investment_portfolio_xlsx",
-          parserVersion: "test-v1",
-          contentHash: digest(rowsJson),
-          manifest: [
-            {
-              index: 0,
-              count: rows.length,
-              bytes: utf8Bytes(rowsJson),
-              digest: digest(rowsJson),
-            },
-          ],
-        });
-        await ctx.db.insert("sourceFiles", {
-          batchId,
-          householdId: current.householdId,
-          uploaderId: current.id,
-          status: "deleted",
-          expiresAt: 0,
-        });
-        await ctx.db.insert("importRowChunks", {
-          batchId,
-          attempt: 1,
-          index: 0,
-          count: rows.length,
-          bytes: utf8Bytes(rowsJson),
-          digest: digest(rowsJson),
-          rowsJson,
-        });
-        return batchId;
-      });
-      await owner.mutation(api.imports.commit, { batchId });
-      await publish(batchId);
+      await importWorkbook(rows);
 
       const original = await owner.query(api.portfolio.positions);
       expect(original.current).toHaveLength(3);
@@ -221,6 +242,109 @@ describe("manual ULIP policies", () => {
       expect(await owner.query(api.manualPolicies.list)).toHaveLength(3);
     },
   );
+
+  it.each(["Short policy name", "Imported policy ".repeat(20)])(
+    "keeps imported names, units, and ISIN when updating values: %s",
+    async (name) => {
+      const { owner, publish, importWorkbook } = await setup();
+      const row = importedHolding(name);
+      await importWorkbook([{ ...row, quantity: "7", isin: "INF000000001" }]);
+      const policy = (await owner.query(api.manualPolicies.list))[0];
+      if (!policy?.entry) throw new Error("Expected imported policy");
+
+      const updated = await owner.mutation(api.manualPolicies.updateValue, {
+        ...values,
+        provider: policy.provider,
+        name: policy.name,
+        policyId: policy.id,
+        expectedBatchId: policy.entry.id,
+        requestId: crypto.randomUUID(),
+      });
+      await publish(updated.batchId);
+      const detail = await owner.query(api.portfolio.holdingDetail, {
+        positionKey: policy.id,
+      });
+      expect(detail?.holding).toMatchObject({
+        instrumentName: name.trim(),
+        quantity: "7",
+        isin: "INF000000001",
+      });
+      if (name.length > 160) {
+        await expect(
+          owner.mutation(api.manualPolicies.create, {
+            ...values,
+            name,
+            requestId: crypto.randomUUID(),
+          }),
+        ).rejects.toMatchObject({ data: { code: "VALIDATION" } });
+      }
+    },
+  );
+
+  it("finds eligible policies after more than 65 exited positions", async () => {
+    const { t, owner, importWorkbook } = await setup();
+    await importWorkbook([importedHolding("Still current")]);
+    await t.run(async (ctx) => {
+      const current = await ctx.db.query("portfolioPositions").first();
+      if (!current) throw new Error("Expected published position");
+      const { _id, _creationTime, ...position } = current;
+      await ctx.db.delete("portfolioPositions", _id);
+      for (let i = 0; i < 65; i++) {
+        await ctx.db.insert("portfolioPositions", {
+          ...position,
+          positionKey: `exited-${i}`,
+          status: "exited",
+        });
+      }
+      await ctx.db.insert("portfolioPositions", position);
+    });
+
+    expect(await owner.query(api.manualPolicies.list)).toMatchObject([
+      { name: "Still current" },
+    ]);
+  });
+
+  it("does not revive a linked imported policy after a later workbook exits it", async () => {
+    const { owner, publish, importWorkbook } = await setup();
+    await importWorkbook([
+      importedHolding("To exit"),
+      importedHolding("Retained"),
+    ]);
+    const policy = (await owner.query(api.manualPolicies.list)).find(
+      (item) => item.name === "To exit",
+    );
+    if (!policy?.entry) throw new Error("Expected imported policy");
+    const input = {
+      ...values,
+      provider: policy.provider,
+      name: policy.name,
+      policyId: policy.id,
+      expectedBatchId: policy.entry.id,
+      sourceDate: "2026-10-05",
+      requestId: crypto.randomUUID(),
+    };
+    const updated = await owner.mutation(api.manualPolicies.updateValue, input);
+    await publish(updated.batchId);
+    await importWorkbook([importedHolding("Retained", "2026-10-06")]);
+    const positions = await owner.query(api.portfolio.positions);
+    expect(positions.exited.some((item) => item.id === policy.id)).toBe(true);
+    expect(
+      (await owner.query(api.manualPolicies.list)).some(
+        (item) => item.id === policy.id,
+      ),
+    ).toBe(false);
+    await expect(
+      owner.mutation(api.manualPolicies.updateValue, {
+        ...input,
+        expectedBatchId: updated.batchId,
+        sourceDate: "2026-10-07",
+        requestId: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ data: { code: "NOT_FOUND" } });
+    await expect(
+      owner.mutation(api.manualPolicies.updateValue, input),
+    ).resolves.toEqual(updated);
+  });
 
   it("publishes exact values to all portfolio views without inventing payments or a source file", async () => {
     const { t, owner, publish } = await setup();

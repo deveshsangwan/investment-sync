@@ -8,6 +8,7 @@ import {
   FinancialDecimal,
 } from "@investment-sync/importers/numeric";
 import {
+  importedPolicyUpdateInputSchema,
   manualPolicyInputSchema,
   manualPolicyValuesSchema,
 } from "../src/manual-entry";
@@ -48,6 +49,7 @@ export const list = query({
   ),
   handler: async (ctx) => {
     const { household } = await requireCurrentMembership(ctx);
+    const activeVersionId = household.activePortfolioVersionId;
     const policies = await ctx.db
       .query("manualPolicies")
       .withIndex("by_householdId", (q) => q.eq("householdId", household._id))
@@ -56,6 +58,15 @@ export const list = query({
 
     const manual = await Promise.all(
       policies.map(async (policy) => {
+        if (policy.importedPositionKey) {
+          const position = await importedPosition(
+            ctx,
+            activeVersionId,
+            policy.importedPositionKey,
+          );
+          if (position?.status !== "current") return null;
+        }
+
         const batch = policy.latestBatchId
           ? await ctx.db.get("importBatches", policy.latestBatchId)
           : null;
@@ -99,28 +110,25 @@ export const list = query({
         };
       }),
     );
-    const activeVersionId = household.activePortfolioVersionId;
-    const imported = activeVersionId
-      ? await ctx.db
-          .query("portfolioPositions")
-          .withIndex("by_versionId_and_assetClass", (q) =>
-            q.eq("versionId", activeVersionId).eq("assetClass", "ulip"),
-          )
-          .take(policyLimit + 1)
-      : [];
     const linked = new Set(
       policies.map((policy) => policy.importedPositionKey),
     );
-    const available = imported.filter(
-      (position) =>
-        position.status === "current" && !linked.has(position.positionKey),
-    );
-    const entries = await Promise.all(
-      available.map(async (position) => {
-        const row = decodeFact(position.holdingJson).row;
+    const entries = [];
 
+    if (activeVersionId) {
+      const positions = ctx.db
+        .query("portfolioPositions")
+        .withIndex("by_versionId_and_assetClass", (q) =>
+          q.eq("versionId", activeVersionId).eq("assetClass", "ulip"),
+        );
+
+      for await (const position of positions) {
+        if (position.status !== "current" || linked.has(position.positionKey))
+          continue;
+
+        const row = decodeFact(position.holdingJson).row;
         if (row.kind !== "holding" || row.policyId || row.currency !== "INR")
-          return null;
+          continue;
 
         const snapshot = await importedSnapshot(
           ctx,
@@ -130,28 +138,47 @@ export const list = query({
         const batch = snapshot?.batchId
           ? await ctx.db.get("importBatches", snapshot.batchId)
           : null;
+        if (!snapshot || !batch) continue;
 
-        if (!snapshot || !batch) return null;
+        const sourceRow = decodeFact(snapshot.factJson).row;
+        if (sourceRow.kind !== "holding") continue;
 
-        return {
+        entries.push({
           id: position.positionKey,
           canEditNames: false,
-          provider: row.provider,
-          name: row.instrumentName,
+          provider: sourceRow.provider,
+          name: sourceRow.instrumentName,
           values: {
-            investedAmount: row.investedAmount,
-            currentValue: row.currentValue,
+            investedAmount: sourceRow.investedAmount,
+            currentValue: sourceRow.currentValue,
             sourceDate: snapshot.date,
           },
           draftValues: null,
           entry: await batchToView(ctx, batch),
-        };
-      }),
-    );
+        });
 
-    return [...manual, ...entries.filter((entry) => entry !== null)];
+        if (entries.length >= policyLimit) break;
+      }
+    }
+
+    return [...manual.filter((policy) => policy !== null), ...entries];
   },
 });
+
+async function importedPosition(
+  ctx: QueryCtx,
+  versionId: Id<"portfolioVersions"> | undefined,
+  positionKey: string,
+) {
+  if (!versionId) return null;
+
+  return ctx.db
+    .query("portfolioPositions")
+    .withIndex("by_versionId_and_positionKey", (q) =>
+      q.eq("versionId", versionId).eq("positionKey", positionKey),
+    )
+    .unique();
+}
 
 async function importedSnapshot(
   ctx: QueryCtx,
@@ -256,12 +283,11 @@ export const updateValue = mutation({
       const activeVersionId = household.activePortfolioVersionId;
 
       if (!policy && !manualId && activeVersionId) {
-        const position = await ctx.db
-          .query("portfolioPositions")
-          .withIndex("by_versionId_and_positionKey", (q) =>
-            q.eq("versionId", activeVersionId).eq("positionKey", args.policyId),
-          )
-          .unique();
+        const position = await importedPosition(
+          ctx,
+          activeVersionId,
+          args.policyId,
+        );
         const snapshot = position
           ? await importedSnapshot(ctx, household._id, args.policyId)
           : null;
@@ -306,7 +332,12 @@ export const updateValue = mutation({
         });
       }
 
-      const values = validate(manualPolicyInputSchema, args);
+      const values = validate(
+        policy.importedPositionKey
+          ? importedPolicyUpdateInputSchema
+          : manualPolicyInputSchema,
+        args,
+      );
       validateSnapshotDate(values.sourceDate);
 
       if (
@@ -331,6 +362,21 @@ export const updateValue = mutation({
       );
 
       if (replay) return replay;
+
+      if (policy.importedPositionKey) {
+        const position = await importedPosition(
+          ctx,
+          activeVersionId,
+          policy.importedPositionKey,
+        );
+        if (position?.status !== "current") {
+          throw new ConvexError({
+            code: "NOT_FOUND",
+            message:
+              "This imported policy is no longer current. Update it in the source workbook.",
+          });
+        }
+      }
 
       if (policy.latestBatchId !== args.expectedBatchId) {
         throw new ConvexError({
@@ -495,6 +541,8 @@ async function saveSnapshot(
           provider: original.provider,
           instrumentName: original.instrumentName,
           symbol: original.symbol,
+          quantity: original.quantity,
+          isin: original.isin,
           source: { ...original.source, completeness: "partial" },
           metadata: { ...original.metadata, manualPolicyUpdate: true },
         }
