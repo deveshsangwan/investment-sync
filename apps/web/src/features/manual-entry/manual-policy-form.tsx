@@ -22,12 +22,14 @@ export function ManualPolicyForm({
   onChange,
   isUpdating,
   isBusy,
+  canEditNames = true,
   onSave,
 }: {
   values: ManualPolicyInput;
   onChange: (values: ManualPolicyInput) => void;
   isUpdating: boolean;
   isBusy: boolean;
+  canEditNames?: boolean;
   onSave: (values: ManualPolicyInput) => Promise<void>;
 }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -72,7 +74,10 @@ export function ManualPolicyForm({
   return (
     <form onSubmit={(event) => void submit(event)} noValidate>
       <fieldset disabled={isBusy} className="grid gap-5">
-        <div className={`grid gap-5 ${isUpdating ? "sm:grid-cols-2" : ""}`}>
+        <fieldset
+          disabled={!canEditNames}
+          className={`grid gap-5 ${isUpdating ? "sm:grid-cols-2" : ""}`}
+        >
           <PolicyNameField
             field="provider"
             value={values.provider}
@@ -87,7 +92,7 @@ export function ManualPolicyForm({
             isUpdating={isUpdating}
             error={errors.name}
           />
-        </div>
+        </fieldset>
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm">
             <span id="investedAmount-label" className="font-medium">

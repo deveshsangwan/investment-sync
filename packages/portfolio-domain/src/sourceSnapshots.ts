@@ -293,7 +293,9 @@ export function timelineWithManualPolicies(
 ): NativeTimelinePoint[] {
   const manualDates = holdings
     .filter(
-      (fact) => fact.row.policyId && fact.row.sourceType === "manual_snapshot",
+      (fact) =>
+        (fact.row.policyId || fact.row.metadata.manualPolicyUpdate === true) &&
+        fact.row.sourceType === "manual_snapshot",
     )
     .map((fact) => fact.snapshotDate)
     .sort();
@@ -360,7 +362,16 @@ export function timelineWithManualPolicies(
   );
   let nextCandidate = candidates.next();
   let nextReportedPoint = reportedPoints.next();
+  const importedUpdateKeys = new Set(
+    holdings
+      .filter((fact) => fact.row.metadata.manualPolicyUpdate === true)
+      .map((fact) => fact.canonicalPositionKey),
+  );
+  const importedHistory = holdings.filter((fact) =>
+    importedUpdateKeys.has(fact.canonicalPositionKey),
+  );
   let reportedTotals: NativeTotal[] = [];
+  let reportedHoldings = new Map<string, HoldingFact>();
 
   for (const snapshotDate of dates) {
     while (
@@ -385,6 +396,12 @@ export function timelineWithManualPolicies(
       nextReportedPoint.value.snapshotDate <= snapshotDate
     ) {
       reportedTotals = nextReportedPoint.value.totals;
+      const reportedDate = nextReportedPoint.value.snapshotDate;
+      reportedHoldings = new Map(
+        selectPositions(
+          importedHistory.filter((fact) => fact.snapshotDate <= reportedDate),
+        ).current.map((fact) => [fact.canonicalPositionKey, fact]),
+      );
       nextReportedPoint = reportedPoints.next();
     }
 
@@ -402,10 +419,48 @@ export function timelineWithManualPolicies(
         pnlAmount: total.pnlAmount.toFixed(),
       }));
 
+    const importedAdjustments = hasExplicitValuations
+      ? [
+          // Reported totals already include imported policies. Apply only the
+          // change since that report, preserving assets without detailed rows.
+          ...[...selection.current.values()]
+            .map((candidate) => candidate.fact)
+            .filter(
+              (fact) =>
+                fact.row.metadata.manualPolicyUpdate === true &&
+                !archivedAccountKeys.has(fact.accountKey),
+            )
+            .map((fact) => {
+              const previous = reportedHoldings.get(
+                fact.canonicalPositionKey,
+              )?.row;
+              return {
+                currency: fact.row.currency,
+                investedAmount: subtractDecimals(
+                  fact.row.investedAmount,
+                  previous?.investedAmount ?? "0",
+                ),
+                currentValue: subtractDecimals(
+                  fact.row.currentValue,
+                  previous?.currentValue ?? "0",
+                ),
+                pnlAmount: subtractDecimals(
+                  fact.row.pnlAmount ?? "0",
+                  previous?.pnlAmount ?? "0",
+                ),
+              };
+            }),
+        ]
+      : [];
+
     timeline.push({
       snapshotDate,
       totals: hasExplicitValuations
-        ? nativeTotals([...reportedTotals, ...selectedTotals])
+        ? nativeTotals([
+            ...reportedTotals,
+            ...selectedTotals,
+            ...importedAdjustments,
+          ])
         : nativeTotals([
             ...selectedTotals,
             ...[...declaredCurrencies].map((currency) => ({

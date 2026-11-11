@@ -1,3 +1,6 @@
+import type { ExactNormalizedImportRow } from "@investment-sync/importers";
+import { adaptLegacyRow } from "@investment-sync/importers/exact-adapter";
+import { digest, utf8Bytes } from "./model/importLimits";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
@@ -50,6 +53,175 @@ async function setup() {
 }
 
 describe("manual ULIP policies", () => {
+  it.each([false, true])(
+    "lists workbook ULIPs and preserves identity and history with reported totals: %s",
+    async (hasReportedTotals) => {
+      const { t, owner, publish } = await setup();
+      const current = await owner.query(api.users.current);
+      const rows: ExactNormalizedImportRow[] = [
+        "Bajaj Allianz Goal Assure",
+        "HDFC Click2 Invest",
+        "HDFC Sanchay",
+      ].map((name) =>
+        adaptLegacyRow({
+          kind: "holding",
+          sourceType: "investment_portfolio_xlsx",
+          accountName: "ULIPs",
+          provider: "Manual Workbook",
+          instrumentName: name,
+          assetClass: "ulip",
+          currency: "INR",
+          sourceDate: "2026-05-15",
+          investedAmount: 160000,
+          currentValue: 183751,
+          pnlAmount: 23751,
+          metadata: { sourceSheet: "ULIPS" },
+        }),
+      );
+      if (hasReportedTotals)
+        rows.push(
+          adaptLegacyRow({
+            kind: "valuation",
+            sourceType: "investment_portfolio_xlsx",
+            valuationDate: "2026-05-15",
+            currency: "INR",
+            investedAmount: 900000,
+            currentValue: 1000000,
+            metadata: {},
+          }),
+        );
+      const rowsJson = JSON.stringify(rows);
+      const batchId = await t.run(async (ctx) => {
+        const batchId = await ctx.db.insert("importBatches", {
+          householdId: current.householdId,
+          uploaderId: current.id,
+          fileName: "portfolio.xlsx",
+          sizeBytes: 1,
+          status: "parsed",
+          attempt: 1,
+          createdAt: Date.now(),
+          rowCount: rows.length,
+          normalizedBytes: utf8Bytes(rowsJson),
+          previewRowsJson: rowsJson,
+          warnings: [],
+          sourceType: "investment_portfolio_xlsx",
+          parserVersion: "test-v1",
+          contentHash: digest(rowsJson),
+          manifest: [
+            {
+              index: 0,
+              count: rows.length,
+              bytes: utf8Bytes(rowsJson),
+              digest: digest(rowsJson),
+            },
+          ],
+        });
+        await ctx.db.insert("sourceFiles", {
+          batchId,
+          householdId: current.householdId,
+          uploaderId: current.id,
+          status: "deleted",
+          expiresAt: 0,
+        });
+        await ctx.db.insert("importRowChunks", {
+          batchId,
+          attempt: 1,
+          index: 0,
+          count: rows.length,
+          bytes: utf8Bytes(rowsJson),
+          digest: digest(rowsJson),
+          rowsJson,
+        });
+        return batchId;
+      });
+      await owner.mutation(api.imports.commit, { batchId });
+      await publish(batchId);
+
+      const original = await owner.query(api.portfolio.positions);
+      expect(original.current).toHaveLength(3);
+      const policies = await owner.query(api.manualPolicies.list);
+      expect(policies).toHaveLength(3);
+      const policy = policies.find(
+        (item) => item.name === "Bajaj Allianz Goal Assure",
+      );
+      if (!policy?.entry)
+        throw new Error("Expected an editable imported policy");
+
+      const foreign = t.withIdentity({
+        ...identity,
+        subject: "foreign_imported_policy_owner",
+        tokenIdentifier: "test|foreign_imported_policy_owner",
+      });
+      await foreign.mutation(api.users.ensureCurrent);
+      expect(await foreign.query(api.manualPolicies.list)).toEqual([]);
+      await expect(
+        foreign.mutation(api.manualPolicies.updateValue, {
+          ...values,
+          provider: policy.provider,
+          name: policy.name,
+          policyId: policy.id,
+          expectedBatchId: policy.entry.id,
+          requestId: crypto.randomUUID(),
+        }),
+      ).rejects.toMatchObject({ data: { code: "NOT_FOUND" } });
+      await expect(
+        owner.mutation(api.manualPolicies.updateValue, {
+          ...values,
+          provider: policy.provider,
+          name: "Renamed imported holding",
+          policyId: policy.id,
+          expectedBatchId: policy.entry.id,
+          requestId: crypto.randomUUID(),
+        }),
+      ).rejects.toMatchObject({ data: { code: "VALIDATION" } });
+
+      const updated = await owner.mutation(api.manualPolicies.updateValue, {
+        ...values,
+        provider: policy.provider,
+        name: policy.name,
+        policyId: policy.id,
+        expectedBatchId: policy.entry.id,
+        currentValue: "210000",
+        requestId: crypto.randomUUID(),
+      });
+      await publish(updated.batchId);
+      const positions = await owner.query(api.portfolio.positions);
+      expect(positions.current).toHaveLength(3);
+      expect(positions.current.map((item) => item.id).sort()).toEqual(
+        original.current.map((item) => item.id).sort(),
+      );
+      expect(
+        positions.current.find((item) => item.instrumentName === policy.name)
+          ?.currentValue,
+      ).toBe("210000");
+      expect(await owner.query(api.manualPolicies.list)).toHaveLength(3);
+      const detail = await owner.query(api.portfolio.holdingDetail, {
+        positionKey: policy.id,
+      });
+      expect(detail?.history).toHaveLength(2);
+      const overview = await owner.query(api.portfolio.overview);
+      expect(overview.summary.currentValue).toBe(577502);
+      expect(overview.timeline.at(-1)?.currentValue).toBe(
+        hasReportedTotals ? 1026249 : 577502,
+      );
+
+      const next = await owner.mutation(api.manualPolicies.updateValue, {
+        ...values,
+        provider: policy.provider,
+        name: policy.name,
+        policyId: updated.policyId,
+        expectedBatchId: updated.batchId,
+        currentValue: "220000",
+        requestId: crypto.randomUUID(),
+      });
+      await publish(next.batchId);
+      expect((await owner.query(api.portfolio.positions)).current).toHaveLength(
+        3,
+      );
+      expect(await owner.query(api.manualPolicies.list)).toHaveLength(3);
+    },
+  );
+
   it("publishes exact values to all portfolio views without inventing payments or a source file", async () => {
     const { t, owner, publish } = await setup();
     const entry = await owner.mutation(api.manualPolicies.create, {

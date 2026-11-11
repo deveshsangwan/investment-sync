@@ -28,7 +28,7 @@ const valuesValidator = v.object({
   sourceDate: v.string(),
 });
 const resultValidator = v.object({
-  policyId: v.id("manualPolicies"),
+  policyId: v.string(),
   batchId: v.id("importBatches"),
 });
 const policyLimit = 64;
@@ -37,7 +37,8 @@ export const list = query({
   args: {},
   returns: v.array(
     v.object({
-      id: v.id("manualPolicies"),
+      id: v.string(),
+      canEditNames: v.boolean(),
       provider: v.string(),
       name: v.string(),
       values: v.union(valuesValidator, v.null()),
@@ -53,7 +54,7 @@ export const list = query({
       .order("desc")
       .take(policyLimit);
 
-    return Promise.all(
+    const manual = await Promise.all(
       policies.map(async (policy) => {
         const batch = policy.latestBatchId
           ? await ctx.db.get("importBatches", policy.latestBatchId)
@@ -63,7 +64,10 @@ export const list = query({
           .withIndex("by_householdId_and_positionKey_and_date", (q) =>
             q
               .eq("householdId", household._id)
-              .eq("positionKey", policyPositionKey(policy._id)),
+              .eq(
+                "positionKey",
+                policy.importedPositionKey ?? policyPositionKey(policy._id),
+              ),
           )
           .order("desc")
           .first();
@@ -71,7 +75,8 @@ export const list = query({
         const draft = batch ? parseRows(batch.previewRowsJson)[0] : null;
 
         return {
-          id: policy._id,
+          id: policy.importedPositionKey ?? policy._id,
+          canEditNames: !policy.importedPositionKey,
           provider: policy.provider,
           name: policy.name,
           values:
@@ -94,8 +99,73 @@ export const list = query({
         };
       }),
     );
+    const activeVersionId = household.activePortfolioVersionId;
+    const imported = activeVersionId
+      ? await ctx.db
+          .query("portfolioPositions")
+          .withIndex("by_versionId_and_assetClass", (q) =>
+            q.eq("versionId", activeVersionId).eq("assetClass", "ulip"),
+          )
+          .take(policyLimit + 1)
+      : [];
+    const linked = new Set(
+      policies.map((policy) => policy.importedPositionKey),
+    );
+    const available = imported.filter(
+      (position) =>
+        position.status === "current" && !linked.has(position.positionKey),
+    );
+    const entries = await Promise.all(
+      available.map(async (position) => {
+        const row = decodeFact(position.holdingJson).row;
+
+        if (row.kind !== "holding" || row.policyId || row.currency !== "INR")
+          return null;
+
+        const snapshot = await importedSnapshot(
+          ctx,
+          household._id,
+          position.positionKey,
+        );
+        const batch = snapshot?.batchId
+          ? await ctx.db.get("importBatches", snapshot.batchId)
+          : null;
+
+        if (!snapshot || !batch) return null;
+
+        return {
+          id: position.positionKey,
+          canEditNames: false,
+          provider: row.provider,
+          name: row.instrumentName,
+          values: {
+            investedAmount: row.investedAmount,
+            currentValue: row.currentValue,
+            sourceDate: snapshot.date,
+          },
+          draftValues: null,
+          entry: await batchToView(ctx, batch),
+        };
+      }),
+    );
+
+    return [...manual, ...entries.filter((entry) => entry !== null)];
   },
 });
+
+async function importedSnapshot(
+  ctx: QueryCtx,
+  householdId: Id<"households">,
+  positionKey: string,
+) {
+  return ctx.db
+    .query("holdingSnapshots")
+    .withIndex("by_householdId_and_positionKey_and_date", (q) =>
+      q.eq("householdId", householdId).eq("positionKey", positionKey),
+    )
+    .order("desc")
+    .first();
+}
 
 export const create = mutation({
   args: {
@@ -158,7 +228,7 @@ export const create = mutation({
 
 export const updateValue = mutation({
   args: {
-    policyId: v.id("manualPolicies"),
+    policyId: v.string(),
     expectedBatchId: v.id("importBatches"),
     provider: v.string(),
     name: v.string(),
@@ -171,7 +241,63 @@ export const updateValue = mutation({
       requireApplicationWritesEnabled();
       const { user, household } = await requireOwner(ctx);
 
-      const policy = await ctx.db.get("manualPolicies", args.policyId);
+      const manualId = ctx.db.normalizeId("manualPolicies", args.policyId);
+      let policy = manualId
+        ? await ctx.db.get("manualPolicies", manualId)
+        : await ctx.db
+            .query("manualPolicies")
+            .withIndex("by_householdId_and_importedPositionKey", (q) =>
+              q
+                .eq("householdId", household._id)
+                .eq("importedPositionKey", args.policyId),
+            )
+            .unique();
+
+      const activeVersionId = household.activePortfolioVersionId;
+
+      if (!policy && !manualId && activeVersionId) {
+        const position = await ctx.db
+          .query("portfolioPositions")
+          .withIndex("by_versionId_and_positionKey", (q) =>
+            q.eq("versionId", activeVersionId).eq("positionKey", args.policyId),
+          )
+          .unique();
+        const snapshot = position
+          ? await importedSnapshot(ctx, household._id, args.policyId)
+          : null;
+        const row = snapshot ? decodeFact(snapshot.factJson).row : null;
+
+        if (
+          position?.status === "current" &&
+          row?.kind === "holding" &&
+          row.assetClass === "ulip" &&
+          row.currency === "INR" &&
+          !row.policyId
+        ) {
+          const existing = await ctx.db
+            .query("manualPolicies")
+            .withIndex("by_householdId", (q) =>
+              q.eq("householdId", household._id),
+            )
+            .take(policyLimit);
+
+          if (existing.length >= policyLimit)
+            throw new ConvexError({
+              code: "CAPACITY",
+              message: "A household can track up to 64 manual policies.",
+            });
+
+          const policyId = await ctx.db.insert("manualPolicies", {
+            householdId: household._id,
+            provider: row.provider,
+            name: row.instrumentName,
+            importedPositionKey: args.policyId,
+            latestBatchId: snapshot?.batchId,
+            createdAt: Date.now(),
+          });
+          policy = await ctx.db.get("manualPolicies", policyId);
+        }
+      }
 
       if (!policy || policy.householdId !== household._id) {
         throw new ConvexError({
@@ -182,6 +308,17 @@ export const updateValue = mutation({
 
       const values = validate(manualPolicyInputSchema, args);
       validateSnapshotDate(values.sourceDate);
+
+      if (
+        policy.importedPositionKey &&
+        (values.provider !== policy.provider || values.name !== policy.name)
+      ) {
+        throw new ConvexError({
+          code: "VALIDATION",
+          message:
+            "Imported policy names and providers must be changed in the source workbook.",
+        });
+      }
 
       const inputHash = digest(
         JSON.stringify({ policyId: policy._id, ...values }),
@@ -285,7 +422,12 @@ async function replayRequest(
     });
   }
 
-  return { policyId: existing.manualPolicyId, batchId: existing._id };
+  const policy = await ctx.db.get("manualPolicies", existing.manualPolicyId);
+
+  return {
+    policyId: policy?.importedPositionKey ?? existing.manualPolicyId,
+    batchId: existing._id,
+  };
 }
 
 async function saveSnapshot(
@@ -301,6 +443,18 @@ async function saveSnapshot(
       .minus(values.investedAmount)
       .toFixed(),
   );
+
+  const snapshot = policy.importedPositionKey
+    ? await importedSnapshot(
+        ctx,
+        policy.householdId,
+        policy.importedPositionKey,
+      )
+    : null;
+  const original = snapshot ? decodeFact(snapshot.factJson).row : null;
+
+  if (policy.importedPositionKey && original?.kind !== "holding")
+    throw new Error("Imported policy snapshot is missing");
 
   const row = exactNormalizedHoldingRowSchema.parse({
     kind: "holding",
@@ -332,6 +486,19 @@ async function saveSnapshot(
       pnlAmount: "derived_decimal",
     },
     metadata: {},
+    // Keep the workbook identity. Assigning a new policyId would duplicate
+    // the imported holding and separate it from its existing history.
+    ...(original?.kind === "holding"
+      ? {
+          policyId: undefined,
+          accountName: original.accountName,
+          provider: original.provider,
+          instrumentName: original.instrumentName,
+          symbol: original.symbol,
+          source: { ...original.source, completeness: "partial" },
+          metadata: { ...original.metadata, manualPolicyUpdate: true },
+        }
+      : {}),
   });
 
   const rowsJson = JSON.stringify([row]);
@@ -379,5 +546,5 @@ async function saveSnapshot(
 
   await commitBatch(ctx, batch);
 
-  return { policyId: policy._id, batchId };
+  return { policyId: policy.importedPositionKey ?? policy._id, batchId };
 }

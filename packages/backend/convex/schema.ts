@@ -378,12 +378,18 @@ export default defineSchema({
     .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_status_and_stagingExpiresAt", ["status", "stagingExpiresAt"]),
   manualPolicies: defineTable({
+    importedPositionKey: v.optional(v.string()),
     householdId: v.id("households"),
     provider: v.string(),
     name: v.string(),
     createdAt: v.number(),
     latestBatchId: v.optional(v.id("importBatches")),
-  }).index("by_householdId", ["householdId"]),
+  })
+    .index("by_householdId", ["householdId"])
+    .index("by_householdId_and_importedPositionKey", [
+      "householdId",
+      "importedPositionKey",
+    ]),
   sourceFiles: defineTable({
     legacyStoragePath: v.optional(v.string()),
     batchId: v.id("importBatches"),
