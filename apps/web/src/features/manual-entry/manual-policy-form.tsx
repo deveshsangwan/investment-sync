@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { manualPolicyInputSchema } from "@investment-sync/backend/manual-entry";
+import {
+  manualPolicyInputSchema,
+  importedPolicyUpdateInputSchema,
+} from "@investment-sync/backend/manual-entry";
 import { Button } from "@/components/ui/button";
 import { useAmountFormatters } from "@/components/amounts";
 import { LoaderCircle, Pencil } from "lucide-react";
@@ -22,17 +25,22 @@ export function ManualPolicyForm({
   onChange,
   isUpdating,
   isBusy,
+  canEditNames = true,
   onSave,
 }: {
   values: ManualPolicyInput;
   onChange: (values: ManualPolicyInput) => void;
   isUpdating: boolean;
   isBusy: boolean;
+  canEditNames?: boolean;
   onSave: (values: ManualPolicyInput) => Promise<void>;
 }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { formatInr } = useAmountFormatters();
-  const parsed = manualPolicyInputSchema.safeParse(values);
+  const inputSchema = canEditNames
+    ? manualPolicyInputSchema
+    : importedPolicyUpdateInputSchema;
+  const parsed = inputSchema.safeParse(values);
   const gain = parsed.success
     ? Number(parsed.data.currentValue) - Number(parsed.data.investedAmount)
     : null;
@@ -47,7 +55,7 @@ export function ManualPolicyForm({
 
     if (isBusy) return;
 
-    const result = manualPolicyInputSchema.safeParse(values);
+    const result = inputSchema.safeParse(values);
 
     if (!result.success) {
       setErrors(
@@ -72,7 +80,10 @@ export function ManualPolicyForm({
   return (
     <form onSubmit={(event) => void submit(event)} noValidate>
       <fieldset disabled={isBusy} className="grid gap-5">
-        <div className={`grid gap-5 ${isUpdating ? "sm:grid-cols-2" : ""}`}>
+        <fieldset
+          disabled={!canEditNames}
+          className={`grid gap-5 ${isUpdating ? "sm:grid-cols-2" : ""}`}
+        >
           <PolicyNameField
             field="provider"
             value={values.provider}
@@ -87,7 +98,7 @@ export function ManualPolicyForm({
             isUpdating={isUpdating}
             error={errors.name}
           />
-        </div>
+        </fieldset>
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm">
             <span id="investedAmount-label" className="font-medium">

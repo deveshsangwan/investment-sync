@@ -273,6 +273,12 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
                     Saved value as of {formatDate(selected.values.sourceDate)}.
                   </p>
                 ) : null}
+                {selected?.canEditNames === false ? (
+                  <p className="mb-5 text-xs leading-5 text-muted-foreground">
+                    This policy was imported. Change its name or provider in the
+                    source workbook.
+                  </p>
+                ) : null}
                 <ManualPolicyForm
                   key={draftKey}
                   values={values}
@@ -282,6 +288,7 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
                       [draftKey]: nextValues,
                     }))
                   }
+                  canEditNames={selected?.canEditNames}
                   isUpdating={isUpdating}
                   isBusy={isSubmitting || isPublishing}
                   onSave={save}

@@ -23,3 +23,10 @@ export const manualPolicyInputSchema = manualPolicyValuesSchema.extend({
   provider: z.string().trim().min(1, "Enter the insurer.").max(120),
   name: z.string().trim().min(1, "Enter the investment name.").max(160),
 });
+
+// Imported labels are locked to their stored values by the update mutation.
+// They must not inherit the length or whitespace rules for newly entered names.
+export const importedPolicyUpdateInputSchema = manualPolicyValuesSchema.extend({
+  provider: z.string(),
+  name: z.string(),
+});

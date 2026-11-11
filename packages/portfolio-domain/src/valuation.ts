@@ -507,7 +507,8 @@ function positionXirr(
 
 function isManualPolicy(fact: HoldingFact): boolean {
   return Boolean(
-    fact.row.policyId && fact.row.sourceType === "manual_snapshot",
+    (fact.row.policyId || fact.row.metadata.manualPolicyUpdate === true) &&
+    fact.row.sourceType === "manual_snapshot",
   );
 }
 
