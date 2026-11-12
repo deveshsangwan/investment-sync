@@ -346,6 +346,37 @@ describe("manual ULIP policies", () => {
     ).resolves.toEqual(updated);
   });
 
+  it("updates a saved imported holding whose expired source batch is parsed", async () => {
+    const { t, owner, publish, importWorkbook } = await setup();
+    const batchId = await importWorkbook([importedHolding("Goal Assure")]);
+    await t.run((ctx) =>
+      ctx.db.patch("importBatches", batchId, {
+        status: "parsed",
+        legacyStatus: "expired",
+      }),
+    );
+    const policy = (await owner.query(api.manualPolicies.list))[0];
+
+    if (!policy?.entry) throw new Error("Expected imported policy");
+
+    expect(policy.entry.status).toBe("parsed");
+    expect(policy.draftValues).toBeNull();
+    expect(policy.values?.currentValue).toBe("120");
+
+    const update = await owner.mutation(api.manualPolicies.updateValue, {
+      ...values,
+      provider: policy.provider,
+      name: policy.name,
+      policyId: policy.id,
+      expectedBatchId: batchId,
+      requestId: crypto.randomUUID(),
+    });
+    await publish(update.batchId);
+    expect((await owner.query(api.portfolio.positions)).current).toMatchObject([
+      { instrumentName: "Goal Assure", currentValue: "200718" },
+    ]);
+  });
+
   it("publishes exact values to all portfolio views without inventing payments or a source file", async () => {
     const { t, owner, publish } = await setup();
     const entry = await owner.mutation(api.manualPolicies.create, {

@@ -96,32 +96,21 @@ function ManualEntryData({ initialPolicyId }: { initialPolicyId?: string }) {
   const isPublishing = entry?.status === "publishing";
   const hasFailed = entry?.status === "parsed" && Boolean(entry.errorMessage);
   const isOwner = current?.role === "owner";
-  const formValues =
-    selected?.entry?.status === "committed"
-      ? selected.values
-      : selected?.draftValues;
+  const draftValues =
+    selected?.entry?.status !== "committed" ? selected?.draftValues : null;
+  // A migrated workbook can retain published holdings after its source batch
+  // expires. Its batch status does not mean this policy has an unsaved draft.
+  const formValues = draftValues ?? selected?.values;
   const draftKey = selected
     ? `${selected.id}:${selected.entry?.id}`
     : "new-policy";
-  const values =
-    drafts[draftKey] ??
-    (selected && formValues
-      ? {
-          provider: selected.provider,
-          name: selected.name,
-          ...formValues,
-          sourceDate:
-            selected.entry?.status === "committed"
-              ? today()
-              : formValues.sourceDate,
-        }
-      : {
-          provider: "",
-          name: "",
-          investedAmount: "",
-          currentValue: "",
-          sourceDate: today(),
-        });
+  const values = drafts[draftKey] ?? {
+    provider: selected?.provider ?? "",
+    name: selected?.name ?? "",
+    investedAmount: formValues?.investedAmount ?? "",
+    currentValue: formValues?.currentValue ?? "",
+    sourceDate: draftValues?.sourceDate ?? today(),
+  };
 
   async function save(values: ManualPolicyInput) {
     if (saving.current || !isOwner || isPublishing) return;
