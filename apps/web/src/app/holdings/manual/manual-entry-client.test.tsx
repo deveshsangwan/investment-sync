@@ -47,6 +47,7 @@ it.each(["committed", "failed", "parsed"])(
   async (status) => {
     mocks.query.mockImplementation((name) => {
       if (name === "users:current") return { role: "owner" };
+
       if (name === "manualPolicies:list")
         return [
           {
@@ -63,8 +64,10 @@ it.each(["committed", "failed", "parsed"])(
             entry: { id: "source-batch", status, errorMessage: null },
           },
         ];
+
       return null;
     });
+
     render(<ManualEntryClient initialPolicyId="imported-position" />);
 
     expect(screen.queryAllByText("Not set")).toHaveLength(0);
@@ -95,6 +98,7 @@ it.each(["committed", "failed", "parsed"])(
 it("retains unsaved manual values and their original value date", async () => {
   mocks.query.mockImplementation((name) => {
     if (name === "users:current") return { role: "owner" };
+
     if (name === "manualPolicies:list")
       return [
         {
@@ -115,8 +119,10 @@ it("retains unsaved manual values and their original value date", async () => {
           entry: { id: "draft-batch", status: "parsed", errorMessage: null },
         },
       ];
+
     return null;
   });
+
   render(<ManualEntryClient initialPolicyId="manual-policy" />);
 
   expect(

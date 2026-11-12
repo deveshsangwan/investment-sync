@@ -356,7 +356,9 @@ describe("manual ULIP policies", () => {
       }),
     );
     const policy = (await owner.query(api.manualPolicies.list))[0];
+
     if (!policy?.entry) throw new Error("Expected imported policy");
+
     expect(policy.entry.status).toBe("parsed");
     expect(policy.draftValues).toBeNull();
     expect(policy.values?.currentValue).toBe("120");
