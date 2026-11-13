@@ -271,7 +271,13 @@ describe("portfolio publication", () => {
           }),
         ),
       ]).projection,
-      quote,
+      {
+        ...quote,
+        historicalRates: {
+          "2025-01-02": { rate: "80", rateDate: "2025-01-02" },
+          "2025-01-03": { rate: "80", rateDate: "2025-01-03" },
+        },
+      },
     ).overview;
 
     expect(

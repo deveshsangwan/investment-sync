@@ -6,7 +6,7 @@ import { internalAction } from "../_generated/server";
 import { currencyRatePolicy } from "../model/currencyRates";
 import { hasMigrationWriteFreeze } from "../model/migrationFreeze";
 
-const providerUrl = "https://api.frankfurter.dev/v2/rate/USD/INR";
+const providerUrl = "https://api.frankfurter.dev/v2/providers/ecb/rate/USD/INR";
 
 class CurrencyRateProviderError extends Error {
   constructor(
@@ -81,7 +81,7 @@ export const refreshCurrencyRate = internalAction({
   },
 });
 
-async function fetchWithRetry(load: () => Promise<number>) {
+async function fetchWithRetry<T>(load: () => Promise<T>) {
   try {
     return await load();
   } catch (error) {
@@ -154,4 +154,116 @@ function isRatePayload(value: unknown): value is { rate: number } {
 
 function delay(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+type HistoricalRequests = {
+  dates: string[];
+  continuationCursor: string | null;
+  hasMoreDates: boolean;
+};
+
+export const refreshHistoricalCurrencyRates = internalAction({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  returns: v.object({ saved: v.number(), failed: v.number() }),
+  handler: async (ctx, args): Promise<{ saved: number; failed: number }> => {
+    if (hasMigrationWriteFreeze()) return { saved: 0, failed: 0 };
+
+    const cursor = args.cursor ?? null;
+    const requests: HistoricalRequests = await ctx.runQuery(
+      internal.currencyRates.historicalRequests,
+      {
+        cursor,
+        beforeDate: new Date().toISOString().slice(0, 10),
+      },
+    );
+    const quotes: { date: string; rateDate: string; rate: string }[] = [];
+    let failed = 0;
+
+    for (let index = 0; index < requests.dates.length; index += 4) {
+      const results = await Promise.allSettled(
+        requests.dates
+          .slice(index, index + 4)
+          .map((date) => fetchWithRetry(() => fetchHistoricalRate(date))),
+      );
+      for (const result of results) {
+        if (result.status === "fulfilled") quotes.push(result.value);
+        else failed += 1;
+      }
+    }
+
+    const saved: number = await ctx.runMutation(
+      internal.currencyRates.saveHistoricalQuotes,
+      { quotes },
+    );
+
+    // Retry failed dates on the next cron, rather than looping on an outage.
+    const nextCursor =
+      requests.hasMoreDates && failed === 0
+        ? cursor
+        : requests.continuationCursor;
+    if ((requests.hasMoreDates && failed === 0) || nextCursor !== null)
+      await ctx.scheduler.runAfter(
+        0,
+        internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+        { cursor: nextCursor },
+      );
+
+    return { saved, failed };
+  },
+});
+
+async function fetchHistoricalRate(date: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    currencyRatePolicy.requestTimeoutMilliseconds,
+  );
+
+  try {
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://api.frankfurter.dev/v2/providers/ecb/rate/USD/INR?date=${encodeURIComponent(date)}`,
+        {
+          headers: { accept: "application/json" },
+          signal: controller.signal,
+        },
+      );
+    } catch {
+      throw new CurrencyRateProviderError(
+        "Historical rate request failed or timed out",
+        true,
+      );
+    }
+
+    if (!response.ok)
+      throw new CurrencyRateProviderError(
+        `Historical rate provider returned ${response.status}`,
+        response.status === 429 || response.status >= 500,
+      );
+
+    const payload: unknown = await response.json();
+    if (
+      !isRatePayload(payload) ||
+      !("date" in payload) ||
+      typeof payload.date !== "string" ||
+      !("base" in payload) ||
+      payload.base !== "USD" ||
+      !("quote" in payload) ||
+      payload.quote !== "INR" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(payload.date) ||
+      !Number.isFinite(Date.parse(payload.date)) ||
+      new Date(payload.date).toISOString().slice(0, 10) !== payload.date ||
+      payload.date > date ||
+      Date.parse(date) - Date.parse(payload.date) > 7 * 86400000
+    )
+      throw new CurrencyRateProviderError(
+        "Invalid historical USD/INR response",
+        false,
+      );
+
+    return { date, rateDate: payload.date, rate: String(payload.rate) };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
