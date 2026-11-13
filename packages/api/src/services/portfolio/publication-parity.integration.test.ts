@@ -1113,12 +1113,11 @@ describeDb("Postgres portfolio publication parity", () => {
       );
       const afterExit = await assertParity(fixture);
       expect(afterExit.actual.overview.timeline.at(-1)?.currentValue).toBe(700);
-      if (withValuations)
-        expect(
-          afterExit.actual.overview.timeline.find(
-            (point) => point.snapshotDate === "2025-01-02",
-          )?.currentValue,
-        ).toBe(1500);
+      expect(
+        afterExit.actual.overview.timeline.find(
+          (point) => point.snapshotDate === "2025-01-02",
+        )?.currentValue,
+      ).toBe(125 * 83.25 + 300);
     },
   );
 
