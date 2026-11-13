@@ -225,7 +225,58 @@ describe("portfolio publication", () => {
     expect(detail?.transactions).toEqual([]);
   });
 
-  it("adds manual values to reported portfolio history without replacing imported totals", () => {
+  it("reconciles the latest chart point with the dashboard after a manual policy update", () => {
+    const original = publish([
+      holding({
+        sourceDate: "2026-11-01",
+        investedAmount: 2202463,
+        currentValue: 2490737.58,
+      }),
+      adaptLegacyRow({
+        kind: "valuation",
+        sourceType: "investment_portfolio_xlsx",
+        valuationDate: "2026-11-01",
+        investedAmount: 2083326,
+        currentValue: 2244466,
+        currency: "INR",
+        metadata: {},
+      }),
+    ]);
+    const updated = publish(
+      [
+        manualPolicy({
+          sourceDate: "2026-11-13",
+          investedAmount: 100000,
+          currentValue: 130000,
+        }),
+      ],
+      original.facts,
+      2,
+    );
+    const { summary, timeline } = valuePortfolioPublication(
+      updated.projection,
+      undefined,
+      { view: "overview" },
+    );
+
+    expect(summary).toMatchObject({
+      investedAmount: 2302463,
+      currentValue: 2620737.58,
+    });
+    expect(timeline.at(-1)).toMatchObject({
+      snapshotDate: "2026-11-13",
+      investedAmount: summary.investedAmount,
+      currentValue: summary.currentValue,
+      pnlAmount: summary.pnlAmount,
+    });
+    expect(timeline[0]).toMatchObject({
+      snapshotDate: "2026-11-01",
+      investedAmount: 2083326,
+      currentValue: 2244466,
+    });
+  });
+
+  it("preserves reported history and reconciles the current point after manual updates", () => {
     const valuation = (date: string, currentValue: number) =>
       adaptLegacyRow({
         kind: "valuation",
@@ -273,7 +324,7 @@ describe("portfolio publication", () => {
       ["2024-12-01", 1100],
       ["2025-01-01", 1220],
       ["2025-02-01", 1420],
-      ["2025-03-01", 1430],
+      ["2025-03-01", 250],
     ]);
   });
 
