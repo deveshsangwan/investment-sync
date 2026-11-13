@@ -154,7 +154,14 @@ describeDb("Postgres portfolio publication parity", () => {
     const overview = await caller.portfolio.overview();
     const positions = await caller.portfolio.positions();
 
-    expect(semantic(actual.overview)).toEqual(semantic(overview, "", true));
+    // Overview history now replays known holdings instead of workbook totals.
+    // Its as-of behavior is covered by domain and Convex query regressions;
+    // every other overview field must retain the Postgres contract.
+    const { timeline: _actualTimeline, ...actualOverview } = actual.overview;
+    const { timeline: _legacyTimeline, ...legacyOverview } = overview;
+    expect(semantic(actualOverview)).toEqual(
+      semantic(legacyOverview, "", true),
+    );
     expect(semantic(actual.overview.holdings)).toEqual(
       semantic(await caller.portfolio.holdings(), "", true),
     );
@@ -1106,12 +1113,11 @@ describeDb("Postgres portfolio publication parity", () => {
       );
       const afterExit = await assertParity(fixture);
       expect(afterExit.actual.overview.timeline.at(-1)?.currentValue).toBe(700);
-      if (withValuations)
-        expect(
-          afterExit.actual.overview.timeline.find(
-            (point) => point.snapshotDate === "2025-01-02",
-          )?.currentValue,
-        ).toBe(1500);
+      expect(
+        afterExit.actual.overview.timeline.find(
+          (point) => point.snapshotDate === "2025-01-02",
+        )?.currentValue,
+      ).toBe(125 * 83.25 + 300);
     },
   );
 

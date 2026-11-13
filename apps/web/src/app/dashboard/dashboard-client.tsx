@@ -147,7 +147,11 @@ function DashboardData() {
               <PortfolioTimelineChart data={timeline} />
             )}
             <p className="mt-3 text-xs text-muted-foreground">
-              Value changes include deposits and withdrawals.
+              Values use the latest holdings known on each date and include
+              deposits and withdrawals.
+              {summary.exchangeRates.length > 0
+                ? " USD holdings use the latest available exchange rate."
+                : null}
             </p>
           </div>
           <div className="min-w-0 rounded-2xl border bg-card p-5">

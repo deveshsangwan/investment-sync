@@ -139,6 +139,20 @@ export function decodePosition(
   } satisfies PositionProjection;
 }
 
+export function decodePortfolioHolding(doc: Doc<"portfolioHistoryFacts">) {
+  if (doc.kind !== "holding" || !doc.positionKey)
+    throw new Error("Portfolio history fact has no holding identity");
+
+  const payload = parseJson(doc.factJson, holdingPayloadSchema);
+
+  return holdingFact(payload, {
+    accountKey: accountKey(payload.row),
+    instrumentKey: instrumentKey(payload.row),
+    positionKey: doc.positionKey,
+    factKey: primaryFactKey(payload.provenance),
+  });
+}
+
 export function decodePortfolioTransaction(doc: Doc<"portfolioHistoryFacts">) {
   if (doc.kind !== "transaction")
     throw new Error("Portfolio history fact has the wrong kind");

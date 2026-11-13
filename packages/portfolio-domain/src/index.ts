@@ -22,3 +22,5 @@ export {
   safePublicErrorMessage,
 } from "./errors";
 export type { PublicError, PublicErrorCode } from "./errors";
+
+export { holdingsTimeline, eligibleSnapshots } from "./sourceSnapshots";

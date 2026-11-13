@@ -151,6 +151,106 @@ async function setupPortfolio(rows: ExactNormalizedImportRow[]) {
   return { t, owner, publication };
 }
 
+it.each([false, true])(
+  "rebuilds the whole overview from holdings for legacy publication: %s",
+  async (legacy) => {
+    const state = await setupPortfolio([
+      holding({
+        sourceDate: "2025-01-01",
+        investedAmount: 80,
+        currentValue: 100,
+      }),
+      holding({
+        sourceDate: "2025-01-02",
+        investedAmount: 90,
+        currentValue: 120,
+      }),
+      holding({
+        sourceDate: "2025-01-02",
+        accountName: "Foreign",
+        symbol: "USD",
+        instrumentName: "USD",
+        currency: "USD",
+        investedAmount: 8,
+        currentValue: 10,
+      }),
+      holding({
+        sourceDate: "2025-01-03",
+        symbol: "REPLACEMENT",
+        instrumentName: "Replacement",
+        investedAmount: 100,
+        currentValue: 130,
+      }),
+      ...["2025-01-01", "2025-01-03"].map((valuationDate) =>
+        adaptLegacyRow({
+          kind: "valuation",
+          sourceType: "investment_portfolio_xlsx",
+          valuationDate,
+          investedAmount: 9000,
+          currentValue: 9999,
+          currency: "INR",
+          metadata: {},
+        }),
+      ),
+    ]);
+
+    if (legacy) {
+      await state.owner.run(async (ctx) => {
+        const active = await activePortfolio(ctx);
+
+        if (!active) throw new Error("Missing published portfolio");
+
+        const summary = await ctx.db
+          .query("portfolioSummaries")
+          .withIndex("by_versionId", (q) =>
+            q.eq("versionId", active.version._id),
+          )
+          .unique();
+
+        if (!summary) throw new Error("Missing published summary");
+
+        await ctx.db.patch(summary._id, { timelineBasis: undefined });
+        const points = await ctx.db
+          .query("portfolioTimeline")
+          .withIndex("by_versionId_and_assetClass_and_date", (q) =>
+            q.eq("versionId", active.version._id).eq("assetClass", null),
+          )
+          .take(100);
+        for (const point of points) await ctx.db.delete(point._id);
+        await ctx.db.insert("portfolioTimeline", {
+          versionId: active.version._id,
+          assetClass: null,
+          date: "2025-01-01",
+          totals: [
+            {
+              currency: "INR",
+              investedAmount: "9000",
+              currentValue: "9999",
+              pnlAmount: "999",
+            },
+          ],
+        });
+      });
+    }
+
+    const overview = await state.owner.query(api.portfolio.overview);
+    expect(
+      overview.timeline.map((point) => [
+        point.snapshotDate,
+        point.investedAmount,
+        point.currentValue,
+      ]),
+    ).toEqual([
+      ["2025-01-01", 80, 100],
+      ["2025-01-02", 730, 920],
+      ["2025-01-03", 740, 930],
+    ]);
+    expect(overview.timeline.at(-1)?.currentValue).toBe(
+      overview.summary.currentValue,
+    );
+  },
+);
+
 async function commitAdditionalPortfolio(
   state: Pick<Awaited<ReturnType<typeof setupPortfolio>>, "t" | "owner">,
   rows: ExactNormalizedImportRow[],

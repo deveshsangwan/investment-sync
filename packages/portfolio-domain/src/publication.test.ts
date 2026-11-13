@@ -225,7 +225,124 @@ describe("portfolio publication", () => {
     expect(detail?.transactions).toEqual([]);
   });
 
-  it("adds manual values to reported portfolio history without replacing imported totals", () => {
+  it("rebuilds every historical point from known holdings across accounts and currencies", () => {
+    const result = valuePortfolioPublication(
+      publish([
+        holding({
+          sourceDate: "2025-01-01",
+          investedAmount: 80,
+          currentValue: 100,
+        }),
+        holding({
+          sourceDate: "2025-01-02",
+          investedAmount: 90,
+          currentValue: 120,
+        }),
+        holding({
+          sourceDate: "2025-01-02",
+          accountName: "Foreign",
+          symbol: "USD",
+          instrumentName: "USD",
+          currency: "USD",
+          investedAmount: 8,
+          currentValue: 10,
+        }),
+        holding({
+          sourceDate: "2025-01-03",
+          symbol: "REPLACEMENT",
+          instrumentName: "Replacement",
+          investedAmount: 100,
+          currentValue: 130,
+        }),
+        manualPolicy({
+          sourceDate: "2025-01-04",
+          investedAmount: 10,
+          currentValue: 20,
+        }),
+        ...["2025-01-01", "2025-01-03"].map((valuationDate) =>
+          adaptLegacyRow({
+            kind: "valuation",
+            sourceType: "investment_portfolio_xlsx",
+            valuationDate,
+            investedAmount: 9000,
+            currentValue: 9999,
+            currency: "INR",
+            metadata: {},
+          }),
+        ),
+      ]).projection,
+      quote,
+    ).overview;
+
+    expect(
+      result.timeline.map((point) => [
+        point.snapshotDate,
+        point.investedAmount,
+        point.currentValue,
+      ]),
+    ).toEqual([
+      ["2025-01-01", 80, 100],
+      ["2025-01-02", 730, 920],
+      ["2025-01-03", 740, 930],
+      ["2025-01-04", 750, 950],
+    ]);
+    expect(result.timeline.at(-1)?.currentValue).toBe(
+      result.summary.currentValue,
+    );
+  });
+
+  it("reconciles the latest chart point with the dashboard after a manual policy update", () => {
+    const original = publish([
+      holding({
+        sourceDate: "2026-11-01",
+        investedAmount: 2202463,
+        currentValue: 2490737.58,
+      }),
+      adaptLegacyRow({
+        kind: "valuation",
+        sourceType: "investment_portfolio_xlsx",
+        valuationDate: "2026-11-01",
+        investedAmount: 2083326,
+        currentValue: 2244466,
+        currency: "INR",
+        metadata: {},
+      }),
+    ]);
+    const updated = publish(
+      [
+        manualPolicy({
+          sourceDate: "2026-11-13",
+          investedAmount: 100000,
+          currentValue: 130000,
+        }),
+      ],
+      original.facts,
+      2,
+    );
+    const { summary, timeline } = valuePortfolioPublication(
+      updated.projection,
+      undefined,
+      { view: "overview" },
+    );
+
+    expect(summary).toMatchObject({
+      investedAmount: 2302463,
+      currentValue: 2620737.58,
+    });
+    expect(timeline.at(-1)).toMatchObject({
+      snapshotDate: "2026-11-13",
+      investedAmount: summary.investedAmount,
+      currentValue: summary.currentValue,
+      pnlAmount: summary.pnlAmount,
+    });
+    expect(timeline[0]).toMatchObject({
+      snapshotDate: "2026-11-01",
+      investedAmount: 2202463,
+      currentValue: 2490737.58,
+    });
+  });
+
+  it("rebuilds reported observation dates from known holdings without backfilling manual updates", () => {
     const valuation = (date: string, currentValue: number) =>
       adaptLegacyRow({
         kind: "valuation",
@@ -260,20 +377,20 @@ describe("portfolio publication", () => {
         point.totals[0]?.currentValue,
       ]),
     ).toEqual([
-      ["2024-12-01", "1100"],
-      ["2025-01-01", "1220"],
-      ["2025-02-01", "1420"],
-      ["2025-03-01", "1430"],
+      ["2024-12-01", "120"],
+      ["2025-01-01", "240"],
+      ["2025-02-01", "240"],
+      ["2025-03-01", "250"],
     ]);
     expect(
       valuePortfolioPublication(updated.projection).overview.timeline.map(
         (point) => [point.snapshotDate, point.currentValue],
       ),
     ).toEqual([
-      ["2024-12-01", 1100],
-      ["2025-01-01", 1220],
-      ["2025-02-01", 1420],
-      ["2025-03-01", 1430],
+      ["2024-12-01", 120],
+      ["2025-01-01", 240],
+      ["2025-02-01", 240],
+      ["2025-03-01", 250],
     ]);
   });
 
@@ -931,7 +1048,7 @@ describe("portfolio publication", () => {
     ).toEqual(["BTC", "INR"]);
   });
 
-  it("uses explicit valuations for history and appends the current portfolio point", () => {
+  it("does not invent holding history before the first known snapshot", () => {
     const valuation = adaptLegacyRow({
       kind: "valuation",
       sourceType: "investment_portfolio_xlsx",
@@ -945,13 +1062,6 @@ describe("portfolio publication", () => {
       publish([holding(), valuation]).projection,
     );
     expect(result.overview.timeline).toEqual([
-      {
-        snapshotDate: "2024-01-01",
-        investedAmount: 80,
-        currentValue: 90,
-        pnlAmount: 10,
-        currency: "INR",
-      },
       {
         snapshotDate: "2025-01-01",
         investedAmount: 100,

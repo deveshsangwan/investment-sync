@@ -222,9 +222,17 @@ describe("manual ULIP policies", () => {
       expect(detail?.history).toHaveLength(2);
       const overview = await owner.query(api.portfolio.overview);
       expect(overview.summary.currentValue).toBe(577502);
-      expect(overview.timeline.at(-1)?.currentValue).toBe(
-        hasReportedTotals ? 1026249 : 577502,
-      );
+      expect(overview.timeline.at(-1)).toMatchObject({
+        snapshotDate: values.sourceDate,
+        currentValue: overview.summary.currentValue,
+        investedAmount: overview.summary.investedAmount,
+        pnlAmount: overview.summary.pnlAmount,
+      });
+      expect(overview.timeline[0]).toMatchObject({
+        snapshotDate: "2026-05-15",
+        currentValue: 551253,
+        investedAmount: 480000,
+      });
 
       const next = await owner.mutation(api.manualPolicies.updateValue, {
         ...values,

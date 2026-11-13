@@ -226,6 +226,84 @@ export function nativeTotals(
   });
 }
 
+/** Replays source selection as of each observation, carrying other accounts forward. */
+export function holdingsTimeline(
+  holdings: HoldingFact[],
+  declarations: SourceSnapshotFact[] = [],
+  observationDates: string[] = [],
+  archivedAccountKeys: ReadonlySet<string> = new Set(),
+): NativeTimelinePoint[] {
+  const firstDate = [...holdings, ...declarations]
+    .map((fact) => fact.snapshotDate)
+    .sort()[0];
+
+  if (!firstDate) return [];
+
+  const dates = [
+    ...new Set([
+      ...holdings.map((fact) => fact.snapshotDate),
+      ...declarations.map((fact) => fact.snapshotDate),
+      ...observationDates.filter((date) => date >= firstDate),
+    ]),
+  ].sort();
+  const candidates = holdings
+    .map((fact, originalIndex) => ({ fact, originalIndex }))
+    .sort((left, right) =>
+      compareText(left.fact.snapshotDate, right.fact.snapshotDate),
+    )
+    .values();
+  const boundaries = [...declarations]
+    .sort((left, right) => compareText(left.snapshotDate, right.snapshotDate))
+    .values();
+  const selection: TimelineSelection = {
+    groups: new Map(),
+    candidatesByPosition: new Map(),
+    changedPositionKeys: new Set(),
+    current: new Map(),
+    totals: new Map(),
+  };
+  const declaredCurrencies = new Set<NativeTotal["currency"]>();
+  let candidate = candidates.next();
+  let boundary = boundaries.next();
+
+  return dates.map((snapshotDate) => {
+    while (!boundary.done && boundary.value.snapshotDate <= snapshotDate) {
+      retainTimelineBoundary(selection, boundary.value);
+      if (!archivedAccountKeys.has(boundary.value.accountKey))
+        declaredCurrencies.add(boundary.value.row.currency);
+      boundary = boundaries.next();
+    }
+
+    while (
+      !candidate.done &&
+      candidate.value.fact.snapshotDate <= snapshotDate
+    ) {
+      retainTimelineCandidate(selection, candidate.value);
+      candidate = candidates.next();
+    }
+
+    updateTimelineSelection(selection, false, archivedAccountKeys);
+
+    return {
+      snapshotDate,
+      totals: nativeTotals([
+        ...[...selection.totals].map(([currency, total]) => ({
+          currency,
+          investedAmount: total.investedAmount.toFixed(),
+          currentValue: total.currentValue.toFixed(),
+          pnlAmount: total.pnlAmount.toFixed(),
+        })),
+        ...[...declaredCurrencies].map((currency) => ({
+          currency,
+          investedAmount: "0",
+          currentValue: "0",
+          pnlAmount: "0",
+        })),
+      ]),
+    };
+  });
+}
+
 export function snapshotTimeline(
   holdings: HoldingFact[],
   declarations: SourceSnapshotFact[] = [],

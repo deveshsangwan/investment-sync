@@ -19,7 +19,7 @@ import {
   nativeTotals,
   selectPositions,
   snapshotTimeline,
-  valuationTimeline,
+  holdingsTimeline,
   timelineWithManualPolicies,
 } from "./sourceSnapshots";
 import type {
@@ -164,14 +164,10 @@ export function buildPortfolioPublication(
     detailPositions,
     totals,
     assetClasses,
-    timeline: timelineWithManualPolicies(
+    timeline: holdingsTimeline(
       eligible,
-      valuations.length
-        ? valuationTimeline(valuations)
-        : snapshotTimeline(eligible, sourceSnapshots),
-      valuations.length > 0,
-      new Set(),
       sourceSnapshots,
+      valuations.map((row) => row.valuationDate),
     ),
     hasExplicitValuations: valuations.length > 0,
     valuations,

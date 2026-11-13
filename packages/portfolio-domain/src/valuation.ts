@@ -252,16 +252,8 @@ function portfolioOverview(
   );
   const last = historicalTimeline.at(-1);
   let timeline = historicalTimeline;
-  // Reported totals can include assets absent from detailed holdings. The
-  // combined timeline already carries these totals alongside manual policies.
-  const canUseHoldingsSummary =
-    !projection.hasExplicitValuations || !hasManualPolicies;
-
-  if (
-    canUseHoldingsSummary &&
-    summary.asOfDate &&
-    (!last || summary.asOfDate >= last.snapshotDate)
-  ) {
+  // Use the summary's display rounding for the terminal point as well.
+  if (summary.asOfDate && (!last || summary.asOfDate >= last.snapshotDate)) {
     const currentPoint = {
       snapshotDate: summary.asOfDate,
       investedAmount: summary.investedAmount,

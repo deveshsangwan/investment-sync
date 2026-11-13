@@ -88,6 +88,7 @@ export const summaryRecordSchema = z.object({
   asOfDate: z.string().nullable(),
   totals: z.array(totalSchema),
   hasExplicitValuations: z.boolean(),
+  timelineBasis: z.literal("holdings").optional(),
   valuationScope: z.string(),
   cashFlowScope: z.string(),
 });
