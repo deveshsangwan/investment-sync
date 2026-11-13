@@ -198,17 +198,7 @@ function portfolioOverview(
     ...projection.cashFlows.map((fact) => fact.row.currency),
     ...projection.valuations.map((row) => row.currency),
   ];
-  const timelineCurrencies = projection.timeline.flatMap((point) =>
-    point.totals
-      .filter(
-        (total) =>
-          total.investedAmount !== "0" ||
-          total.currentValue !== "0" ||
-          total.pnlAmount !== "0",
-      )
-      .map((total) => total.currency),
-  );
-  const rate = requiredRate([...currencies, ...timelineCurrencies], quote);
+  const rate = requiredRate(currencies, quote);
   const summary = summaryValues(projection, quote, currencies, rate);
   const performanceHoldings = current.map((position) =>
     performanceHolding(position.holding, rate),
@@ -247,24 +237,58 @@ function portfolioOverview(
     );
   }
 
-  const historicalTimeline = projection.timeline.map((point) =>
-    timelinePoint(point, rate, projection.hasExplicitValuations),
+  const valuationDate = summary.exchangeRates.reduce(
+    (latest, exchange) =>
+      latest && latest > exchange.fetchedAt.slice(0, 10)
+        ? latest
+        : exchange.fetchedAt.slice(0, 10),
+    summary.asOfDate,
   );
+  const timelineMissingRateDates: string[] = [];
+  const historicalTimeline = projection.timeline.flatMap((point) => {
+    if (point.snapshotDate === valuationDate) return [];
+
+    const hasUsd = point.totals.some(
+      (total) =>
+        total.currency === "USD" &&
+        (Number(total.currentValue) !== 0 ||
+          Number(total.investedAmount) !== 0),
+    );
+    const historical = quote.historicalRates?.[point.snapshotDate];
+    const historicalRate =
+      historical && historical.rateDate <= point.snapshotDate
+        ? Number(historical.rate)
+        : undefined;
+
+    if (
+      hasUsd &&
+      (!historicalRate ||
+        !Number.isFinite(historicalRate) ||
+        historicalRate <= 0)
+    ) {
+      timelineMissingRateDates.push(point.snapshotDate);
+      return [];
+    }
+
+    return [
+      timelinePoint(point, historicalRate, projection.hasExplicitValuations),
+    ];
+  });
   const last = historicalTimeline.at(-1);
   let timeline = historicalTimeline;
-  // Use the summary's display rounding for the terminal point as well.
-  if (summary.asOfDate && (!last || summary.asOfDate >= last.snapshotDate)) {
-    const currentPoint = {
-      snapshotDate: summary.asOfDate,
-      investedAmount: summary.investedAmount,
-      currentValue: summary.currentValue,
-      pnlAmount: summary.pnlAmount,
-      currency: "INR" as const,
-    };
-    timeline =
-      last?.snapshotDate === summary.asOfDate
-        ? [...historicalTimeline.slice(0, -1), currentPoint]
-        : [...historicalTimeline, currentPoint];
+
+  // The current quote belongs to its valuation date, never an older snapshot.
+  if (valuationDate && (!last || valuationDate >= last.snapshotDate)) {
+    timeline = [
+      ...historicalTimeline,
+      {
+        snapshotDate: valuationDate,
+        investedAmount: summary.investedAmount,
+        currentValue: summary.currentValue,
+        pnlAmount: summary.pnlAmount,
+        currency: "INR" as const,
+      },
+    ];
   }
 
   return {
@@ -273,7 +297,8 @@ function portfolioOverview(
       .sort(byDateAndValue),
     summary,
     performance,
-    timeline,
+    timeline: timelineMissingRateDates.length ? [] : timeline,
+    ...(timelineMissingRateDates.length ? { timelineMissingRateDates } : {}),
   };
 }
 
@@ -587,12 +612,47 @@ function timelinePoint(
   rate: number | undefined,
   hasPnl: boolean,
 ) {
-  const totals = convertedTimelineAmounts(point, rate);
+  // Keep multiplication and summation exact until the final paise rounding.
+  const totals = point.totals.reduce(
+    (sum, total) => {
+      const multiplier =
+        total.currency === "INR"
+          ? 1
+          : total.currency === "USD"
+            ? (rate ?? 0)
+            : 0;
+
+      return {
+        investedAmount: sum.investedAmount.plus(
+          new FinancialDecimal(total.investedAmount).times(multiplier),
+        ),
+        currentValue: sum.currentValue.plus(
+          new FinancialDecimal(total.currentValue).times(multiplier),
+        ),
+      };
+    },
+    {
+      investedAmount: new FinancialDecimal(0),
+      currentValue: new FinancialDecimal(0),
+    },
+  );
+
   return {
     snapshotDate: point.snapshotDate,
-    investedAmount: roundDisplay(totals.investedAmount),
-    currentValue: roundDisplay(totals.currentValue),
-    ...(hasPnl ? { pnlAmount: roundDisplay(totals.pnlAmount) } : {}),
+    investedAmount: totals.investedAmount
+      .toDecimalPlaces(2, FinancialDecimal.ROUND_HALF_UP)
+      .toNumber(),
+    currentValue: totals.currentValue
+      .toDecimalPlaces(2, FinancialDecimal.ROUND_HALF_UP)
+      .toNumber(),
+    ...(hasPnl
+      ? {
+          pnlAmount: totals.currentValue
+            .minus(totals.investedAmount)
+            .toDecimalPlaces(2, FinancialDecimal.ROUND_HALF_UP)
+            .toNumber(),
+        }
+      : {}),
     currency: "INR" as const,
   };
 }

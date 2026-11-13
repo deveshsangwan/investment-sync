@@ -170,11 +170,17 @@ export interface PortfolioPublication {
   digest: string;
 }
 
-export type ValuationQuote =
+export interface HistoricalUsdInrRate {
+  rate: string;
+  rateDate: string;
+}
+
+export type ValuationQuote = (
   | { status: "unavailable" }
   | {
       status: "fresh" | "stale";
       rate: string;
       fetchedAt: string;
       provider: "frankfurter";
-    };
+    }
+) & { historicalRates?: Record<string, HistoricalUsdInrRate> };

@@ -9,7 +9,7 @@ import {
   archivedProjection,
   applyAccountNames,
 } from "./model/accountVisibility";
-import { readValuationQuote } from "./model/currencyRates";
+import { readValuationQuote, readHistoricalRates } from "./model/currencyRates";
 import {
   activePortfolio,
   assetClassProjection,
@@ -42,16 +42,27 @@ export const overview = query({
       visible ?? overviewProjection(ctx, active),
       readValuationQuote(ctx),
     ]);
+    const historicalRateDates = readModel.projection.timeline
+      .filter((point) =>
+        point.totals.some(
+          (total) =>
+            total.currency === "USD" &&
+            (Number(total.currentValue) !== 0 ||
+              Number(total.investedAmount) !== 0),
+        ),
+      )
+      .map((point) => point.snapshotDate);
+    const historicalRates = await readHistoricalRates(ctx, historicalRateDates);
     const value = valuePortfolioPublication(
       applyAccountNames(readModel.projection, accounts),
-      quote,
+      { ...quote, historicalRates },
       {
         view: "overview",
       },
     );
     await logPortfolioRead(ctx, "overview", {
       ...readModel.counts,
-      ranges: readModel.counts.ranges + 2,
+      ranges: readModel.counts.ranges + 2 + historicalRateDates.length,
     });
 
     return value;

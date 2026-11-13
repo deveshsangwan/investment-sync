@@ -289,7 +289,13 @@ describe("legacy snapshot chart arithmetic", () => {
         rows: [...rows, holding({ sourceDate: "2025-02-01" })],
       },
     });
-    const chartQuote = { ...quote, rate: "85.123456789" };
+    const chartQuote = {
+      ...quote,
+      rate: "85.123456789",
+      historicalRates: {
+        "2025-01-01": { rate: "85.123456789", rateDate: "2025-01-01" },
+      },
+    };
     const expected = aggregateSnapshotTotalsByDate(
       rows.map((row, index) => ({
         accountId: row.accountName,
@@ -359,7 +365,7 @@ describe("portfolio valuation view selection", () => {
     ).toThrow("unavailable");
   });
 
-  it("only the fallback timeline requires FX when current holdings and cash flows are INR", () => {
+  it("keeps the INR dashboard available while historical USD rates are missing", () => {
     const value = projection([holding()]);
     const historical: PortfolioProjection = {
       ...value,
@@ -386,12 +392,25 @@ describe("portfolio valuation view selection", () => {
       valuePortfolioPublication(historical, undefined, { view: "positions" })
         .current,
     ).toHaveLength(1);
-    expect(() =>
+    expect(
       valuePortfolioPublication(historical, undefined, { view: "overview" }),
-    ).toThrow("unavailable");
-    const overview = valuePortfolioPublication(historical, quote, {
-      view: "overview",
+    ).toMatchObject({
+      timeline: [],
+      timelineMissingRateDates: ["2024-01-01"],
+      summary: { currentValue: 120 },
     });
+    const overview = valuePortfolioPublication(
+      historical,
+      {
+        ...quote,
+        historicalRates: {
+          "2024-01-01": { rate: "80", rateDate: "2024-01-01" },
+        },
+      },
+      {
+        view: "overview",
+      },
+    );
     expect(overview.timeline[0]?.currentValue).toBe(960);
     expect(overview.summary.exchangeRates).toEqual([]);
   });
@@ -597,5 +616,70 @@ describe("portfolio valuation view selection", () => {
     expect(
       new Set(all.holdingDetails[0]?.history.map((point) => point.id)).size,
     ).toBe(2);
+  });
+});
+
+describe("historical overview exchange rates", () => {
+  const value = () =>
+    projection([
+      holding({ currency: "USD", sourceDate: "2024-01-01", currentValue: 100 }),
+      holding({ currency: "USD", sourceDate: "2025-01-01", currentValue: 110 }),
+    ]);
+
+  it("uses each date's rate and keeps history unchanged when the current quote changes", () => {
+    const rates = { "2024-01-01": { rate: "75", rateDate: "2023-12-29" } };
+    for (const rate of ["80", "90"]) {
+      const result = valuePortfolioPublication(
+        value(),
+        { ...quote, rate, historicalRates: rates },
+        { view: "overview" },
+      );
+
+      expect(result.timeline[0]?.currentValue).toBe(7500);
+      expect(result.timeline[0]?.investedAmount).toBe(7500);
+      expect(result.timeline.at(-1)?.currentValue).toBe(110 * Number(rate));
+    }
+  });
+
+  it("rounds half-paise totals after exact historical conversion", () => {
+    const rows = projection([
+      holding({ sourceDate: "2024-07-27", currentValue: 1.5 }),
+      holding({
+        accountName: "Foreign",
+        currency: "USD",
+        sourceDate: "2024-07-27",
+        currentValue: 0.46,
+      }),
+    ]);
+    const result = valuePortfolioPublication(
+      rows,
+      {
+        ...quote,
+        historicalRates: {
+          "2024-07-27": { rate: "83.75", rateDate: "2024-07-26" },
+        },
+      },
+      { view: "overview" },
+    );
+
+    expect(result.timeline[0]?.currentValue).toBe(40.03);
+  });
+
+  it("does not replace missing or future-dated historical rates with today's quote", () => {
+    const observations: Record<string, { rate: string; rateDate: string }>[] = [
+      {},
+      { "2024-01-01": { rate: "75", rateDate: "2024-01-02" } },
+    ];
+    for (const historicalRates of observations) {
+      const result = valuePortfolioPublication(
+        value(),
+        { ...quote, historicalRates },
+        { view: "overview" },
+      );
+
+      expect(result.timeline).toEqual([]);
+      expect(result.timelineMissingRateDates).toEqual(["2024-01-01"]);
+      expect(result.summary.currentValue).toBe(8800);
+    }
   });
 });
