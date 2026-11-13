@@ -9,6 +9,7 @@ import {
 } from "./identity";
 import {
   nativeTotals,
+  holdingsTimeline,
   selectPositions,
   snapshotTimeline,
   timelineWithManualPolicies,
@@ -922,4 +923,44 @@ it("applies only the P&L difference when an imported policy omits P&L", () => {
   expect(timeline.at(-1)?.totals).toMatchObject([
     { investedAmount: "100", currentValue: "130", pnlAmount: "30" },
   ]);
+});
+
+describe("holdings history replay", () => {
+  it.each([false, true])(
+    "matches independent as-of source selection with archived accounts: %s",
+    (archived) => {
+      const snapshots = Array.from({ length: 160 }, (_, index) =>
+        holding(
+          {
+            sourceDate: `2025-01-${String(Math.floor(index / 8) + 1).padStart(2, "0")}`,
+            accountName: `Account ${index % 4}`,
+            instrumentName: `Instrument ${Math.floor(index / 4) % 3}`,
+            symbol: `S${Math.floor(index / 4) % 3}`,
+            investedAmount: `${index + 100}.1234`,
+            currentValue: `${index + 120}.5678`,
+            currency: index % 4 === 0 ? "USD" : "INR",
+            source: {
+              ...partialSource,
+              group: index % 5 === 0 ? "other-source" : "broker-one",
+              completeness: index % 3 === 0 ? "complete" : "partial",
+            },
+          },
+          { rowNumber: index + 1 },
+        ),
+      );
+      const hidden = new Set(archived ? [snapshots[0]?.accountKey ?? ""] : []);
+      const timeline = holdingsTimeline(snapshots, [], ["2025-01-25"], hidden);
+
+      expect(timeline).toHaveLength(21);
+      for (const point of timeline) {
+        const expected = selectPositions(
+          snapshots.filter((fact) => fact.snapshotDate <= point.snapshotDate),
+        ).current.filter((fact) => !hidden.has(fact.accountKey));
+
+        expect(point.totals, point.snapshotDate).toEqual(
+          nativeTotals(expected.map((fact) => fact.row)),
+        );
+      }
+    },
+  );
 });

@@ -168,6 +168,7 @@ export function projectionRecords(projection: PortfolioProjection) {
       asOfDate: projection.asOfDate,
       totals: projection.totals,
       hasExplicitValuations: projection.hasExplicitValuations,
+      timelineBasis: "holdings" as const,
       valuationScope: "portfolio:valuations",
       cashFlowScope: "portfolio:cashFlows",
     },

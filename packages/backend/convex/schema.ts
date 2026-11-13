@@ -287,6 +287,7 @@ export default defineSchema({
     asOfDate: v.union(v.string(), v.null()),
     totals: v.array(nativeTotalValidator),
     hasExplicitValuations: v.boolean(),
+    timelineBasis: v.optional(v.literal("holdings")),
     valuationScope: v.string(),
     cashFlowScope: v.string(),
   }).index("by_versionId", ["versionId"]),

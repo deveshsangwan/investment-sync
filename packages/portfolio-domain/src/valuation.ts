@@ -252,8 +252,7 @@ function portfolioOverview(
   );
   const last = historicalTimeline.at(-1);
   let timeline = historicalTimeline;
-  // Keep reported totals for historical dates, but value the latest point
-  // from the same current holdings as the dashboard, including manual policies.
+  // Use the summary's display rounding for the terminal point as well.
   if (summary.asOfDate && (!last || summary.asOfDate >= last.snapshotDate)) {
     const currentPoint = {
       snapshotDate: summary.asOfDate,

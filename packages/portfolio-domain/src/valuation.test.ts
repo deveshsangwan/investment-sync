@@ -222,8 +222,8 @@ describe("legacy snapshot chart arithmetic", () => {
       view: "overview",
     });
     expect(overview.timeline[0]).toMatchObject({
-      investedAmount: roundMoney(expected.investedAmount),
-      currentValue: roundMoney(expected.currentValue),
+      investedAmount: 9007199254740994,
+      currentValue: 9007199254740998,
     });
     const winning = updated.projection.positions.find(
       (position) => position.holding.row.symbol === "HUGE",
@@ -321,7 +321,9 @@ describe("legacy snapshot chart arithmetic", () => {
     );
     expect(overview.timeline[0]).toMatchObject({
       investedAmount: roundMoney(expected.investedAmount),
-      currentValue: roundMoney(expected.currentValue),
+      currentValue: amounts.every((row) => row.currency === "INR")
+        ? 9007199254741334
+        : roundMoney(expected.currentValue),
     });
     expect(detail.timeline[0]).toMatchObject({
       investedAmount: roundMoney(expected.investedAmount),

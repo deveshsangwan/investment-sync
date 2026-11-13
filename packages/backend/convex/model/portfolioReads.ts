@@ -1,3 +1,7 @@
+import {
+  holdingsTimeline,
+  eligibleSnapshots,
+} from "@investment-sync/portfolio-domain";
 import type { AssetClass } from "@investment-sync/importers";
 import type {
   NativeTimelinePoint,
@@ -10,6 +14,7 @@ import { capacityError, portfolioLimits } from "./portfolioLimits";
 import { parseJson, timelineDisplayAmountsSchema } from "./publicationStages";
 import {
   decodePortfolioTransaction,
+  decodePortfolioHolding,
   decodeSourceSnapshot,
   decodePortfolioValuation,
   decodePosition,
@@ -53,19 +58,44 @@ export async function overviewProjection(
       historyByKind(ctx, versionId, "valuation"),
     ]);
 
+  // Old publications contain workbook totals. Rebuild them on read until the
+  // next import persists a holdings timeline; no production backfill is needed.
+  const legacyHistory =
+    summary.timelineBasis === "holdings"
+      ? null
+      : await Promise.all([
+          historyByKind(ctx, versionId, "holding"),
+          historyByKind(ctx, versionId, "source_snapshot"),
+        ]);
+  const historicalTimeline = legacyHistory
+    ? holdingsTimeline(
+        eligibleSnapshots(legacyHistory[0].map(decodePortfolioHolding)),
+        legacyHistory[1].map(decodeSourceSnapshot),
+        valuations.map((doc) => decodePortfolioValuation(doc).valuationDate),
+      )
+    : timeline;
+  ensureMaximum(
+    historicalTimeline,
+    portfolioLimits.timeline,
+    "Portfolio timeline capacity exceeded",
+  );
+
   return {
     projection: projection({
       summary,
       positions: positions.map(decodePositionHeader),
-      timeline,
+      timeline: historicalTimeline,
       cashFlows: transactions.map(decodePortfolioTransaction),
       valuations: valuations.map(decodePortfolioValuation),
     }),
     counts: {
-      ranges: 5,
+      ranges: legacyHistory ? 7 : 5,
       positions: positions.length,
-      historyFacts: transactions.length + valuations.length,
-      timelinePoints: timeline.length,
+      historyFacts:
+        transactions.length +
+        valuations.length +
+        (legacyHistory ? legacyHistory[0].length + legacyHistory[1].length : 0),
+      timelinePoints: historicalTimeline.length,
     },
   };
 }
@@ -454,7 +484,7 @@ export async function resolvePositionKey(
 async function historyByKind(
   ctx: QueryCtx,
   versionId: Id<"portfolioVersions">,
-  kind: "transaction" | "valuation",
+  kind: Doc<"portfolioHistoryFacts">["kind"],
 ) {
   const facts = [];
   const range = ctx.db

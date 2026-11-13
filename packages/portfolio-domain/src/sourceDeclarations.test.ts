@@ -226,7 +226,7 @@ describe("complete source snapshot declarations", () => {
     expect(result.projection.totals[0]?.currentValue).toBe("120");
   });
 
-  it("retains prior explicit valuation history and records later source boundaries without inventing valuation facts", () => {
+  it("retains valuation facts without charting unknown holdings before the first snapshot", () => {
     const first = report("2025-01-01");
     const prior: PortfolioFact = {
       row: adaptLegacyRow({
@@ -254,7 +254,7 @@ describe("complete source snapshot declarations", () => {
     );
     expect(
       empty.projection.timeline.map((point) => point.snapshotDate),
-    ).toEqual(["2024-12-01", "2025-01-01", "2025-02-01"]);
+    ).toEqual(["2025-01-01", "2025-02-01"]);
     expect(empty.projection.timeline.at(-1)?.totals[0]?.currentValue).toBe("0");
     expect(empty.projection.valuations).toHaveLength(1);
   });

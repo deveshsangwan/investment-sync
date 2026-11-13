@@ -3,6 +3,7 @@ import {
   eligibleSnapshots,
   nativeTotals,
   snapshotTimeline,
+  holdingsTimeline,
   timelineWithManualPolicies,
 } from "./sourceSnapshots";
 import type { PortfolioProjection, PositionProjection } from "./types";
@@ -79,7 +80,7 @@ export function visibleAccountProjection(
         asset.assetClass,
       ),
     })),
-    timeline: timeline(eligible),
+    timeline: holdingsTimeline(eligible, declarations, [], archivedAccountKeys),
     // Reported portfolio totals have no account attribution and cannot be
     // apportioned safely. Use visible holding history while accounts are hidden.
     hasExplicitValuations: false,
