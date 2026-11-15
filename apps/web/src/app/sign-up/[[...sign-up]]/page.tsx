@@ -18,8 +18,8 @@ export default function SignUpPage() {
         path="/sign-up"
         routing="path"
         signInUrl="/sign-in"
-        forceRedirectUrl="/dashboard"
-        signInForceRedirectUrl="/dashboard"
+        fallbackRedirectUrl="/dashboard"
+        signInFallbackRedirectUrl="/dashboard"
         appearance={authAppearance}
       />
     </AuthPageShell>
