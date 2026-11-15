@@ -233,6 +233,16 @@ it.each([false, true])(
       });
     }
 
+    await state.t.run(async (ctx) => {
+      for (const date of ["2025-01-02", "2025-01-03"])
+        await ctx.db.insert("historicalCurrencyRates", {
+          date,
+          rateDate: date,
+          rate: "80",
+          provider: "frankfurter-ecb",
+          fetchedAt: quote.fetchedAt,
+        });
+    });
     const overview = await state.owner.query(api.portfolio.overview);
     expect(
       overview.timeline.map((point) => [
@@ -244,12 +254,169 @@ it.each([false, true])(
       ["2025-01-01", 80, 100],
       ["2025-01-02", 730, 920],
       ["2025-01-03", 740, 930],
+      ["2025-04-01", 740, 930],
     ]);
     expect(overview.timeline.at(-1)?.currentValue).toBe(
       overview.summary.currentValue,
     );
   },
 );
+
+it("retrieves dated rates, keeps history fixed on live quote changes, and does not refetch cached dates", async () => {
+  const state = await setupPortfolio([
+    holding({ currency: "USD", sourceDate: "2025-01-01", currentValue: 100 }),
+    holding({ currency: "USD", sourceDate: "2025-01-02", currentValue: 110 }),
+    holding({ currency: "USD", sourceDate: "2025-01-03", currentValue: 120 }),
+  ]);
+  const pending = await state.owner.query(api.portfolio.overview);
+  expect(pending.timeline).toEqual([]);
+  expect(pending.timelineMissingRateDates).toEqual([
+    "2025-01-01",
+    "2025-01-02",
+    "2025-01-03",
+  ]);
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation((input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    expect(url.pathname).toBe("/v2/providers/ecb/rate/USD/INR");
+    const date = url.searchParams.get("date");
+    const rates: Record<string, number> = {
+      "2025-01-01": 75,
+      "2025-01-02": 76,
+      "2025-01-03": 77,
+    };
+
+    return Promise.resolve(
+      Response.json({
+        date: date === "2025-01-01" ? "2024-12-31" : date,
+        base: "USD",
+        quote: "INR",
+        rate: date ? rates[date] : 0,
+      }),
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(
+    state.t.action(
+      internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+      {},
+    ),
+  ).resolves.toEqual({ saved: 3, failed: 0 });
+  const historical = await state.owner.query(api.portfolio.overview);
+  expect(
+    historical.timeline.map((point) => [
+      point.snapshotDate,
+      point.currentValue,
+    ]),
+  ).toEqual([
+    ["2025-01-01", 7500],
+    ["2025-01-02", 8360],
+    ["2025-01-03", 9240],
+    ["2025-04-01", 9600],
+  ]);
+  const refresh = await state.t.mutation(
+    internal.currencyRates.beginRefresh,
+    {},
+  );
+  await state.t.mutation(internal.currencyRates.saveQuote, {
+    requestRevision: refresh.requestRevision,
+    rate: "90",
+    fetchedAt: quote.fetchedAt,
+  });
+  const changed = await state.owner.query(api.portfolio.overview);
+  expect(changed.timeline.slice(0, -1)).toEqual(
+    historical.timeline.slice(0, -1),
+  );
+  expect(changed.timeline.at(-1)?.currentValue).toBe(10800);
+  await expect(
+    state.t.action(
+      internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+      {},
+    ),
+  ).resolves.toEqual({ saved: 0, failed: 0 });
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+it("rejects future historical quotes and retries missing dates without using today's rate", async () => {
+  const state = await setupPortfolio([
+    holding({ currency: "USD", sourceDate: "2025-01-03" }),
+  ]);
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+    Response.json({
+      date: "2025-01-04",
+      base: "USD",
+      quote: "INR",
+      rate: 75,
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(
+    state.t.action(
+      internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+      {},
+    ),
+  ).resolves.toEqual({ saved: 0, failed: 1 });
+  expect((await state.owner.query(api.portfolio.overview)).timeline).toEqual(
+    [],
+  );
+  fetchMock.mockResolvedValueOnce(
+    Response.json({ date: "2025-01-03", base: "USD", quote: "INR", rate: 75 }),
+  );
+  await expect(
+    state.t.action(
+      internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+      {},
+    ),
+  ).resolves.toEqual({ saved: 1, failed: 0 });
+  expect(
+    (await state.owner.query(api.portfolio.overview)).timeline[0]?.currentValue,
+  ).toBe(9000);
+});
+
+it("retrieves historical rates in bounded batches and completes the remaining dates", async () => {
+  const state = await setupPortfolio(
+    Array.from({ length: 23 }, (_, index) =>
+      holding({
+        currency: "USD",
+        sourceDate: `2025-01-${String(index + 1).padStart(2, "0")}`,
+      }),
+    ),
+  );
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation((input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+
+    return Promise.resolve(
+      Response.json({
+        date: url.searchParams.get("date"),
+        base: "USD",
+        quote: "INR",
+        rate: 75,
+      }),
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(
+    state.t.action(
+      internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+      {},
+    ),
+  ).resolves.toEqual({ saved: 20, failed: 0 });
+  expect(
+    (await state.owner.query(api.portfolio.overview)).timelineMissingRateDates,
+  ).toHaveLength(3);
+  await expect(
+    state.t.action(
+      internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+      {},
+    ),
+  ).resolves.toEqual({ saved: 3, failed: 0 });
+  const complete = await state.owner.query(api.portfolio.overview);
+  expect(complete.timeline).toHaveLength(24);
+  expect(complete.timelineMissingRateDates).toBeUndefined();
+  expect(fetchMock).toHaveBeenCalledTimes(23);
+});
 
 async function commitAdditionalPortfolio(
   state: Pick<Awaited<ReturnType<typeof setupPortfolio>>, "t" | "owner">,
@@ -329,6 +496,7 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("public portfolio reads", () => {

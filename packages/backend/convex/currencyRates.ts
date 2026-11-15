@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
+import { overviewProjection } from "./model/portfolioReads";
 import type { MutationCtx } from "./_generated/server";
 import {
   classifyQuoteAge,
@@ -171,3 +172,112 @@ function validateQuote(rate: string, fetchedAt: string) {
     throw new Error("Invalid USD/INR quote");
   }
 }
+
+export const historicalRequests = internalQuery({
+  args: { cursor: v.union(v.string(), v.null()), beforeDate: v.string() },
+  returns: v.object({
+    dates: v.array(v.string()),
+    continuationCursor: v.union(v.string(), v.null()),
+    hasMoreDates: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("households")
+      .paginate({ cursor: args.cursor, numItems: 1 });
+    const dates: string[] = [];
+
+    for (const household of page.page) {
+      if (!household.activePortfolioVersionId) continue;
+
+      const version = await ctx.db.get(household.activePortfolioVersionId);
+
+      if (!version || version.householdId !== household._id) continue;
+
+      const model = await overviewProjection(ctx, { household, version });
+      const candidates = [
+        ...new Set(
+          model.projection.timeline
+            .filter(
+              (point) =>
+                point.snapshotDate < args.beforeDate &&
+                point.totals.some(
+                  (total) =>
+                    total.currency === "USD" &&
+                    (Number(total.currentValue) !== 0 ||
+                      Number(total.investedAmount) !== 0),
+                ),
+            )
+            .map((point) => point.snapshotDate),
+        ),
+      ];
+
+      for (const date of candidates) {
+        const existing = await ctx.db
+          .query("historicalCurrencyRates")
+          .withIndex("by_date", (q) => q.eq("date", date))
+          .unique();
+
+        if (!existing) dates.push(date);
+
+        if (dates.length > 20) break;
+      }
+    }
+
+    return {
+      dates: dates.slice(0, 20),
+      continuationCursor: page.isDone ? null : page.continueCursor,
+      hasMoreDates: dates.length > 20,
+    };
+  },
+});
+
+export const saveHistoricalQuotes = internalMutation({
+  args: {
+    quotes: v.array(
+      v.object({ date: v.string(), rateDate: v.string(), rate: v.string() }),
+    ),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    if (hasMigrationWriteFreeze()) return 0;
+
+    if (args.quotes.length > 20) throw new Error("Too many historical rates");
+
+    let saved = 0;
+    for (const quote of args.quotes) {
+      const requested = Date.parse(quote.date);
+      const observed = Date.parse(quote.rateDate);
+      const rate = Number(quote.rate);
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(quote.date) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(quote.rateDate) ||
+        !Number.isFinite(requested) ||
+        !Number.isFinite(observed) ||
+        new Date(requested).toISOString().slice(0, 10) !== quote.date ||
+        new Date(observed).toISOString().slice(0, 10) !== quote.rateDate ||
+        quote.date >= new Date().toISOString().slice(0, 10) ||
+        observed > requested ||
+        requested - observed > 7 * 86400000 ||
+        !Number.isFinite(rate) ||
+        rate <= 0
+      )
+        throw new Error("Invalid historical USD/INR rate");
+
+      const existing = await ctx.db
+        .query("historicalCurrencyRates")
+        .withIndex("by_date", (q) => q.eq("date", quote.date))
+        .unique();
+
+      if (existing) continue;
+
+      await ctx.db.insert("historicalCurrencyRates", {
+        ...quote,
+        provider: "frankfurter-ecb",
+        fetchedAt: new Date().toISOString(),
+      });
+      saved += 1;
+    }
+
+    return saved;
+  },
+});

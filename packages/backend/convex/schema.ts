@@ -312,6 +312,13 @@ export default defineSchema({
     legacyId: v.string(),
     positionKey: v.string(),
   }).index("by_householdId_and_legacyId", ["householdId", "legacyId"]),
+  historicalCurrencyRates: defineTable({
+    date: v.string(),
+    rateDate: v.string(),
+    rate: v.string(),
+    provider: v.literal("frankfurter-ecb"),
+    fetchedAt: v.string(),
+  }).index("by_date", ["date"]),
   currencyRates: defineTable({
     base: v.literal("USD"),
     quote: v.literal("INR"),

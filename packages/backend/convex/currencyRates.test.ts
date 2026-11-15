@@ -236,3 +236,48 @@ function readRate(t: TestConvex<typeof schema>) {
     return rates[0];
   });
 }
+
+describe("historical USD/INR cache", () => {
+  it("keeps the first verified historical observation even when another result arrives", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-04-01T00:00:00Z"));
+    const t = convexTest(schema, modules);
+
+    await expect(
+      t.mutation(internal.currencyRates.saveHistoricalQuotes, {
+        quotes: [{ date: "2025-01-04", rateDate: "2025-01-03", rate: "75" }],
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      t.mutation(internal.currencyRates.saveHistoricalQuotes, {
+        quotes: [{ date: "2025-01-04", rateDate: "2025-01-03", rate: "95" }],
+      }),
+    ).resolves.toBe(0);
+    expect(
+      await t.run((ctx) =>
+        ctx.db
+          .query("historicalCurrencyRates")
+          .withIndex("by_date", (q) => q.eq("date", "2025-01-04"))
+          .unique(),
+      ),
+    ).toMatchObject({ rate: "75", rateDate: "2025-01-03" });
+  });
+
+  it.each([
+    { date: "2025-02-30", rateDate: "2025-02-28", rate: "75" },
+    { date: "2025-01-04", rateDate: "2025-01-05", rate: "75" },
+    { date: "2025-01-14", rateDate: "2025-01-03", rate: "75" },
+    { date: "2025-01-04", rateDate: "2025-01-03", rate: "0" },
+    { date: "2025-04-02", rateDate: "2025-04-01", rate: "75" },
+  ])("rejects invalid historical observations: %j", async (quote) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-04-01T00:00:00Z"));
+    const t = convexTest(schema, modules);
+
+    await expect(
+      t.mutation(internal.currencyRates.saveHistoricalQuotes, {
+        quotes: [quote],
+      }),
+    ).rejects.toThrow("Invalid historical");
+  });
+});

@@ -149,7 +149,19 @@ describeDb("Postgres portfolio publication parity", () => {
       fixture.membership.householdId,
     );
     const publication = buildPortfolioPublication({ existingFacts: facts });
-    const actual = valuePortfolioPublication(publication.projection, quote);
+    const historicalRates =
+      quote.status === "unavailable"
+        ? {}
+        : Object.fromEntries(
+            publication.projection.timeline.map((point) => [
+              point.snapshotDate,
+              { rate: quote.rate, rateDate: point.snapshotDate },
+            ]),
+          );
+    const actual = valuePortfolioPublication(publication.projection, {
+      ...quote,
+      historicalRates,
+    });
     const caller = appRouter.createCaller(contextFor(db, fixture));
     const overview = await caller.portfolio.overview();
     const positions = await caller.portfolio.positions();

@@ -44,4 +44,10 @@ crons.interval(
   internal.actions.refreshCurrencyRate.refreshCurrencyRate,
   {},
 );
+crons.interval(
+  "Retrieve missing historical USD INR rates",
+  { minutes: 5 },
+  internal.actions.refreshCurrencyRate.refreshHistoricalCurrencyRates,
+  {},
+);
 export default crons;

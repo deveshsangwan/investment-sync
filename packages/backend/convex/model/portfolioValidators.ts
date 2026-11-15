@@ -138,6 +138,7 @@ export const positionsViewValidator = v.object({
 });
 
 export const overviewViewValidator = v.object({
+  timelineMissingRateDates: v.optional(v.array(v.string())),
   holdings: v.array(publicHoldingValidator),
   summary: portfolioSummaryValidator,
   performance: v.object({

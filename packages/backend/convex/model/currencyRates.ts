@@ -71,3 +71,20 @@ export function toValuationQuote(
     provider: rate.provider,
   };
 }
+
+export async function readHistoricalRates(ctx: QueryCtx, dates: string[]) {
+  const entries = await Promise.all(
+    [...new Set(dates)].map(async (date) => {
+      const rate = await ctx.db
+        .query("historicalCurrencyRates")
+        .withIndex("by_date", (q) => q.eq("date", date))
+        .unique();
+
+      return rate
+        ? ([date, { rate: rate.rate, rateDate: rate.rateDate }] as const)
+        : null;
+    }),
+  );
+
+  return Object.fromEntries(entries.filter((entry) => entry !== null));
+}

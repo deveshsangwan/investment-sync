@@ -86,6 +86,14 @@ function DashboardData() {
       !latest || holding.snapshotDate > latest ? holding.snapshotDate : latest,
     null,
   );
+  const holdingsDate = summary.asOfDate ?? latestSnapshotDate;
+  const valuationDate = summary.exchangeRates.reduce(
+    (latest, exchange) =>
+      latest && latest > exchange.fetchedAt.slice(0, 10)
+        ? latest
+        : exchange.fetchedAt.slice(0, 10),
+    holdingsDate,
+  );
   const topHoldings = [...holdings]
     .sort((left, right) => right.currentValueInInr - left.currentValueInInr)
     .slice(0, 5);
@@ -106,10 +114,15 @@ function DashboardData() {
             />
             <p className="mt-3 text-sm text-muted-foreground">
               Total value
-              {latestSnapshotDate
-                ? ` as of ${formatDate(latestSnapshotDate)}`
+              {valuationDate
+                ? ` as of ${formatDate(valuationDate)}`
                 : ", date unavailable"}
             </p>
+            {holdingsDate && valuationDate !== holdingsDate ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Holdings last updated {formatDate(holdingsDate)}
+              </p>
+            ) : null}
           </div>
           <StatRail>
             <RailStat
@@ -137,7 +150,13 @@ function DashboardData() {
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 rounded-2xl border bg-card p-5">
             <h2 className="mono-section-title mb-6">Value history</h2>
-            {timeline.length < 2 ? (
+            {overview.timelineMissingRateDates?.length ? (
+              <EmptyState
+                icon={TrendingUp}
+                title="Historical values are not available yet"
+                description="Exchange rates for some dates are being retrieved. Your current portfolio totals remain available."
+              />
+            ) : timeline.length < 2 ? (
               <EmptyState
                 icon={TrendingUp}
                 title="Your history starts here"
@@ -150,7 +169,7 @@ function DashboardData() {
               Values use the latest holdings known on each date and include
               deposits and withdrawals.
               {summary.exchangeRates.length > 0
-                ? " USD holdings use the latest available exchange rate."
+                ? " Historical USD values use dated ECB reference rates, or the previous available working day's rate."
                 : null}
             </p>
           </div>
